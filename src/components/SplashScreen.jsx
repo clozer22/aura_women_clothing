@@ -15,8 +15,18 @@ export default function SplashScreen({ onComplete }) {
     };
   }, [onComplete]);
 
-  // Letters of the title for staggered animation
-  const titleLetters = ["A", "u", "r", "a"];
+  // Unified fade-in animation for the entire brand title
+  const textVariants = {
+    initial: { opacity: 0, scale: 0.98 },
+    animate: {
+      opacity: 1,
+      scale: 1,
+      transition: {
+        duration: 1.5,
+        ease: [0.16, 1, 0.3, 1] // Luxurious smooth ease-out
+      }
+    }
+  };
 
   const containerVariants = {
     initial: { opacity: 1 },
@@ -26,41 +36,6 @@ export default function SplashScreen({ onComplete }) {
         duration: 0.8,
         ease: [0.76, 0, 0.24, 1], // Custom cubic-bezier for smooth slide up
         delay: 0.2
-      }
-    }
-  };
-
-  const textContainerVariants = {
-    initial: {},
-    animate: {
-      transition: {
-        staggerChildren: 0.2
-      }
-    }
-  };
-
-  const letterVariants = {
-    initial: { opacity: 0, y: 30, scale: 0.9 },
-    animate: {
-      opacity: 1,
-      y: 0,
-      scale: 1,
-      transition: {
-        duration: 0.8,
-        ease: [0.16, 1, 0.3, 1]
-      }
-    }
-  };
-
-  const subtitleVariants = {
-    initial: { opacity: 0, letterSpacing: '0.1em' },
-    animate: {
-      opacity: 0.8,
-      letterSpacing: '0.3em',
-      transition: {
-        duration: 1.2,
-        delay: 0.8,
-        ease: [0.16, 1, 0.3, 1]
       }
     }
   };
@@ -75,22 +50,12 @@ export default function SplashScreen({ onComplete }) {
     >
       <div className="flex flex-col items-center justify-center">
         {/* Animated Main Title */}
-        <motion.div
-          variants={textContainerVariants}
-          className="flex items-center gap-4 sm:gap-6 mb-4"
+        <motion.h1
+          variants={textVariants}
+          className="text-[110px] sm:text-[230px] md:text-[350px] font-brand text-[#f3d5e7] tracking-normal select-none leading-none"
         >
-          {titleLetters.map((letter, idx) => (
-            <motion.span
-              key={idx}
-              variants={letterVariants}
-              className="text-[110px] sm:text-[230px] md:text-[350px] font-brand text-[#f3d5e7] tracking-normal select-none leading-none"
-            >
-              {letter}
-            </motion.span>
-          ))}
-        </motion.div>
-
-        {/* Animated Subtitle */}
+          Aura
+        </motion.h1>
       </div>
 
       {/* Decorative Brand Details */}

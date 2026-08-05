@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, ShoppingBag, Sliders, ArrowLeft, Search, Plus, X, Globe, Save, Trash2, LogOut, Upload, AlertTriangle, XCircle, Check, Edit, Star } from 'lucide-react';
+import { User, ShoppingBag, Sliders, ArrowLeft, Search, Plus, X, Globe, Save, Trash2, LogOut, Upload, AlertTriangle, XCircle, Check, Edit, Star, Menu } from 'lucide-react';
 import { PRODUCTS } from '../data/products';
 import { supabase } from '../lib/supabaseClient';
 
@@ -72,6 +72,7 @@ export default function AdminPortal({
   const [isUploadingProductImage, setIsUploadingProductImage] = useState(false);
   const [notification, setNotification] = useState(null); // { type: 'success' | 'error' | 'warning', title: string, message: string }
   const [confirmDialog, setConfirmDialog] = useState(null); // { message: string, onConfirm: () => void }
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
 
   const triggerNotification = (type, title, message) => {
     setNotification({ type, title, message });
@@ -743,19 +744,164 @@ export default function AdminPortal({
   return (
     <div className="min-h-screen bg-[#FAF0EC] text-[#2C1E1B] flex flex-col md:flex-row select-none rounded-none">
 
-      {/* Sidebar Navigation */}
-      <aside className="w-full md:w-80 bg-[#ccc2c3] text-white flex flex-row md:flex-col justify-between items-center md:items-stretch p-4 md:p-6 rounded-none z-10 border-b md:border-b-0 md:border-r border-white/5">
+      {/* Mobile Top Header */}
+      <header className="md:hidden w-full bg-[#ccc2c3] p-4 flex items-center justify-between border-b border-white/10 z-20 shadow-md flex-shrink-0">
+        <button
+          onClick={() => setIsMobileDrawerOpen(true)}
+          className="p-2 -ml-2 text-white hover:text-white/80 focus:outline-none"
+          aria-label="Open sidebar drawer"
+        >
+          <Menu className="w-6 h-6" />
+        </button>
 
-        <div className="flex items-center md:block md:space-y-8 w-full md:w-auto justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-xl font-brand tracking-widest text-[#2C1E1B]">Aura</span>
+          <span className="text-[8px] tracking-[0.18em] uppercase font-sans text-[#2C1E1B] bg-white/50 px-1.5 py-0.5 rounded-none font-semibold">Atelier Admin</span>
+        </div>
+
+        <div className="w-9" /> {/* Visual spacer */}
+      </header>
+
+      {/* Mobile Off-Canvas Drawer */}
+      <AnimatePresence>
+        {isMobileDrawerOpen && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              onClick={() => setIsMobileDrawerOpen(false)}
+              className="md:hidden fixed inset-0 z-40 bg-black/40 backdrop-blur-xs"
+            />
+
+            {/* Drawer Container */}
+            <motion.aside
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="md:hidden fixed top-0 bottom-0 left-0 z-50 w-72 bg-[#ccc2c3] p-6 flex flex-col justify-between shadow-2xl border-r border-white/5 overflow-y-auto"
+            >
+              <div className="space-y-8">
+                {/* Header with Close */}
+                <div className="flex items-center justify-between pb-4 border-b border-white/10">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl font-brand tracking-widest text-[#2C1E1B]">Aura</span>
+                    <span className="text-[8px] tracking-[0.18em] uppercase font-sans text-[#2C1E1B] bg-white/50 px-1.5 py-0.5 rounded-none font-semibold">Atelier</span>
+                  </div>
+                  <button
+                    onClick={() => setIsMobileDrawerOpen(false)}
+                    className="p-1.5 text-white hover:text-white/80 focus:outline-none"
+                    aria-label="Close drawer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Profile Card Summary */}
+                {!isLoadingProfile && (
+                  <div className="flex items-center gap-4 bg-white p-4 rounded-none border border-white/10 w-full">
+                    {profile.avatar_url ? (
+                      <img
+                        src={profile.avatar_url}
+                        alt={profile.name}
+                        className="w-10 h-10 object-cover rounded-none border border-[#D99B91]/40 flex-shrink-0"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 bg-[#FAF0EC] flex items-center justify-center border border-[#E8DCD7] rounded-none flex-shrink-0">
+                        <User className="w-4 h-4 text-[#ccc2c3]" />
+                      </div>
+                    )}
+                    <div>
+                      <h4 className="font-editorial text-base text-[#2C1E1B] font-normal leading-tight">{profile.name}</h4>
+                      <p className="text-[9px] uppercase tracking-wider text-[#2C1E1B] font-semibold mt-0.5">{profile.role_title}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Navigation Menu */}
+                <nav className="flex flex-col gap-2">
+                  <button
+                    onClick={() => {
+                      setActiveTab('profile');
+                      setIsMobileDrawerOpen(false);
+                    }}
+                    className={`py-3 px-4 text-xs font-semibold uppercase tracking-wider text-left flex items-center gap-3 transition-all rounded-none ${activeTab === 'profile'
+                      ? 'bg-white text-[#2C1E1B] font-bold'
+                      : 'text-white/70 hover:bg-white/5 hover:text-white'
+                      }`}
+                  >
+                    <User className="w-4 h-4" />
+                    <span>Owner Profile</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setActiveTab('products');
+                      setIsMobileDrawerOpen(false);
+                    }}
+                    className={`py-3 px-4 text-xs font-semibold uppercase tracking-wider text-left flex items-center gap-3 transition-all rounded-none ${activeTab === 'products'
+                      ? 'bg-white text-[#2C1E1B] font-bold'
+                      : 'text-white/70 hover:bg-white/5 hover:text-white'
+                      }`}
+                  >
+                    <ShoppingBag className="w-4 h-4" />
+                    <span>Products Table</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setActiveTab('customize');
+                      setIsMobileDrawerOpen(false);
+                    }}
+                    className={`py-3 px-4 text-xs font-semibold uppercase tracking-wider text-left flex items-center gap-3 transition-all rounded-none ${activeTab === 'customize'
+                      ? 'bg-white text-[#2C1E1B] font-bold'
+                      : 'text-white/70 hover:bg-white/5 hover:text-white'
+                      }`}
+                  >
+                    <Sliders className="w-4 h-4" />
+                    <span>Store Customizer</span>
+                  </button>
+                </nav>
+              </div>
+
+              {/* Bottom Actions */}
+              <div className="pt-6 border-t border-white/10 flex flex-col gap-2 w-full mt-8">
+                <button
+                  onClick={onClosePortal}
+                  className="py-3 w-full bg-white text-[#2C1E1B] rounded-none text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-2"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>Return to Shop</span>
+                </button>
+
+                <button
+                  onClick={handleLogout}
+                  className="py-3 w-full bg-white text-[#2C1E1B] rounded-none text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-2 border"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Log Out</span>
+                </button>
+              </div>
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Desktop Stationary Sidebar */}
+      <aside className="hidden md:flex md:w-80 bg-[#ccc2c3] text-white flex-col justify-between p-6 rounded-none z-10 border-r border-white/5 h-screen sticky top-0 flex-shrink-0">
+        <div className="space-y-8">
           {/* Logo Identity */}
-          <div className="flex items-center gap-2.5 pb-0 md:pb-6 border-b-0 md:border-b border-white/10">
-            <span className="text-xl sm:text-2xl font-brand tracking-widest text-[#2C1E1B]">Aura</span>
-            <span className="hidden md:inline-block text-[9px] tracking-[0.18em] uppercase font-sans text-[#2C1E1B] bg-white/50 px-2 py-0.5 rounded-none">Atelier Admin</span>
+          <div className="flex items-center gap-2.5 pb-6 border-b border-white/10">
+            <span className="text-2xl font-brand tracking-widest text-[#2C1E1B]">Aura</span>
+            <span className="text-[9px] tracking-[0.18em] uppercase font-sans text-[#2C1E1B] bg-white/50 px-2 py-0.5 rounded-none font-semibold">Atelier Admin</span>
           </div>
 
-          {/* Profile Card Summary - Desktop Only */}
+          {/* Profile Card Summary */}
           {isLoadingProfile ? (
-            <div className="hidden md:flex items-center gap-4 bg-white/60 p-4 rounded-none border border-white/10 w-full animate-pulse">
+            <div className="flex items-center gap-4 bg-white/60 p-4 rounded-none border border-white/10 w-full animate-pulse">
               <div className="w-12 h-12 bg-[#2C1E1B]/10 skeleton-shimmer flex-shrink-0" />
               <div className="space-y-2 flex-grow">
                 <div className="h-4 bg-[#2C1E1B]/10 skeleton-shimmer w-3/4" />
@@ -763,7 +909,7 @@ export default function AdminPortal({
               </div>
             </div>
           ) : (
-            <div className="hidden md:flex items-center gap-4 bg-white p-4 rounded-none border border-white/10 w-full">
+            <div className="flex items-center gap-4 bg-white p-4 rounded-none border border-white/10 w-full">
               {profile.avatar_url ? (
                 <img
                   src={profile.avatar_url}
@@ -783,50 +929,50 @@ export default function AdminPortal({
           )}
 
           {/* Navigation Menu */}
-          <nav className="flex flex-row md:flex-col gap-2.5 md:gap-2">
+          <nav className="flex flex-col gap-2">
             <button
               onClick={() => setActiveTab('profile')}
-              className={`py-2 px-2.5 md:py-3.5 md:px-4 text-xs font-semibold uppercase tracking-wider text-left flex items-center gap-3 transition-all rounded-none ${activeTab === 'profile'
+              className={`py-3.5 px-4 text-xs font-semibold uppercase tracking-wider text-left flex items-center gap-3 transition-all rounded-none ${activeTab === 'profile'
                 ? 'bg-white text-[#2C1E1B] font-bold'
                 : 'text-white/70 hover:bg-white/5 hover:text-white'
                 }`}
               title="Owner Profile"
             >
               <User className="w-4 h-4" />
-              <span className="hidden md:inline">Owner Profile</span>
+              <span>Owner Profile</span>
             </button>
 
             <button
               onClick={() => setActiveTab('products')}
-              className={`py-2 px-2.5 md:py-3.5 md:px-4 text-xs font-semibold uppercase tracking-wider text-left flex items-center gap-3 transition-all rounded-none ${activeTab === 'products'
+              className={`py-3.5 px-4 text-xs font-semibold uppercase tracking-wider text-left flex items-center gap-3 transition-all rounded-none ${activeTab === 'products'
                 ? 'bg-white text-[#2C1E1B] font-bold'
                 : 'text-white/70 hover:bg-white/5 hover:text-white'
                 }`}
               title="Products Table"
             >
               <ShoppingBag className="w-4 h-4" />
-              <span className="hidden md:inline">Products Table</span>
+              <span>Products Table</span>
             </button>
 
             <button
               onClick={() => setActiveTab('customize')}
-              className={`py-2 px-2.5 md:py-3.5 md:px-4 text-xs font-semibold uppercase tracking-wider text-left flex items-center gap-3 transition-all rounded-none ${activeTab === 'customize'
+              className={`py-3.5 px-4 text-xs font-semibold uppercase tracking-wider text-left flex items-center gap-3 transition-all rounded-none ${activeTab === 'customize'
                 ? 'bg-white text-[#2C1E1B] font-bold'
                 : 'text-white/70 hover:bg-white/5 hover:text-white'
                 }`}
               title="Store Customizer"
             >
               <Sliders className="w-4 h-4" />
-              <span className="hidden md:inline">Store Customizer</span>
+              <span>Store Customizer</span>
             </button>
           </nav>
         </div>
 
         {/* Bottom Actions */}
-        <div className="pt-0 md:pt-6 border-t-0 md:border-t border-white/10 ml-4 md:ml-0 flex-shrink-0 flex flex-col gap-2 w-full max-w-[160px] md:max-w-none">
+        <div className="pt-6 border-t border-white/10 flex flex-col gap-2 w-full">
           <button
             onClick={onClosePortal}
-            className="py-2 px-3 md:py-3.5 w-full bg-white text-[#2C1E1B] rounded-none text-[10px] sm:text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-2 border border-white/10"
+            className="py-3.5 w-full bg-white text-[#2C1E1B] rounded-none text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-2 border border-white/10"
             title="Return to Shop"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
@@ -835,14 +981,13 @@ export default function AdminPortal({
 
           <button
             onClick={handleLogout}
-            className="py-2 px-3 md:py-3.5 w-full bg-white text-[#2C1E1B] rounded-none text-[10px] sm:text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-2 border"
+            className="py-3.5 w-full bg-white text-[#2C1E1B] rounded-none text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-2 border"
             title="Log Out"
           >
             <LogOut className="w-3.5 h-3.5" />
             <span>Log Out</span>
           </button>
         </div>
-
       </aside>
 
       {/* Main Panel Content Area */}
@@ -1554,7 +1699,9 @@ export default function AdminPortal({
 
                 {/* Product Photo Upload */}
                 <div className="space-y-2">
-                  <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Product Photo</label>
+                  <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
+                    Product Photo (Portrait Orientation Only)
+                  </label>
                   <input
                     type="file"
                     id="product-image-file"
@@ -1596,7 +1743,10 @@ export default function AdminPortal({
                     >
                       <Upload className="w-5 h-5 text-[#B86B60]" />
                       <span className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Upload Product Photo</span>
-                      <span className="text-[9px] text-[#A38E88]">PNG, JPG, or WEBP (Portrait ratio preferred)</span>
+                      <span className="text-[9px] text-[#A38E88] font-medium leading-normal">
+                        Supports PNG, JPG, WEBP.<br/>
+                        <strong className="text-[#B86B60]">Must be portrait</strong> (height &gt; width, e.g., 1000 x 1500px).
+                      </span>
                     </label>
                   )}
 
