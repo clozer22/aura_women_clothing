@@ -1,0 +1,190 @@
+@font-face {
+  font-family: 'Respective';
+  src: url('./assets/fonts/respective/Respective_2.0.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Borscha';
+  src: url('./assets/fonts/borscha/Borscha-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Borscha';
+  src: url('./assets/fonts/borscha/Borscha-Medium.ttf') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Borscha';
+  src: url('./assets/fonts/borscha/Borscha-SemiBold.ttf') format('truetype');
+  font-weight: 600;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Borscha';
+  src: url('./assets/fonts/borscha/Borscha-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Borscha';
+  src: url('./assets/fonts/borscha/Borscha-Light.ttf') format('truetype');
+  font-weight: 300;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Borscha';
+  src: url('./assets/fonts/borscha/Borscha-ExtraLight.ttf') format('truetype');
+  font-weight: 200;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Borscha';
+  src: url('./assets/fonts/borscha/Borscha-Thin.ttf') format('truetype');
+  font-weight: 100;
+  font-style: normal;
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ==========================================================================
+   AURA Women's Clothing — Luxury Design System & Custom CSS Utilities
+   ========================================================================== */
+
+@layer base {
+  :root {
+    --bg-primary: #fff3f7;
+    --bg-secondary: #ccc2c3;
+    --text-primary: #2C1E1B;
+    --text-secondary: #ccc2c3;
+    --accent-rose: #D99B91;
+    --accent-terracotta: #B86B60;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+}
+
+/* Custom Typography Helpers */
+.font-brand {
+  font-family: 'Playfair Display', 'Prata', 'Italiana', 'Bodoni Moda', serif;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+.font-hero {
+  font-family: 'Playfair Display', 'Prata', 'Italiana', 'Bodoni Moda', serif;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+
+/* Custom Scrollbar (Square shapes, rounded-none) */
+::-webkit-scrollbar {
+  width: 7px;
+}
+::-webkit-scrollbar-track {
+  background: #fff3f7;
+}
+::-webkit-scrollbar-thumb {
+  background: #D99B91;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #B86B60;
+}
+
+/* Glassmorphism Navigation (Square, rounded-none) */
+.glass-nav {
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow: 0 10px 30px -5px rgba(44, 30, 27, 0.08);
+  border-radius: 0px !important;
+}
+
+.glass-nav-scrolled {
+  background: rgba(255, 243, 247, 0.85);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 16px 40px -5px rgba(44, 30, 27, 0.12);
+  border-radius: 0px !important;
+}
+
+/* Glass Card */
+.glass-card {
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 0px !important;
+}
+
+/* Luxury Arch Frame Shapes - Changed to 0px to make them completely square */
+.arch-frame {
+  border-top-left-radius: 0px !important;
+  border-top-right-radius: 0px !important;
+  border-bottom-left-radius: 0px !important;
+  border-bottom-right-radius: 0px !important;
+  overflow: hidden;
+}
+
+.arch-frame-sm {
+  border-top-left-radius: 0px !important;
+  border-top-right-radius: 0px !important;
+  border-bottom-left-radius: 0px !important;
+  border-bottom-right-radius: 0px !important;
+  overflow: hidden;
+}
+
+.curved-badge-frame {
+  border-top-left-radius: 0px !important;
+  border-top-right-radius: 0px !important;
+  border-bottom-left-radius: 0px !important;
+  border-bottom-right-radius: 0px !important;
+  overflow: hidden;
+}
+
+/* Sparkle icon glow */
+.sparkle-icon {
+  color: #B86B60;
+  display: inline-block;
+  filter: drop-shadow(0 0 6px rgba(212, 175, 55, 0.4));
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(90deg, #faf0ec 25%, #f5e6e1 50%, #faf0ec 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite linear;
+}
