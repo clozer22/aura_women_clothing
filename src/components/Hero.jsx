@@ -91,7 +91,7 @@ export default function Hero({ config }) {
 
         {/* Highlighted Giant White Text */}
         <div className="absolute inset-0 flex items-center justify-center rounded-none z-10">
-          <h1 className="text-[240px] sm:text-[500px] md:text-[500px] font-brand font-normal text-white select-none tracking-tight leading-none lowercase first-letter:capitalize drop-shadow-xl text-center">
+          <h1 className="text-[32vw] sm:text-[35vw] md:text-[38vw] lg:text-[40vw] font-brand font-normal text-white select-none tracking-tight leading-none lowercase first-letter:capitalize drop-shadow-xl text-center">
             {activeConfig.title || 'Aura'}
           </h1>
         </div>

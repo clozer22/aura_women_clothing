@@ -1392,7 +1392,10 @@ export default function AdminPortal({
                         {localHeroConfig.posterUrl ? 'File selected & active' : 'No file selected'}
                       </span>
                     </div>
-                    <p className="text-[9px] text-[#A38E88] italic">Supports PNG, JPG, MP4, MOV, WEBM</p>
+                    <p className="text-[9px] text-[#A38E88] leading-relaxed">
+                      Supports PNG, JPG, MP4, MOV, WEBM.<br/>
+                      <strong className="text-[#B86B60]">Recommended: 1920 x 1080px (16:9) or 1600 x 1200px (4:3) with subject centered</strong> both horizontally and vertically (crop-safe for both desktop landscape and mobile portrait).
+                    </p>
                   </div>
 
                   {/* Display Title */}
@@ -1431,7 +1434,10 @@ export default function AdminPortal({
                         {localHeroConfig.aboutMediaUrl ? 'File selected & active' : 'No file selected'}
                       </span>
                     </div>
-                    <p className="text-[9px] text-[#A38E88] italic">Supports PNG, JPG, MP4, MOV, WEBM</p>
+                    <p className="text-[9px] text-[#A38E88] leading-relaxed">
+                      Supports PNG, JPG, MP4, MOV, WEBM.<br/>
+                      <strong className="text-[#B86B60]">Recommended: 1920 x 1080px (16:9) or 1600 x 1200px (4:3) with subject on the left</strong> (to keep the text readable on the right on desktop views).
+                    </p>
                   </div>
 
                   {/* About Title */}
