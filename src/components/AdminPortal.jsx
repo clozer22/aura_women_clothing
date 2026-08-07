@@ -804,7 +804,7 @@ export default function AdminPortal({
 
         <div className="flex items-center gap-2">
           <span className="text-xl font-brand tracking-widest text-[#2C1E1B]">Aura</span>
-          <span className="text-[8px] tracking-[0.18em] uppercase font-sans text-[#2C1E1B] bg-white/50 px-1.5 py-0.5 rounded-none font-semibold">Atelier Admin</span>
+          <span className="text-[8px] tracking-[0.18em] uppercase font-sans text-[#2C1E1B] bg-white/50 px-1.5 py-0.5 rounded-none font-semibold">Admin</span>
         </div>
 
         <div className="w-9" /> {/* Visual spacer */}
@@ -944,7 +944,7 @@ export default function AdminPortal({
           {/* Logo Identity */}
           <div className="flex items-center gap-2.5 pb-6 border-b border-white/10">
             <span className="text-2xl font-brand tracking-widest text-[#2C1E1B]">Aura</span>
-            <span className="text-[9px] tracking-[0.18em] uppercase font-sans text-[#2C1E1B] bg-white/50 px-2 py-0.5 rounded-none font-semibold">Atelier Admin</span>
+            <span className="text-[9px] tracking-[0.18em] uppercase font-sans text-[#2C1E1B] bg-white/50 px-2 py-0.5 rounded-none font-semibold">Admin</span>
           </div>
 
           {/* Profile Card Summary */}
@@ -1049,8 +1049,8 @@ export default function AdminPortal({
             className="max-w-3xl space-y-8"
           >
             <div>
-              <span className="font-script text-[5rem] leading-none text-[#2C1E1B] block -mb-2">Super Admin</span>
-              <h2 className="text-3xl sm:text-5xl font-editorial font-light text-[#2C1E1B] tracking-tight">Atelier Owner Profile</h2>
+              {/* <span className="font-script text-[5rem] leading-none text-[#2C1E1B] block -mb-2">Super Admin</span> */}
+              <h2 className="text-3xl sm:text-5xl font-editorial font-light text-[#2C1E1B] tracking-tight">Main Admin Profile</h2>
             </div>
 
             {isEditingProfile ? (
@@ -1472,7 +1472,7 @@ export default function AdminPortal({
                       </span>
                     </div>
                     <p className="text-[9px] text-[#A38E88] leading-relaxed">
-                      Supports PNG, JPG, MP4, MOV, WEBM.<br/>
+                      Supports PNG, JPG, MP4, MOV, WEBM.<br />
                       <strong className="text-[#B86B60]">Recommended: 1920 x 1080px (16:9) or 1600 x 1200px (4:3) with subject centered</strong> both horizontally and vertically (crop-safe for both desktop landscape and mobile portrait).
                     </p>
                   </div>
@@ -1514,7 +1514,7 @@ export default function AdminPortal({
                       </span>
                     </div>
                     <p className="text-[9px] text-[#A38E88] leading-relaxed">
-                      Supports PNG, JPG, MP4, MOV, WEBM.<br/>
+                      Supports PNG, JPG, MP4, MOV, WEBM.<br />
                       <strong className="text-[#B86B60]">Recommended: 1920 x 1080px (16:9) or 1600 x 1200px (4:3) with subject on the left</strong> (to keep the text readable on the right on desktop views).
                     </p>
                   </div>
@@ -1591,7 +1591,7 @@ export default function AdminPortal({
                     )}
 
                     <div className="relative z-10 text-center px-4">
-                      <h1 
+                      <h1
                         className="text-4xl font-brand font-normal text-white lowercase first-letter:capitalize tracking-tight leading-none drop-shadow-lg"
                         style={{ textShadow: '0 4px 24px rgba(44, 30, 27, 0.7), 0 2px 8px rgba(44, 30, 27, 0.5)' }}
                       >
@@ -1624,8 +1624,8 @@ export default function AdminPortal({
                       )
                     ) : null}
                     <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#2C1E1B]/10 to-[#2C1E1B]/40" />
-                    
-                    <div 
+
+                    <div
                       className="relative z-10 w-[55%] flex flex-col justify-center text-left text-white"
                       style={{ textShadow: '0 2px 8px rgba(44, 30, 27, 0.8), 0 1px 3px rgba(44, 30, 27, 0.6)' }}
                     >
@@ -1875,7 +1875,7 @@ export default function AdminPortal({
                       <Upload className="w-5 h-5 text-[#B86B60]" />
                       <span className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Upload Product Photo</span>
                       <span className="text-[9px] text-[#A38E88] font-medium leading-normal">
-                        Supports PNG, JPG, WEBP.<br/>
+                        Supports PNG, JPG, WEBP.<br />
                         <strong className="text-[#B86B60]">Must be portrait</strong> (height &gt; width, e.g., 1000 x 1500px).
                       </span>
                     </label>
