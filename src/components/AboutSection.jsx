@@ -44,7 +44,7 @@ export default function AboutSection({ config }) {
   const paragraphs = description.split('\n\n');
 
   return (
-    <section id="about" className="relative min-h-[600px] w-full flex items-center justify-end py-24 sm:py-32 px-6 sm:px-12 md:px-20 lg:px-32 overflow-hidden select-none bg-[#fff3f7]">
+    <section id="about" className="relative min-h-[600px] w-full flex items-center py-24 sm:py-32 overflow-hidden select-none bg-[#fff3f7]">
       {/* Shimmer Placeholder while fetching or loading */}
       {(!loaded || !mediaUrl) && (
         <div className="absolute inset-0 skeleton-shimmer z-20" />
@@ -90,14 +90,14 @@ export default function AboutSection({ config }) {
         03
       </div>
 
-      {/* Right-Aligned Text Container */}
-      <div className="max-w-5xl w-full mx-auto relative z-20 flex justify-end">
+      {/* Right-Aligned Text Container (Shifted right on desktop by using standard max-w-6xl grid container) */}
+      <div className="max-w-6xl w-full mx-auto relative z-20 flex justify-end px-6 sm:px-12 lg:px-16">
         <motion.div
           initial={{ opacity: 0, x: 30 }}
           whileInView={{ opacity: 1, x: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.9, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
-          className="w-full md:w-[50%] flex flex-col justify-center text-left"
+          className="w-full md:w-[48%] flex flex-col justify-center text-left"
         >
           {/* Main editorial stacked heading */}
           <div className="mb-4">
@@ -116,8 +116,11 @@ export default function AboutSection({ config }) {
             {subtitle}
           </span>
 
-          {/* Text description paragraphs */}
-          <div className="space-y-5 text-xs sm:text-sm text-[#E8DCD7] font-sans leading-relaxed drop-shadow-sm">
+          {/* Text description paragraphs (Made all-white with a text shadow for contrast) */}
+          <div 
+            className="space-y-5 text-xs sm:text-sm text-white font-sans leading-relaxed drop-shadow-sm"
+            style={{ textShadow: '0 2px 8px rgba(44, 30, 27, 0.8), 0 1px 3px rgba(44, 30, 27, 0.6)' }}
+          >
             {paragraphs.map((p, idx) => (
               <p key={idx} className="first-letter:text-lg first-letter:font-editorial first-letter:text-white">
                 {p}

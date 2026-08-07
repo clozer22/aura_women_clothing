@@ -73,6 +73,7 @@ export default function AdminPortal({
   const [notification, setNotification] = useState(null); // { type: 'success' | 'error' | 'warning', title: string, message: string }
   const [confirmDialog, setConfirmDialog] = useState(null); // { message: string, onConfirm: () => void }
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
+  const [selectedProductIds, setSelectedProductIds] = useState([]);
 
   const triggerNotification = (type, title, message) => {
     setNotification({ type, title, message });
@@ -548,8 +549,55 @@ export default function AdminPortal({
           if (error) throw error;
 
           setProductList(productList.filter(p => p.id !== id));
+          // Remove from selection if deleted
+          setSelectedProductIds(prev => prev.filter(item => item !== id));
           if (onRefreshData) onRefreshData();
           triggerNotification('success', 'Product Deleted', 'The garment has been removed from inventory successfully.');
+        } catch (err) {
+          triggerNotification('error', 'Delete Failed', err.message);
+        }
+      }
+    });
+  };
+
+  const handleToggleSelectProduct = (id) => {
+    setSelectedProductIds(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAllFiltered = (filteredList) => {
+    const filteredIds = filteredList.map(p => p.id);
+    const allSelected = filteredIds.length > 0 && filteredIds.every(id => selectedProductIds.includes(id));
+
+    if (allSelected) {
+      setSelectedProductIds(prev => prev.filter(id => !filteredIds.includes(id)));
+    } else {
+      setSelectedProductIds(prev => {
+        const union = new Set([...prev, ...filteredIds]);
+        return Array.from(union);
+      });
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedProductIds.length === 0) return;
+
+    setConfirmDialog({
+      message: `Are you sure you want to remove the ${selectedProductIds.length} selected garments from inventory?`,
+      onConfirm: async () => {
+        try {
+          const { error } = await supabase
+            .from('products')
+            .delete()
+            .in('id', selectedProductIds);
+
+          if (error) throw error;
+
+          setProductList(productList.filter(p => !selectedProductIds.includes(p.id)));
+          setSelectedProductIds([]);
+          if (onRefreshData) onRefreshData();
+          triggerNotification('success', 'Products Deleted', 'The selected garments have been removed from inventory successfully.');
         } catch (err) {
           triggerNotification('error', 'Delete Failed', err.message);
         }
@@ -1230,10 +1278,33 @@ export default function AdminPortal({
             </div>
 
             {/* Table */}
-            <div className="bg-white border border-[#E8DCD7] shadow-sm overflow-x-auto rounded-none">
+            <div className="bg-white border border-[#E8DCD7] shadow-sm overflow-x-auto rounded-none relative">
+              {selectedProductIds.length > 0 && (
+                <div className="bg-[#FAF5F2] p-3 border-b border-[#E8DCD7] flex items-center justify-between px-6 sticky left-0 right-0 z-10 shadow-sm animate-fadeIn">
+                  <span className="text-xs font-semibold text-[#705B56]">
+                    Selected <strong className="text-[#B86B60]">{selectedProductIds.length}</strong> {selectedProductIds.length === 1 ? 'garment' : 'garments'}
+                  </span>
+                  <button
+                    onClick={handleDeleteSelected}
+                    className="bg-red-700 hover:bg-red-800 text-white py-2 px-4 rounded-none text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 transition-all shadow-sm focus:outline-none"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete Selected</span>
+                  </button>
+                </div>
+              )}
               <table className="w-full text-left border-collapse rounded-none">
                 <thead>
                   <tr className="bg-[#F3EAE6] border-b border-[#E8DCD7] text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
+                    <th className="p-4 text-center w-12">
+                      <input
+                        type="checkbox"
+                        checked={filteredProducts.length > 0 && filteredProducts.every(p => selectedProductIds.includes(p.id))}
+                        onChange={() => handleSelectAllFiltered(filteredProducts)}
+                        className="w-4 h-4 rounded-none accent-[#2C1E1B] cursor-pointer"
+                        title="Select All on page"
+                      />
+                    </th>
                     <th className="p-4 text-center">Featured</th>
                     <th className="p-4">Thumbnail</th>
                     <th className="p-4">Product Name</th>
@@ -1250,7 +1321,15 @@ export default function AdminPortal({
                 </thead>
                 <tbody className="divide-y divide-[#E8DCD7]/60 text-xs font-semibold text-[#2C1E1B]">
                   {filteredProducts.map((p) => (
-                    <tr key={p.id} className="hover:bg-[#FAF5F2]/40 transition-colors">
+                    <tr key={p.id} className={`hover:bg-[#FAF5F2]/40 transition-colors ${selectedProductIds.includes(p.id) ? 'bg-[#FAF0EC]' : ''}`}>
+                      <td className="p-4 text-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedProductIds.includes(p.id)}
+                          onChange={() => handleToggleSelectProduct(p.id)}
+                          className="w-4 h-4 rounded-none accent-[#2C1E1B] cursor-pointer"
+                        />
+                      </td>
                       <td className="p-4 text-center">
                         <button
                           type="button"
@@ -1484,36 +1563,82 @@ export default function AdminPortal({
                   <Save className="w-4 h-4" />
                   <span>Apply Theme Settings</span>
                 </button>
-
               </div>
 
               {/* Right Column: Visual Mockup / Live Preview */}
-              <div className="lg:col-span-5 bg-white border border-[#E8DCD7] shadow-sm p-5 rounded-none space-y-4">
-                <span className="text-[9px] uppercase tracking-[0.2em] font-bold text-[#B86B60] bg-[#FAF0EC] px-3 py-1 rounded-none inline-block">LIVE WORKSPACE PREVIEW</span>
+              <div className="lg:col-span-5 bg-white border border-[#E8DCD7] shadow-sm p-5 rounded-none space-y-6 lg:sticky lg:top-6">
+                <span className="text-[9px] uppercase tracking-[0.2em] font-bold text-[#B86B60] bg-[#FAF0EC] px-3 py-1 rounded-none inline-block">LIVE WORKSPACE PREVIEWS</span>
 
-                {/* Visual rendering of customizer results */}
-                <div className="border border-[#E8DCD7] rounded-none overflow-hidden relative min-h-[300px] flex items-center justify-center bg-gray-100">
-                  {localHeroConfig.posterUrl?.startsWith('data:video/') || localHeroConfig.posterUrl?.match(/\.(mp4|webm|mov|ogg)($|\?)/i) ? (
-                    <video
-                      src={localHeroConfig.posterUrl}
-                      autoPlay
-                      loop
-                      muted
-                      playsInline
-                      className="absolute inset-0 w-full h-full object-cover"
-                    />
-                  ) : (
-                    <img
-                      src={localHeroConfig.posterUrl}
-                      alt="Banner Preview"
-                      className="absolute inset-0 w-full h-full object-cover"
-                    />
-                  )}
-                  <div className="absolute inset-0 bg-[#2C1E1B]/15" />
-                  <div className="relative z-10 text-center">
-                    <h1 className="text-5xl font-brand font-normal text-white lowercase first-letter:capitalize tracking-tight leading-none drop-shadow-lg">
-                      {localHeroConfig.title}
-                    </h1>
+                {/* Preview 1: Hero Banner */}
+                <div className="space-y-2">
+                  <span className="text-[10px] uppercase tracking-wider font-bold text-[#705B56] block">Hero Banner Preview</span>
+                  <div className="border border-[#E8DCD7] rounded-none overflow-hidden relative min-h-[220px] flex items-center justify-center bg-gray-100">
+                    {localHeroConfig.posterUrl?.startsWith('data:video/') || localHeroConfig.posterUrl?.match(/\.(mp4|webm|mov|ogg)($|\?)/i) ? (
+                      <video
+                        src={localHeroConfig.posterUrl}
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                        className="absolute inset-0 w-full h-full object-cover"
+                      />
+                    ) : (
+                      <img
+                        src={localHeroConfig.posterUrl}
+                        alt="Banner Preview"
+                        className="absolute inset-0 w-full h-full object-cover"
+                      />
+                    )}
+                    <div className="absolute inset-0 bg-[#2C1E1B]/15" />
+                    <div className="relative z-10 text-center px-4">
+                      <h1 
+                        className="text-4xl font-brand font-normal text-white lowercase first-letter:capitalize tracking-tight leading-none drop-shadow-lg"
+                        style={{ textShadow: '0 4px 24px rgba(44, 30, 27, 0.7), 0 2px 8px rgba(44, 30, 27, 0.5)' }}
+                      >
+                        {localHeroConfig.title}
+                      </h1>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Preview 2: About Us Section */}
+                <div className="space-y-2">
+                  <span className="text-[10px] uppercase tracking-wider font-bold text-[#705B56] block">About Us Section Preview</span>
+                  <div className="border border-[#E8DCD7] rounded-none overflow-hidden relative min-h-[240px] flex items-center justify-end bg-gray-100 p-4">
+                    {localHeroConfig.aboutMediaUrl ? (
+                      localHeroConfig.aboutMediaUrl.startsWith('data:video/') || localHeroConfig.aboutMediaUrl.match(/\.(mp4|webm|mov|ogg)($|\?)/i) ? (
+                        <video
+                          src={localHeroConfig.aboutMediaUrl}
+                          autoPlay
+                          loop
+                          muted
+                          playsInline
+                          className="absolute inset-0 w-full h-full object-cover object-left"
+                        />
+                      ) : (
+                        <img
+                          src={localHeroConfig.aboutMediaUrl}
+                          alt="About Us Preview"
+                          className="absolute inset-0 w-full h-full object-cover object-left"
+                        />
+                      )
+                    ) : null}
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#2C1E1B]/10 to-[#2C1E1B]/40" />
+                    
+                    <div 
+                      className="relative z-10 w-[55%] flex flex-col justify-center text-left text-white"
+                      style={{ textShadow: '0 2px 8px rgba(44, 30, 27, 0.8), 0 1px 3px rgba(44, 30, 27, 0.6)' }}
+                    >
+                      <h4 className="font-editorial italic text-xl leading-none text-white block mb-1">
+                        {localHeroConfig.aboutTitle || 'Oh What?'}
+                      </h4>
+                      <span className="text-[7px] uppercase tracking-[0.2em] font-semibold text-[#D99B91] mb-2 block">
+                        {localHeroConfig.aboutSubtitle || 'Sakura Blossom'}
+                      </span>
+                      <p className="text-[7.5px] leading-relaxed font-sans text-white/95 line-clamp-4 whitespace-pre-line">
+                        {localHeroConfig.aboutDescription || 'The Brightening Secret...'}
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
