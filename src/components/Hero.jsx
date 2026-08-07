@@ -86,8 +86,7 @@ export default function Hero({ config }) {
           )
         ) : null}
 
-        {/* Subtle warm overlay for readable white text contrast */}
-        <div className="absolute inset-0 bg-[#2C1E1B]/15 transition-opacity duration-500 group-hover:bg-[#2C1E1B]/10 rounded-none z-10" />
+
 
         {/* Highlighted Giant White Text */}
         <div className="absolute inset-0 flex items-center justify-center rounded-none z-10">

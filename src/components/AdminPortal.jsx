@@ -1589,7 +1589,7 @@ export default function AdminPortal({
                         className="absolute inset-0 w-full h-full object-cover"
                       />
                     )}
-                    <div className="absolute inset-0 bg-[#2C1E1B]/15" />
+
                     <div className="relative z-10 text-center px-4">
                       <h1 
                         className="text-4xl font-brand font-normal text-white lowercase first-letter:capitalize tracking-tight leading-none drop-shadow-lg"

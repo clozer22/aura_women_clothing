@@ -74,7 +74,7 @@ export default function QuickViewModal({ product, onClose }) {
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.94, y: 20 }}
           transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-          className="relative z-10 w-full max-w-4xl bg-[#FAF5F2] rounded-none shadow-2xl border border-white/80 flex flex-col md:flex-row max-h-[90vh] md:max-h-[85vh] overflow-y-auto md:overflow-hidden my-auto"
+          className="relative z-10 w-full max-w-4xl bg-[#f3d5e7] rounded-none shadow-2xl border border-white/80 flex flex-col md:flex-row max-h-[90vh] md:max-h-[85vh] overflow-y-auto md:overflow-hidden my-auto"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Close Button */}
@@ -93,11 +93,6 @@ export default function QuickViewModal({ product, onClose }) {
               alt={product.name}
               className="w-full h-full object-cover object-center"
             />
-            <div className="absolute top-5 left-5">
-              <span className="font-script text-[4.5rem] leading-none text-white drop-shadow-lg block">
-                Aura Atelier
-              </span>
-            </div>
           </div>
 
           {/* Right Column: Details & Actions */}
@@ -189,15 +184,6 @@ export default function QuickViewModal({ product, onClose }) {
                 </div>
               </div>
 
-              {/* Fabric Details Bullets */}
-              <div className="p-4 rounded-none bg-[#F3EAE6] mb-6 border border-[#E8DCD7]">
-                <h4 className="text-xs uppercase tracking-[0.18em] font-semibold text-[#2C1E1B] mb-2 flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-[#B86B60]" /> Craftsmanship Notes
-                </h4>
-                <ul className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs text-[#705B56]">
-                  {renderDetails()}
-                </ul>
-              </div>
             </div>
 
             {/* Direct Shopee Checkout Redirect */}
@@ -206,7 +192,7 @@ export default function QuickViewModal({ product, onClose }) {
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => window.open(product.shopeeLink || 'https://shopee.ph', '_blank', 'noopener,noreferrer')}
-                className="w-full py-4 px-6 rounded-none text-xs font-semibold uppercase tracking-[0.2em] bg-[#ccc2c3] text-[#2C1E1B] transition-all duration-300 shadow-xl flex items-center justify-center gap-2"
+                className="w-full py-4 px-6 rounded-none text-xs font-semibold uppercase tracking-[0.2em] bg-[#ccc2c3] text-white transition-all duration-300 shadow-xl flex items-center justify-center gap-2"
               >
                 <span>Buy Here</span>
               </motion.button>
