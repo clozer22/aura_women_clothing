@@ -28,6 +28,11 @@ export default function App() {
   const [catalogSearchQuery, setCatalogSearchQuery] = useState('');
   
   const [showSplash, setShowSplash] = useState(true);
+  const [mediaTheme, setMediaTheme] = useState('light');
+
+  const handleToggleMediaTheme = () => {
+    setMediaTheme(prev => prev === 'light' ? 'dark' : 'light');
+  };
 
   // Real-time products state loaded from database
   const [dbProducts, setDbProducts] = useState([]);
@@ -246,6 +251,8 @@ export default function App() {
               isLoading={isLoading}
               onSelectProduct={(product) => setSelectedProduct(product)}
               onViewFullCatalog={navigateToFullCatalog}
+              mediaTheme={mediaTheme}
+              onToggleMediaTheme={handleToggleMediaTheme}
             />
 
             {/* Atelier Contact Us Section */}
@@ -258,6 +265,8 @@ export default function App() {
             onBackToHome={navigateToHome}
             onSelectProduct={(product) => setSelectedProduct(product)}
             initialSearchQuery={catalogSearchQuery}
+            mediaTheme={mediaTheme}
+            onToggleMediaTheme={handleToggleMediaTheme}
           />
         )}
       </main>
@@ -270,6 +279,7 @@ export default function App() {
         <QuickViewModal
           product={selectedProduct}
           onClose={() => setSelectedProduct(null)}
+          mediaTheme={mediaTheme}
         />
       )}
 

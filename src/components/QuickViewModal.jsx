@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Star, Sparkles, Check } from 'lucide-react';
 
-export default function QuickViewModal({ product, onClose }) {
+const isVideoUrl = (url) => url && (url.startsWith('data:video/') || url.match(/\.(mp4|mov|webm)($|\?)/i));
+
+export default function QuickViewModal({ product, onClose, mediaTheme = 'light' }) {
   if (!product) return null;
 
   // Safeguard array transformations for colors
@@ -86,13 +88,43 @@ export default function QuickViewModal({ product, onClose }) {
             <X className="w-5 h-5" />
           </button>
 
-          {/* Left Column: Product Image Gallery */}
+          {/* Left Column: Product Image/Video Gallery */}
           <div className="w-full md:w-1/2 relative bg-[#F3EAE6] h-[280px] sm:h-[350px] md:h-full flex-shrink-0 overflow-hidden">
-            <img
-              src={product.image}
-              alt={product.name}
-              className="w-full h-full object-cover object-center"
-            />
+            {mediaTheme === 'dark' ? (
+              isVideoUrl(product.hoverImage || product.image) ? (
+                <video
+                  src={product.hoverImage || product.image}
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  className="w-full h-full object-cover object-center"
+                />
+              ) : (
+                <img
+                  src={product.hoverImage || product.image}
+                  alt={product.name}
+                  className="w-full h-full object-cover object-center"
+                />
+              )
+            ) : (
+              isVideoUrl(product.image) ? (
+                <video
+                  src={product.image}
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  className="w-full h-full object-cover object-center"
+                />
+              ) : (
+                <img
+                  src={product.image}
+                  alt={product.name}
+                  className="w-full h-full object-cover object-center"
+                />
+              )
+            )}
           </div>
 
           {/* Right Column: Details & Actions */}
