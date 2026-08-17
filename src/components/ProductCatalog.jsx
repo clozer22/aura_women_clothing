@@ -29,7 +29,7 @@ function SkeletonCard() {
   );
 }
 
-export default function ProductCatalog({ products, isLoading, onSelectProduct, onViewFullCatalog, mediaTheme = 'light', onToggleMediaTheme }) {
+export default function ProductCatalog({ products, isLoading, onSelectProduct, onViewFullCatalog }) {
   const [selectedCategory, setSelectedCategory] = useState('All Collections');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('featured');
@@ -124,40 +124,19 @@ export default function ProductCatalog({ products, isLoading, onSelectProduct, o
             ))}
           </div>
 
-          {/* Sort Dropdown & Media View Toggle */}
-          <div className="relative w-full md:w-auto flex items-center justify-end gap-3 flex-wrap">
-            {/* Media Theme Toggle */}
-            <div className="flex items-center gap-2 border border-[#E8DCD7] bg-white px-3 py-1.5 shadow-sm select-none">
-              <span className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Media View:</span>
-              <button
-                onClick={onToggleMediaTheme}
-                className="relative inline-flex h-5 w-10 items-center justify-start rounded-full bg-[#FAF0EC] border border-[#E8DCD7] transition-colors focus:outline-none cursor-pointer"
-                title="Toggle Product Light/Dark Media"
-              >
-                <span
-                  className={`inline-block h-3.5 w-3.5 transform rounded-full bg-[#B86B60] transition-transform duration-300 ${
-                    mediaTheme === 'dark' ? 'translate-x-5' : 'translate-x-0.5'
-                  }`}
-                />
-              </button>
-              <span className="text-[9px] uppercase tracking-widest font-bold text-[#2C1E1B] w-8">
-                {mediaTheme === 'light' ? 'Light' : 'Dark'}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <SlidersHorizontal className="w-3.5 h-3.5 text-[#705B56]" />
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="bg-white/90 border border-[#E8DCD7] text-xs text-[#705B56] font-medium rounded-none px-4 py-2.5 focus:outline-none focus:border-[#2C1E1B] cursor-pointer shadow-sm"
-              >
-                <option value="featured">Sort by Featured</option>
-                <option value="price-low">Price: Low to High</option>
-                <option value="price-high">Price: High to Low</option>
-                <option value="rating">Highest Rated</option>
-              </select>
-            </div>
+          {/* Sort Dropdown */}
+          <div className="relative w-full md:w-auto flex items-center justify-end gap-2">
+            <SlidersHorizontal className="w-3.5 h-3.5 text-[#705B56]" />
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="bg-white/90 border border-[#E8DCD7] text-xs text-[#705B56] font-medium rounded-none px-4 py-2.5 focus:outline-none focus:border-[#2C1E1B] cursor-pointer shadow-sm"
+            >
+              <option value="featured">Sort by Featured</option>
+              <option value="price-low">Price: Low to High</option>
+              <option value="price-high">Price: High to Low</option>
+              <option value="rating">Highest Rated</option>
+            </select>
           </div>
         </div>
 
@@ -205,42 +184,22 @@ export default function ProductCatalog({ products, isLoading, onSelectProduct, o
 
                       {/* Studio Model Full Body Image or Video */}
                       <div className="relative flex-1 flex items-center justify-center my-2 overflow-hidden rounded-none w-full h-[260px] sm:h-[340px]">
-                        {mediaTheme === 'dark' ? (
-                          isVideoUrl(product.hoverImage || product.image) ? (
-                            <video
-                              src={product.hoverImage || product.image}
-                              autoPlay
-                              loop
-                              muted
-                              playsInline
-                              className={`w-full h-full object-cover object-top rounded-none ${isSoldOut ? 'opacity-65' : ''}`}
-                            />
-                          ) : (
-                            <ShimmerImage
-                              src={product.hoverImage || product.image}
-                              alt={product.name}
-                              className={`w-full h-[260px] sm:h-[340px] rounded-none ${isSoldOut ? 'opacity-65' : ''}`}
-                              imgClassName={`w-full h-full object-cover object-top transition-transform duration-700 ${isSoldOut ? '' : 'group-hover:scale-105'}`}
-                            />
-                          )
+                        {isVideoUrl(product.image) ? (
+                          <video
+                            src={product.image}
+                            autoPlay
+                            loop
+                            muted
+                            playsInline
+                            className={`w-full h-full object-cover object-top rounded-none ${isSoldOut ? 'opacity-65' : ''}`}
+                          />
                         ) : (
-                          isVideoUrl(product.image) ? (
-                            <video
-                              src={product.image}
-                              autoPlay
-                              loop
-                              muted
-                              playsInline
-                              className={`w-full h-full object-cover object-top rounded-none ${isSoldOut ? 'opacity-65' : ''}`}
-                            />
-                          ) : (
-                            <ShimmerImage
-                              src={product.image}
-                              alt={product.name}
-                              className={`w-full h-[260px] sm:h-[340px] rounded-none ${isSoldOut ? 'opacity-65' : ''}`}
-                              imgClassName={`w-full h-full object-cover object-top transition-transform duration-700 ${isSoldOut ? '' : 'group-hover:scale-105'}`}
-                            />
-                          )
+                          <ShimmerImage
+                            src={product.image}
+                            alt={product.name}
+                            className={`w-full h-[260px] sm:h-[340px] rounded-none ${isSoldOut ? 'opacity-65' : ''}`}
+                            imgClassName={`w-full h-full object-cover object-top transition-transform duration-700 ${isSoldOut ? '' : 'group-hover:scale-105'}`}
+                          />
                         )}
 
                         {/* Quick View Button on Hover */}

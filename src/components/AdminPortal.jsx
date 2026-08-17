@@ -59,7 +59,6 @@ export default function AdminPortal({
     colorsRaw: 'Warm Rose Taupe, Nude Beige, Espresso',
     sizes: 'XXS-XS, S-M, L, XL',
     image: '',
-    hoverImage: '', // Added for Dark Mode Media
     descriptionLabel: 'Description',
     description: '',
     shopeeLink: 'https://shopee.ph/Aura-Garment-i.123456.78924',
@@ -245,7 +244,7 @@ export default function AdminPortal({
     });
   };
 
-  const handleProductImageUpload = async (e, mode = 'light') => {
+  const handleProductImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
@@ -282,7 +281,7 @@ export default function AdminPortal({
       }
 
       const fileExt = file.name.split('.').pop();
-      const fileName = `product_${mode}_${Date.now()}.${fileExt}`;
+      const fileName = `product_${Date.now()}.${fileExt}`;
       const filePath = `products/${fileName}`;
 
       const { data, error: uploadError } = await supabase.storage
@@ -296,18 +295,18 @@ export default function AdminPortal({
 
         setNewProduct(prev => ({
           ...prev,
-          [mode === 'light' ? 'image' : 'hoverImage']: publicUrl
+          image: publicUrl
         }));
-        triggerNotification('success', 'Upload Successful', `Product ${mode === 'light' ? 'light' : 'dark'} media uploaded successfully.`);
+        triggerNotification('success', 'Upload Successful', 'Product media uploaded successfully.');
       } else {
         console.warn('Storage upload failed, utilizing Base64 fallback:', uploadError?.message);
         const reader = new FileReader();
         reader.onload = (event) => {
           setNewProduct(prev => ({
             ...prev,
-            [mode === 'light' ? 'image' : 'hoverImage']: event.target.result
+            image: event.target.result
           }));
-          triggerNotification('success', 'Upload Successful', `Product ${mode === 'light' ? 'light' : 'dark'} media loaded as Base64.`);
+          triggerNotification('success', 'Upload Successful', 'Product media loaded as Base64.');
         };
         reader.readAsDataURL(file);
       }
@@ -512,7 +511,6 @@ export default function AdminPortal({
         colorsRaw: 'Warm Rose Taupe, Nude Beige, Espresso',
         sizes: 'XXS-XS, S-M, L, XL',
         image: '',
-        hoverImage: '',
         descriptionLabel: 'Description',
         description: '',
         shopeeLink: 'https://shopee.ph/Aura-Garment-i.123456.78924',
@@ -538,7 +536,6 @@ export default function AdminPortal({
       colorsRaw: (product.colors || []).map(c => c.name).join(', '),
       sizes: product.sizes || '',
       image: product.image || '',
-      hoverImage: product.hoverImage || '',
       descriptionLabel: product.descriptionLabel || 'Description',
       description: product.description || '',
       shopeeLink: product.shopeeLink || '',
@@ -1837,16 +1834,16 @@ export default function AdminPortal({
                   />
                 </div>
 
-                {/* Light Mode Media Upload */}
+                {/* Product Media Upload */}
                 <div className="space-y-2">
                   <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
-                    Light Mode Media (Photo or Video - Default View)
+                    Product Media (Photo or Video - Portrait Orientation Only)
                   </label>
                   <input
                     type="file"
                     id="product-image-file"
                     accept="image/*,video/*"
-                    onChange={(e) => handleProductImageUpload(e, 'light')}
+                    onChange={handleProductImageUpload}
                     className="hidden"
                     disabled={isUploadingProductImage}
                   />
@@ -1874,7 +1871,7 @@ export default function AdminPortal({
                       )}
                       <div className="space-y-1.5">
                         <span className="text-[9px] uppercase tracking-widest font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-none block w-max">
-                          Light Media Loaded
+                          Media Loaded
                         </span>
                         <label
                           htmlFor="product-image-file"
@@ -1891,7 +1888,7 @@ export default function AdminPortal({
                       className="flex flex-col items-center justify-center h-28 border border-dashed border-[#E8DCD7] bg-[#FAF0EC] hover:bg-[#FAF0EC]/60 transition-colors cursor-pointer text-center p-4 gap-1.5 rounded-none"
                     >
                       <Upload className="w-5 h-5 text-[#B86B60]" />
-                      <span className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Upload Light Mode Media</span>
+                      <span className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Upload Product Media</span>
                       <span className="text-[9px] text-[#A38E88] font-medium leading-normal">
                         Supports images (PNG, JPG, WEBP) & videos (MP4, MOV, WEBM).<br />
                         <strong className="text-[#B86B60]">Must be portrait</strong> if uploading an image.
@@ -1906,69 +1903,6 @@ export default function AdminPortal({
                     value={newProduct.image}
                     required
                   />
-                </div>
-
-                {/* Dark Mode Media Upload */}
-                <div className="space-y-2">
-                  <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
-                    Dark Mode Media (Photo or Video - Toggle View)
-                  </label>
-                  <input
-                    type="file"
-                    id="product-dark-image-file"
-                    accept="image/*,video/*"
-                    onChange={(e) => handleProductImageUpload(e, 'dark')}
-                    className="hidden"
-                    disabled={isUploadingProductImage}
-                  />
-
-                  {isUploadingProductImage ? (
-                    <div className="h-28 border border-dashed border-[#E8DCD7] bg-[#FAF0EC] flex flex-col items-center justify-center gap-2">
-                      <div className="w-5 h-5 border-2 border-t-transparent border-[#B86B60] rounded-full animate-spin" />
-                      <span className="text-[9px] uppercase tracking-wider font-bold text-[#B86B60]">Uploading to Server...</span>
-                    </div>
-                  ) : newProduct.hoverImage ? (
-                    <div className="flex items-center gap-4 p-3 bg-[#FAF0EC] border border-[#E8DCD7] rounded-none">
-                      {isVideoUrl(newProduct.hoverImage) ? (
-                        <video
-                          src={newProduct.hoverImage}
-                          muted
-                          playsInline
-                          className="w-16 h-20 object-cover border border-[#E8DCD7] bg-white flex-shrink-0"
-                        />
-                      ) : (
-                        <img
-                          src={newProduct.hoverImage}
-                          alt="Product Preview"
-                          className="w-16 h-20 object-cover border border-[#E8DCD7] bg-white flex-shrink-0"
-                        />
-                      )}
-                      <div className="space-y-1.5">
-                        <span className="text-[9px] uppercase tracking-widest font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-none block w-max">
-                          Dark Media Loaded
-                        </span>
-                        <label
-                          htmlFor="product-dark-image-file"
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-gray-50 border border-[#E8DCD7] text-[10px] font-bold uppercase tracking-wider text-[#2C1E1B] cursor-pointer transition-colors"
-                        >
-                          <Upload className="w-3 h-3 text-[#B86B60]" />
-                          Replace Media
-                        </label>
-                      </div>
-                    </div>
-                  ) : (
-                    <label
-                      htmlFor="product-dark-image-file"
-                      className="flex flex-col items-center justify-center h-28 border border-dashed border-[#E8DCD7] bg-[#FAF0EC] hover:bg-[#FAF0EC]/60 transition-colors cursor-pointer text-center p-4 gap-1.5 rounded-none"
-                    >
-                      <Upload className="w-5 h-5 text-[#B86B60]" />
-                      <span className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Upload Dark Mode Media</span>
-                      <span className="text-[9px] text-[#A38E88] font-medium leading-normal">
-                        Supports images (PNG, JPG, WEBP) & videos (MP4, MOV, WEBM).<br />
-                        <strong className="text-[#B86B60]">Must be portrait</strong> if uploading an image.
-                      </span>
-                    </label>
-                  )}
                 </div>
 
                 {/* Shopee Link */}
