@@ -26,7 +26,7 @@ export default function App() {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
   const [catalogSearchQuery, setCatalogSearchQuery] = useState('');
-  
+
   const [showSplash, setShowSplash] = useState(true);
 
   // Real-time products state loaded from database
@@ -60,7 +60,7 @@ export default function App() {
         .from('products')
         .select('*')
         .order('createdAt', { ascending: false });
-      
+
       if (error) throw error;
       if (data) {
         setDbProducts(data);
@@ -80,7 +80,7 @@ export default function App() {
         .select('*')
         .limit(1)
         .single();
-      
+
       if (error) throw error;
       if (data) {
         setHeroConfig({
@@ -144,7 +144,7 @@ export default function App() {
     setCatalogSearchQuery('');
     setCurrentView('home');
     window.history.pushState(null, '', '/');
-    
+
     if (scrollToSection && typeof scrollToSection === 'string') {
       setTimeout(() => {
         const element = document.getElementById(scrollToSection);
@@ -170,7 +170,7 @@ export default function App() {
   // Render full-screen Admin View if selected
   if (currentView === 'admin') {
     return (
-      <AdminPortal 
+      <AdminPortal
         onClosePortal={() => {
           fetchProducts();
           fetchStorefrontConfig();
@@ -188,15 +188,15 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#fff3f7] text-[#2C1E1B] selection:bg-[#D99B91] selection:text-white">
-      
+
       {/* Premium Session-first Splash Screen */}
       <AnimatePresence>
         {showSplash && (
-          <SplashScreen 
+          <SplashScreen
             onComplete={() => {
               sessionStorage.setItem('aura_splash_seen', 'true');
               setShowSplash(false);
-            }} 
+            }}
           />
         )}
       </AnimatePresence>
@@ -237,9 +237,22 @@ export default function App() {
             {/* Continuous Scrolling Marquee Ticker */}
             <MarqueeTicker />
 
-            {/* About Aura Brand Story */}
+            <div className="w-full flex items-center justify-center py-5 bg-white">
+              <h2
+                className="font-editorial italic font-light tracking-tight leading-none text-white text-3xl sm:text-5xl text-center select-none"
+                style={{ textShadow: '0 2px 10px rgba(44, 30, 27, 0.95), 0 1px 4px rgba(44, 30, 27, 0.75)' }}
+              >
+                {heroConfig.aboutTitle || 'About Aura'}
+              </h2>
+            </div>
             <AboutSection config={heroConfig} />
-
+            <div className="w-full flex flex-col items-center justify-center py-5 bg-white pb-16">
+              <div className='max-w-2xl'>
+                <p className="text-xs sm:text-sm text-[#705B56] font-sans text-center leading-relaxed">
+                  {heroConfig.aboutDescription || ''}
+                </p>
+              </div>
+            </div>
             {/* Product Catalog Grid */}
             <ProductCatalog
               products={activeProducts}

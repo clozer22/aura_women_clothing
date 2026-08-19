@@ -52,14 +52,14 @@ export default function SplashScreen({ onComplete }) {
         {/* Animated Main Title */}
         <motion.h1
           variants={textVariants}
-          className="text-[110px] sm:text-[230px] md:text-[350px] font-brand text-[#f3d5e7] tracking-normal select-none leading-none"
+          className="text-[110px] sm:text-[230px] md:text-[350px] font-brand text-[#A25F55] tracking-normal select-none leading-none"
         >
           Aura
         </motion.h1>
       </div>
 
       {/* Decorative Brand Details */}
-      <div className="absolute bottom-8 left-0 right-0 text-center text-[9px] uppercase tracking-[0.2em] font-semibold text-[#f3d5e7]/50 px-6 sm:px-0 flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-3 pointer-events-none">
+      <div className="absolute bottom-8 left-0 right-0 text-center text-[9px] uppercase tracking-[0.2em] font-semibold text-[#A25F55]/50 px-6 sm:px-0 flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-3 pointer-events-none">
         <span>© 2026 Aura Women's Clothing</span>
         <span className="hidden sm:inline opacity-40">|</span>
         <span>All Rights Reserved</span>
