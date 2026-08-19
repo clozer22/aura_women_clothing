@@ -246,7 +246,7 @@ export default function App() {
               </h2>
             </div>
             <AboutSection config={heroConfig} />
-            <div className="w-full flex flex-col items-center justify-center py-5 bg-white pb-16">
+            <div className="w-full flex flex-col items-center justify-center py-5 px-3 bg-white pb-16">
               <div className='max-w-2xl'>
                 <p className="text-xs sm:text-sm text-[#705B56] font-sans text-center leading-relaxed">
                   {heroConfig.aboutDescription || ''}
