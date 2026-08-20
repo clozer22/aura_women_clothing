@@ -59,7 +59,7 @@ export default function SplashScreen({ onComplete }) {
       </div>
 
       {/* Decorative Brand Details */}
-      <div className="absolute bottom-8 left-0 right-0 text-center text-[9px] uppercase tracking-[0.2em] font-semibold text-[#A25F55]/50 px-6 sm:px-0 flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-3 pointer-events-none">
+      <div className="absolute bottom-8 left-0 right-0 text-center text-[9px] uppercase tracking-[0.2em] font-semibold text-[#f3d5e7] px-6 sm:px-0 flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-3 pointer-events-none">
         <span>© 2026 Aura Women's Clothing</span>
         <span className="hidden sm:inline opacity-40">|</span>
         <span>All Rights Reserved</span>
