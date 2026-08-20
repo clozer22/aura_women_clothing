@@ -239,8 +239,7 @@ export default function App() {
 
             <div className="w-full flex items-center justify-center py-5 bg-white">
               <h2
-                className="font-editorial italic font-light tracking-tight leading-none text-white text-3xl sm:text-5xl text-center select-none"
-                style={{ textShadow: '0 2px 10px rgba(44, 30, 27, 0.95), 0 1px 4px rgba(44, 30, 27, 0.75)' }}
+                className="font-brand font-light tracking-tight leading-none  text-[#2C1E1B] block uppercase text-3xl sm:text-5xl text-center select-none"
               >
                 {heroConfig.aboutTitle || 'About Aura'}
               </h2>

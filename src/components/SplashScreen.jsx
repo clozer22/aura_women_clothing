@@ -52,7 +52,7 @@ export default function SplashScreen({ onComplete }) {
         {/* Animated Main Title */}
         <motion.h1
           variants={textVariants}
-          className="text-[110px] sm:text-[230px] md:text-[350px] font-brand text-[#A25F55] tracking-normal select-none leading-none"
+          className="text-[110px] sm:text-[230px] md:text-[350px] font-brand text-[#f3d5e7] tracking-normal select-none leading-none"
         >
           Aura
         </motion.h1>

@@ -15,8 +15,8 @@ export default function MarqueeTicker() {
           <div key={idx} className="flex items-center gap-12 font-medium">
             <span className={
               item.isScript
-                ? "font-script text-[4.5rem] leading-none text-[#A25F55] lowercase tracking-wide -mt-3 block pr-2"
-                : "font-brand text-sm sm:text-base text-[#A25F55] tracking-widest lowercase first-letter:capitalize"
+                ? "font-script text-[4.5rem] leading-none text-[#f3d5e7] lowercase tracking-wide -mt-3 block pr-2"
+                : "font-brand text-sm sm:text-base text-[#f3d5e7] tracking-widest lowercase first-letter:capitalize"
             }>
               {item.text}
             </span>
