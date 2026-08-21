@@ -237,9 +237,9 @@ export default function App() {
             {/* Continuous Scrolling Marquee Ticker */}
             <MarqueeTicker />
 
-            <div className="w-full flex items-center justify-center py-5 bg-white">
+            <div className="w-full flex items-center justify-center pt-[4rem] pb-7 bg-white">
               <h2
-                className="font-brand font-light text-[2.2rem] sm:text-[3.5rem] tracking-[0.25em] leading-none  text-[#2C1E1B] block uppercase text-center select-none"
+                className="font-brand font-light text-[2.2rem] sm:text-[5rem] tracking-[0.25em] leading-none  text-[#2C1E1B] block uppercase text-center select-none"
               >
                 {heroConfig.aboutTitle || 'About Aura'}
               </h2>
