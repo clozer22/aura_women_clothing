@@ -91,7 +91,7 @@
 .font-brand {
   font-family: 'Playfair Display', 'Prata', 'Italiana', 'Bodoni Moda', serif;
   font-weight: 500;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
 }
 
 .font-hero {
@@ -101,17 +101,26 @@
 }
 
 /* Custom Scrollbar (Square shapes, rounded-none) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #ccc2c3 #fff3f7;
+}
+
 ::-webkit-scrollbar {
   width: 7px;
+  height: 7px;
 }
+
 ::-webkit-scrollbar-track {
   background: #fff3f7;
 }
+
 ::-webkit-scrollbar-thumb {
-  background: #D99B91;
+  background: #ccc2c3;
 }
+
 ::-webkit-scrollbar-thumb:hover {
-  background: #B86B60;
+  background: #a89f9f;
 }
 
 /* Glassmorphism Navigation (Square, rounded-none) */
@@ -178,6 +187,7 @@
   0% {
     background-position: -200% 0;
   }
+
   100% {
     background-position: 200% 0;
   }
@@ -187,4 +197,62 @@
   background: linear-gradient(90deg, #faf0ec 25%, #f5e6e1 50%, #faf0ec 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite linear;
+}
+
+/* Product Description Rich Text Formatting */
+.product-description-html ul,
+.product-description-editor ul {
+  list-style-type: disc !important;
+  margin-left: 1.25rem !important;
+  margin-top: 0.5rem !important;
+  margin-bottom: 0.5rem !important;
+}
+
+.product-description-html ol,
+.product-description-editor ol {
+  list-style-type: decimal !important;
+  margin-left: 1.25rem !important;
+  margin-top: 0.5rem !important;
+  margin-bottom: 0.5rem !important;
+}
+
+.product-description-html li,
+.product-description-editor li {
+  margin-bottom: 0.25rem !important;
+  list-style-position: outside !important;
+  display: list-item !important;
+}
+
+.product-description-html b,
+.product-description-html strong,
+.product-description-editor b,
+.product-description-editor strong {
+  font-weight: 700 !important;
+}
+
+.product-description-html i,
+.product-description-html em,
+.product-description-editor i,
+.product-description-editor em {
+  font-style: italic !important;
+}
+
+/* Placeholder support for contenteditable */
+.product-description-editor:empty:before {
+  content: attr(placeholder);
+  color: #a8928b;
+  opacity: 0.6;
+  cursor: text;
+}
+
+/* Scrollbar Hiding Utility */
+.scrollbar-none::-webkit-scrollbar {
+  display: none !important;
+}
+
+.scrollbar-none {
+  -ms-overflow-style: none !important;
+  /* IE/Edge */
+  scrollbar-width: none !important;
+  /* Firefox */
 }

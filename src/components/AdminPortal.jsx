@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { User, ShoppingBag, Sliders, ArrowLeft, Search, Plus, X, Globe, Save, Trash2, LogOut, Upload, AlertTriangle, XCircle, Check, Edit, Star, Menu } from 'lucide-react';
 import { PRODUCTS } from '../data/products';
 import { supabase } from '../lib/supabaseClient';
+import RichTextEditor from './RichTextEditor';
 
 const isVideoUrl = (url) => url && (url.startsWith('data:video/') || url.match(/\.(mp4|mov|webm)($|\?)/i));
 
@@ -1934,11 +1935,9 @@ export default function AdminPortal({
                 {/* Description */}
                 <div className="space-y-1">
                   <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Product Description</label>
-                  <textarea
-                    rows={2}
+                  <RichTextEditor
                     value={newProduct.description}
-                    onChange={(e) => setNewProduct({ ...newProduct, description: e.target.value })}
-                    className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B] resize-none"
+                    onChange={(html) => setNewProduct({ ...newProduct, description: html })}
                     placeholder="Describe material tailoring details..."
                   />
                 </div>
