@@ -92,7 +92,7 @@ export default function Hero({ config }) {
         <div className="absolute inset-0 flex items-center justify-center rounded-none z-10">
           <h1
             className="text-[32vw] sm:text-[35vw] md:text-[38vw] lg:text-[40vw] font-brand font-normal text-white select-none tracking-tight leading-none lowercase first-letter:capitalize drop-shadow-xl text-center"
-            style={{ textShadow: '0 5px 24px rgba(179, 179, 179, 0.81), 0 2px 8px rgba(160, 158, 158, 0.61)' }}
+            style={{ textShadow: '0 5px 24px rgba(179, 179, 179, 0.81) ' }}
           >
             {activeConfig.title || 'Aura'}
           </h1>
