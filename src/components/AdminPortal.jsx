@@ -1179,7 +1179,7 @@ export default function AdminPortal({
                 </div>
                 <div className="md:col-span-8 flex flex-col justify-between space-y-6">
                   <div className="space-y-3">
-                    <span className="text-[10px] tracking-widest uppercase font-bold text-[#B86B60] bg-[#FAF0EC] px-3 py-1 rounded-none inline-block">ATELIER FOUNDER</span>
+                    <span className="text-[10px] tracking-widest uppercase font-bold text-[#B86B60] bg-[#FAF0EC] px-3 py-1 rounded-none inline-block">FOUNDER</span>
                     <h3 className="text-3xl font-editorial font-light text-[#2C1E1B]">{profile.name}</h3>
                     <p className="text-xs text-[#705B56] leading-relaxed">
                       {profile.bio}
