@@ -54,17 +54,18 @@ export default function AdminPortal({
     name: '',
     category: 'Suits & Coats',
     mainCategory: 'top',
-    subType: 'Blazers & Jackets',
+    subType: '',
     price: '',
-    qty: 24,
-    colorsRaw: 'Warm Rose Taupe, Nude Beige, Espresso',
+    qty: '',
+    colorsRaw: '',
     sizes: 'XXS-XS, S-M, L, XL',
     image: '',
+    sizeChart: '',
     descriptionLabel: 'Description',
     description: '',
-    shopeeLink: 'https://shopee.ph/Aura-Garment-i.123456.78924',
-    rating: '4.9',
-    solds: '150',
+    shopeeLink: '',
+    rating: '',
+    solds: '',
     statusBadge: ''
   });
 
@@ -73,6 +74,7 @@ export default function AdminPortal({
   const [isUploadingPoster, setIsUploadingPoster] = useState(false);
   const [isUploadingAboutMedia, setIsUploadingAboutMedia] = useState(false);
   const [isUploadingProductImage, setIsUploadingProductImage] = useState(false);
+  const [isUploadingSizeChart, setIsUploadingSizeChart] = useState(false);
   const [notification, setNotification] = useState(null); // { type: 'success' | 'error' | 'warning', title: string, message: string }
   const [confirmDialog, setConfirmDialog] = useState(null); // { message: string, onConfirm: () => void }
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
@@ -298,7 +300,6 @@ export default function AdminPortal({
           ...prev,
           image: publicUrl
         }));
-        triggerNotification('success', 'Upload Successful', 'Product media uploaded successfully.');
       } else {
         console.warn('Storage upload failed, utilizing Base64 fallback:', uploadError?.message);
         const reader = new FileReader();
@@ -307,7 +308,6 @@ export default function AdminPortal({
             ...prev,
             image: event.target.result
           }));
-          triggerNotification('success', 'Upload Successful', 'Product media loaded as Base64.');
         };
         reader.readAsDataURL(file);
       }
@@ -315,6 +315,53 @@ export default function AdminPortal({
       triggerNotification('error', 'Upload Failed', err.message);
     } finally {
       setIsUploadingProductImage(false);
+    }
+  };
+
+  const handleSizeChartUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const isImage = file.type.startsWith('image/') || !!file.name.toLowerCase().match(/\.(png|jpg|jpeg|gif|webp)$/i);
+    if (!isImage) {
+      triggerNotification('warning', 'Invalid File Format', 'Only image files (PNG, JPG, JPEG, WEBP) are allowed for size charts.');
+      return;
+    }
+
+    setIsUploadingSizeChart(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `sizechart_${Date.now()}.${fileExt}`;
+      const filePath = `products/${fileName}`;
+
+      const { data, error: uploadError } = await supabase.storage
+        .from('storefront')
+        .upload(filePath, file, { cacheControl: '3600', upsert: true });
+
+      if (!uploadError && data) {
+        const { data: { publicUrl } } = supabase.storage
+          .from('storefront')
+          .getPublicUrl(filePath);
+
+        setNewProduct(prev => ({
+          ...prev,
+          sizeChart: publicUrl
+        }));
+      } else {
+        console.warn('Storage upload failed, utilizing Base64 fallback:', uploadError?.message);
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          setNewProduct(prev => ({
+            ...prev,
+            sizeChart: event.target.result
+          }));
+        };
+        reader.readAsDataURL(file);
+      }
+    } catch (err) {
+      triggerNotification('error', 'Upload Failed', err.message);
+    } finally {
+      setIsUploadingSizeChart(false);
     }
   };
 
@@ -451,6 +498,7 @@ export default function AdminPortal({
       sizes: newProduct.sizes,
       image: newProduct.image,
       hoverImage: newProduct.hoverImage || newProduct.image, // fall back to light-mode if empty
+      sizeChart: newProduct.sizeChart || null,
       descriptionLabel: newProduct.descriptionLabel || 'Description',
       description: newProduct.description,
       shopeeLink: newProduct.shopeeLink || 'https://shopee.ph',
@@ -506,17 +554,18 @@ export default function AdminPortal({
         name: '',
         category: 'Suits & Coats',
         mainCategory: 'top',
-        subType: 'Blazers & Jackets',
+        subType: '',
         price: '',
-        qty: 24,
-        colorsRaw: 'Warm Rose Taupe, Nude Beige, Espresso',
+        qty: '',
+        colorsRaw: '',
         sizes: 'XXS-XS, S-M, L, XL',
         image: '',
+        sizeChart: '',
         descriptionLabel: 'Description',
         description: '',
-        shopeeLink: 'https://shopee.ph/Aura-Garment-i.123456.78924',
-        rating: '4.9',
-        solds: '150',
+        shopeeLink: '',
+        rating: '',
+        solds: '',
         statusBadge: ''
       });
       setEditingProductId(null);
@@ -537,6 +586,7 @@ export default function AdminPortal({
       colorsRaw: (product.colors || []).map(c => c.name).join(', '),
       sizes: product.sizes || '',
       image: product.image || '',
+      sizeChart: product.sizeChart || '',
       descriptionLabel: product.descriptionLabel || 'Description',
       description: product.description || '',
       shopeeLink: product.shopeeLink || '',
@@ -1231,16 +1281,17 @@ export default function AdminPortal({
                     name: '',
                     category: 'Suits & Coats',
                     mainCategory: 'top',
-                    subType: 'Blazers & Jackets',
+                    subType: '',
                     price: '',
-                    qty: 24,
-                    colorsRaw: 'Warm Rose Taupe, Nude Beige, Espresso',
+                    qty: '',
+                    colorsRaw: '',
                     sizes: 'XXS-XS, S-M, L, XL',
                     image: '',
+                    sizeChart: '',
                     description: '',
-                    shopeeLink: 'https://shopee.ph/Aura-Garment-i.123456.78924',
-                    rating: '4.9',
-                    solds: '150',
+                    shopeeLink: '',
+                    rating: '',
+                    solds: '',
                     statusBadge: ''
                   });
                   setIsAddModalOpen(true);
@@ -1792,34 +1843,19 @@ export default function AdminPortal({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Colors */}
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Colors (comma-sep)</label>
-                    <input
-                      type="text"
-                      required
-                      value={newProduct.colorsRaw}
-                      onChange={(e) => setNewProduct({ ...newProduct, colorsRaw: e.target.value })}
-                      className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B]"
-                      placeholder="e.g. Pink, Grey, Gold"
-                    />
-                  </div>
-
-                  {/* Ratings (Fake) */}
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Rating (e.g. 4.9)</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      min="1"
-                      max="5"
-                      required
-                      value={newProduct.rating}
-                      onChange={(e) => setNewProduct({ ...newProduct, rating: e.target.value })}
-                      className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B]"
-                    />
-                  </div>
+                {/* Ratings (Fake) */}
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Rating (e.g. 4.9)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="1"
+                    max="5"
+                    required
+                    value={newProduct.rating}
+                    onChange={(e) => setNewProduct({ ...newProduct, rating: e.target.value })}
+                    className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B]"
+                  />
                 </div>
 
                 {/* Sizes Range Input */}
@@ -1904,6 +1940,68 @@ export default function AdminPortal({
                     value={newProduct.image}
                     required
                   />
+                </div>
+
+                {/* Product Size Chart Upload */}
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
+                    Product Size Chart (Optional Image)
+                  </label>
+                  <input
+                    type="file"
+                    id="product-sizechart-file"
+                    accept="image/*"
+                    onChange={handleSizeChartUpload}
+                    className="hidden"
+                    disabled={isUploadingSizeChart}
+                  />
+
+                  {isUploadingSizeChart ? (
+                    <div className="h-24 border border-dashed border-[#E8DCD7] bg-[#FAF0EC] flex flex-col items-center justify-center gap-2">
+                      <div className="w-5 h-5 border-2 border-t-transparent border-[#B86B60] rounded-full animate-spin" />
+                      <span className="text-[9px] uppercase tracking-wider font-bold text-[#B86B60]">Uploading Size Chart...</span>
+                    </div>
+                  ) : newProduct.sizeChart ? (
+                    <div className="flex items-center gap-4 p-3 bg-[#FAF0EC] border border-[#E8DCD7] rounded-none">
+                      <img
+                        src={newProduct.sizeChart}
+                        alt="Size Chart Preview"
+                        className="w-20 h-16 object-contain border border-[#E8DCD7] bg-white flex-shrink-0"
+                      />
+                      <div className="space-y-1.5">
+                        <span className="text-[9px] uppercase tracking-widest font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-none block w-max">
+                          Size Chart Loaded
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <label
+                            htmlFor="product-sizechart-file"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-gray-50 border border-[#E8DCD7] text-[10px] font-bold uppercase tracking-wider text-[#2C1E1B] cursor-pointer transition-colors"
+                          >
+                            <Upload className="w-3 h-3 text-[#B86B60]" />
+                            Replace Image
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setNewProduct({ ...newProduct, sizeChart: '' })}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-red-50 border border-red-200 text-[10px] font-bold uppercase tracking-wider text-red-600 transition-colors"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <label
+                      htmlFor="product-sizechart-file"
+                      className="flex flex-col items-center justify-center h-24 border border-dashed border-[#E8DCD7] bg-[#FAF0EC] hover:bg-[#FAF0EC]/60 transition-colors cursor-pointer text-center p-4 gap-1.5 rounded-none"
+                    >
+                      <Upload className="w-5 h-5 text-[#B86B60]" />
+                      <span className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Upload Size Chart Image</span>
+                      <span className="text-[9px] text-[#A38E88] font-medium leading-normal">
+                        Supports images (PNG, JPG, WEBP). Recommended format: horizontal table list.
+                      </span>
+                    </label>
+                  )}
                 </div>
 
                 {/* Shopee Link */}

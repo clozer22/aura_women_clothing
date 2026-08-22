@@ -32,6 +32,7 @@ CREATE TABLE public.products (
   sizes text DEFAULT 'XXS-XS, S-M, L, XL',
   image text NOT NULL,
   "hoverImage" text,
+  "sizeChart" text,
   details text[] DEFAULT '{}'::text[],
   qty integer DEFAULT 24,
   "createdAt" timestamptz DEFAULT now()

@@ -125,7 +125,7 @@ export default function ContactSection() {
                   <Mail className="w-4 h-4 text-[#ffffff]" />
                 </div>
                 <div>
-                  <span className="text-[10px] uppercase tracking-widest text-[#ffffff] block mb-0.5">Concierge Email</span>
+                  <span className="text-[10px] uppercase tracking-widest text-[#ffffff] block mb-0.5">EMAIL</span>
                   <span className="font-sans text-[#ffffff] group-hover:text-[#ffffff] transition-colors">auraofficialph@gmail.com</span>
                 </div>
               </a>
@@ -136,7 +136,7 @@ export default function ContactSection() {
                   <MapPin className="w-4 h-4 text-[#ffffff]" />
                 </div>
                 <div>
-                  <span className="text-[10px] uppercase tracking-widest text-[#ffffff] block mb-0.5">Atelier Location</span>
+                  <span className="text-[10px] uppercase tracking-widest text-[#ffffff] block mb-0.5">AURA HEADQUARTERS</span>
                   <span className="font-sans text-[#ffffff]">General Trias Cavite</span>
                 </div>
               </div>
@@ -258,7 +258,7 @@ export default function ContactSection() {
                     </>
                   ) : (
                     <>
-                      <span>Connect with Atelier</span>
+                      <span>SEND MESSAGE</span>
                       <Send className="w-3.5 h-3.5" />
                     </>
                   )}

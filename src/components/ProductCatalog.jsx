@@ -81,7 +81,7 @@ export default function ProductCatalog({ products, isLoading, onSelectProduct, o
           transition={{ duration: 0.8 }}
           className="text-center max-w-2xl mx-auto mb-12"
         >
-          <span className="font-brand text-[2.2rem] sm:text-[3.5rem] tracking-[0.25em] text-[#2C1E1B] block uppercase font-normal mb-3">
+          <span className="font-brand text-[2.2rem] sm:text-[3.5rem] tracking-[0.25em] text-[#705B56] block uppercase font-normal mb-3">
             AURA COLLECTIONS
           </span>
           <p className="text-xs sm:text-sm text-[#705B56] font-sans leading-relaxed">

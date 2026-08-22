@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Star, Sparkles, Check } from 'lucide-react';
+import sizeChartImg from '../images/size_chart.png';
 
 const isVideoUrl = (url) => url && (url.startsWith('data:video/') || url.match(/\.(mp4|mov|webm)($|\?)/i));
 
@@ -10,6 +11,7 @@ export default function QuickViewModal({ product, onClose }) {
   // Safeguard array transformations for colors
   const colorsArray = Array.isArray(product.colors) ? product.colors : [];
   const [selectedColor, setSelectedColor] = useState(colorsArray[0]);
+  const [showSizeChart, setShowSizeChart] = useState(false);
 
   // Safeguard array transformations for sizes
   const renderSizes = () => {
@@ -152,15 +154,15 @@ export default function QuickViewModal({ product, onClose }) {
                 />
               </div>
 
-              {/* Size Selector - Purely informational range badges */}
+              {/* Size Selector - Clickable View Sizes button */}
               <div className="mb-6">
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs uppercase tracking-[0.18em] font-semibold text-[#2C1E1B]">
-                    Available Sizes
-                  </label>
-                </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  {renderSizes()}
+                <div>
+                  <button
+                    onClick={() => setShowSizeChart(true)}
+                    className="px-6 py-2.5 bg-white text-[#705B56] hover:bg-[#FAF5F2] border border-[#E8DCD7] text-xs font-semibold uppercase tracking-wider transition-all duration-200 cursor-pointer"
+                  >
+                    View Sizes
+                  </button>
                 </div>
               </div>
 
@@ -182,6 +184,41 @@ export default function QuickViewModal({ product, onClose }) {
 
         </motion.div>
       </div>
+
+      {/* Size Chart Image Modal */}
+      <AnimatePresence>
+        {showSizeChart && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-[#2C1E1B]/80 backdrop-blur-sm"
+              onClick={() => setShowSizeChart(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative z-10 bg-white p-3 sm:p-5 max-w-md w-full max-h-[85vh] overflow-y-auto flex flex-col items-center shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                onClick={() => setShowSizeChart(false)}
+                className="absolute top-3 right-3 p-1.5 rounded-none bg-[#FAF0EC] hover:bg-[#FAF0EC]/80 text-[#2C1E1B] transition-all cursor-pointer"
+                aria-label="Close size chart"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              <img
+                src={product.sizeChart || sizeChartImg}
+                alt={`${product.name} Size Chart`}
+                className="w-full h-auto object-contain max-h-[70vh] mt-6"
+              />
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </AnimatePresence>
   );
 }
