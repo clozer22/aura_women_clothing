@@ -82,63 +82,12 @@ export default function ProductCatalog({ products, isLoading, onSelectProduct, o
           className="text-center max-w-2xl mx-auto mb-12"
         >
           <span className="font-brand text-[2.2rem] sm:text-[3.5rem] tracking-[0.25em] text-[#2C1E1B] block uppercase font-normal mb-3">
-            Curated Wardrobe
+            AURA COLLECTIONS
           </span>
-          <h2 className="text-3xl sm:text-5xl font-editorial font-light text-[#2C1E1B] tracking-tight mb-4">
-            The Aura Collection
-          </h2>
           <p className="text-xs sm:text-sm text-[#705B56] font-sans leading-relaxed">
-            Hand-cut Mulberry silk, Italian virgin wool tailoring, and Grade-A cashmere essentials crafted for enduring style.
+            AURA is a modern wardrobe of timeless essentials, designed for everyday wear.
           </p>
         </motion.div>
-
-        {/* Filter Controls Bar */}
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-10">
-
-          {/* Search Box */}
-          <div className="relative w-full md:w-72">
-            <Search className="w-4 h-4 text-[#705B56] absolute left-4 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Search garments..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-11 pr-4 py-2.5 rounded-none bg-white/90 border border-[#E8DCD7] text-xs text-[#2C1E1B] placeholder-[#A38E88] focus:outline-none focus:border-[#2C1E1B] transition-all shadow-sm"
-            />
-          </div>
-
-          {/* Category Pills Navigation */}
-          <div className="flex items-center justify-center gap-2 flex-wrap max-w-full">
-            {CATEGORIES.map((cat) => (
-              <motion.button
-                whileTap={{ scale: 0.95 }}
-                key={cat}
-                onClick={() => setSelectedCategory(cat)}
-                className={`px-4 py-2 sm:px-5 sm:py-2.5 rounded-none text-[11px] uppercase tracking-[0.15em] font-medium transition-all duration-300 ${selectedCategory === cat
-                  ? 'bg-[#ccc2c3] text-white shadow-lg scale-105'
-                  : 'bg-white/80 hover:bg-white text-[#705B56] border border-[#E8DCD7]'
-                  }`}
-              >
-                {cat}
-              </motion.button>
-            ))}
-          </div>
-
-          {/* Sort Dropdown */}
-          <div className="relative w-full md:w-auto flex items-center justify-end gap-2">
-            <SlidersHorizontal className="w-3.5 h-3.5 text-[#705B56]" />
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className="bg-white/90 border border-[#E8DCD7] text-xs text-[#705B56] font-medium rounded-none px-4 py-2.5 focus:outline-none focus:border-[#2C1E1B] cursor-pointer shadow-sm"
-            >
-              <option value="featured">Sort by Featured</option>
-              <option value="price-low">Price: Low to High</option>
-              <option value="price-high">Price: High to Low</option>
-              <option value="rating">Highest Rated</option>
-            </select>
-          </div>
-        </div>
 
         {/* Product Grid - Unified with the Full Catalog Page Layout (Thin border grid separator, empty slots render white) */}
         {filteredProducts.length === 0 && !isLoading ? (
@@ -169,94 +118,94 @@ export default function ProductCatalog({ products, isLoading, onSelectProduct, o
                         onClick={() => onSelectProduct(product)}
                         className="group bg-white p-3 sm:p-4 flex flex-col justify-between cursor-pointer hover:bg-[#FAF5F2]/40 transition-colors relative min-h-[380px] sm:min-h-[460px] rounded-none border-r border-b border-[#E8DCD7]"
                       >
-                      {/* Top Badges Header */}
-                      <div className="flex items-center justify-between text-[11px] font-bold text-[#2C1E1B] uppercase tracking-wider mb-2 z-10">
-                        <span />
-                        <span>
-                          {product.statusBadge && (
-                            <span className={`text-[10px] tracking-widest font-bold ${product.statusBadge === 'SOLD OUT' ? 'text-gray-400' : 'text-[#2C1E1B]'
-                              }`}>
-                              {product.statusBadge}
-                            </span>
-                          )}
-                        </span>
-                      </div>
-
-                      {/* Studio Model Full Body Image or Video */}
-                      <div className="relative flex-1 flex items-center justify-center my-2 overflow-hidden rounded-none w-full h-[260px] sm:h-[340px]">
-                        {isVideoUrl(product.image) ? (
-                          <video
-                            src={product.image}
-                            autoPlay
-                            loop
-                            muted
-                            playsInline
-                            className={`w-full h-full object-cover object-top rounded-none ${isSoldOut ? 'opacity-65' : ''}`}
-                          />
-                        ) : (
-                          <ShimmerImage
-                            src={product.image}
-                            alt={product.name}
-                            className={`w-full h-[260px] sm:h-[340px] rounded-none ${isSoldOut ? 'opacity-65' : ''}`}
-                            imgClassName={`w-full h-full object-cover object-top transition-transform duration-700 ${isSoldOut ? '' : 'group-hover:scale-105'}`}
-                          />
-                        )}
-
-                        {/* Quick View Button on Hover */}
-                        <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center gap-2 rounded-none">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onSelectProduct(product);
-                            }}
-                            className="px-4 py-2 bg-white text-[#2C1E1B] rounded-none text-[10px] font-bold uppercase tracking-widest shadow-xl hover:bg-[#ccc2c3] hover:text-white transition-colors"
-                          >
-                            Quick View
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Bottom Product Info Bar (Exact layout from catalog page) */}
-                      <div className="pt-3 border-t border-[#E8DCD7]/40 flex items-end justify-between gap-2 text-[11px] rounded-none">
-
-                        {/* Left: Product Name */}
-                        <div className="flex-1">
-                          <h3 className="font-bold text-[#2C1E1B] uppercase tracking-wider text-[11px] sm:text-xs leading-tight line-clamp-1 group-hover:text-[#B86B60] transition-colors rounded-none">
-                            {product.name}
-                          </h3>
-                        </div>
-
-                        {/* Right: Price & Status */}
-                        <div className="text-right whitespace-nowrap">
-                          {isSoldOut ? (
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                              SOLD OUT
-                            </span>
-                          ) : (
-                            <div className="flex items-baseline gap-1.5 justify-end">
-                              <span className="font-bold text-[#2C1E1B]">
-                                ₱{Number(product.price)?.toLocaleString()}
+                        {/* Top Badges Header */}
+                        <div className="flex items-center justify-between text-[11px] font-bold text-[#2C1E1B] uppercase tracking-wider mb-2 z-10">
+                          <span />
+                          <span>
+                            {product.statusBadge && (
+                              <span className={`text-[10px] tracking-widest font-bold ${product.statusBadge === 'SOLD OUT' ? 'text-gray-400' : 'text-[#2C1E1B]'
+                                }`}>
+                                {product.statusBadge}
                               </span>
-                            </div>
-                          )}
+                            )}
+                          </span>
                         </div>
 
-                      </div>
+                        {/* Studio Model Full Body Image or Video */}
+                        <div className="relative flex-1 flex items-center justify-center my-2 overflow-hidden rounded-none w-full h-[260px] sm:h-[340px]">
+                          {isVideoUrl(product.image) ? (
+                            <video
+                              src={product.image}
+                              autoPlay
+                              loop
+                              muted
+                              playsInline
+                              className={`w-full h-full object-cover object-top rounded-none ${isSoldOut ? 'opacity-65' : ''}`}
+                            />
+                          ) : (
+                            <ShimmerImage
+                              src={product.image}
+                              alt={product.name}
+                              className={`w-full h-[260px] sm:h-[340px] rounded-none ${isSoldOut ? 'opacity-65' : ''}`}
+                              imgClassName={`w-full h-full object-cover object-top transition-transform duration-700 ${isSoldOut ? '' : 'group-hover:scale-105'}`}
+                            />
+                          )}
 
-                    </motion.div>
-                  );
-                })}
-              </AnimatePresence>
-              {6 - filteredProducts.slice(0, 6).length > 0 &&
-                Array(6 - filteredProducts.slice(0, 6).length)
-                  .fill(0)
-                  .map((_, idx) => (
-                    <div
-                      key={`empty-${idx}`}
-                      className="bg-white min-h-[380px] sm:min-h-[460px] rounded-none border-r border-b border-[#E8DCD7]"
-                    />
-                  ))
-              }
+                          {/* Quick View Button on Hover */}
+                          <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center gap-2 rounded-none">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onSelectProduct(product);
+                              }}
+                              className="px-4 py-2 bg-white text-[#2C1E1B] rounded-none text-[10px] font-bold uppercase tracking-widest shadow-xl hover:bg-[#ccc2c3] hover:text-white transition-colors"
+                            >
+                              Quick View
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Bottom Product Info Bar (Exact layout from catalog page) */}
+                        <div className="pt-3 border-t border-[#E8DCD7]/40 flex items-end justify-between gap-2 text-[11px] rounded-none">
+
+                          {/* Left: Product Name */}
+                          <div className="flex-1">
+                            <h3 className="font-bold text-[#2C1E1B] uppercase tracking-wider text-[11px] sm:text-xs leading-tight line-clamp-1 group-hover:text-[#B86B60] transition-colors rounded-none">
+                              {product.name}
+                            </h3>
+                          </div>
+
+                          {/* Right: Price & Status */}
+                          <div className="text-right whitespace-nowrap">
+                            {isSoldOut ? (
+                              <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                                SOLD OUT
+                              </span>
+                            ) : (
+                              <div className="flex items-baseline gap-1.5 justify-end">
+                                <span className="font-bold text-[#2C1E1B]">
+                                  ₱{Number(product.price)?.toLocaleString()}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+
+                        </div>
+
+                      </motion.div>
+                    );
+                  })}
+                </AnimatePresence>
+                {6 - filteredProducts.slice(0, 6).length > 0 &&
+                  Array(6 - filteredProducts.slice(0, 6).length)
+                    .fill(0)
+                    .map((_, idx) => (
+                      <div
+                        key={`empty-${idx}`}
+                        className="bg-white min-h-[380px] sm:min-h-[460px] rounded-none border-r border-b border-[#E8DCD7]"
+                      />
+                    ))
+                }
               </>
             )}
           </div>

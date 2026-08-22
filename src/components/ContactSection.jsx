@@ -76,7 +76,7 @@ export default function ContactSection() {
   };
 
   return (
-    <section id="contact" className="py-20 sm:py-28 bg-[#fff3f7] relative overflow-hidden rounded-none">
+    <section id="contact" className="pt-10 sm:pt-1 pb-20 bg-[#fff3f7] relative overflow-hidden rounded-none">
 
       <div className="max-w-6xl mx-auto px-4 sm:px-8 rounded-none">
 
@@ -88,12 +88,6 @@ export default function ContactSection() {
           transition={{ duration: 0.8 }}
           className="mb-14 text-center sm:text-left rounded-none"
         >
-          <span className="font-brand text-[2.2rem] sm:text-[3.5rem] tracking-[0.25em] text-[#2C1E1B] block uppercase font-normal mb-3">
-            Connect
-          </span>
-          <h2 className="text-3xl sm:text-5xl font-editorial font-light text-[#2C1E1B] tracking-tight">
-            Connect with the Atelier
-          </h2>
         </motion.div>
 
         {/* Contact Layout Grid */}
@@ -112,13 +106,10 @@ export default function ContactSection() {
 
             <div className="relative z-10 space-y-6">
               <span className="font-script text-[5rem] text-[#ffffff] block -rotate-1 leading-none mb-2">
-                Aura Atelier
+                Let's Connect
               </span>
-              <h3 className="font-editorial text-2xl sm:text-3xl font-light text-[#ffffff] leading-tight">
-                Personalized fit, private viewings, & custom tailoring requests.
-              </h3>
-              <p className="text-xs text-[#ffffff] leading-relaxed font-sans">
-                Our master tailors and design advisors are available to guide your wardrobe capsule planning. Leave a message, and our concierge will respond within 24 hours.
+              <p className="text-md text-[#ffffff] leading-relaxed font-sans text-justify">
+                For collaborations, customer inquiries, supplier partnerships, or business proposals, we invite you to connect with AURA. Our team is always open to meaningful partnerships and opportunities, and we look forward to hearing from you.
               </p>
             </div>
 

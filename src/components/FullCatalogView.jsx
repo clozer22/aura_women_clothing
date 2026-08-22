@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { TOP_SUBTYPES, BOTTOM_SUBTYPES } from '../data/products';
-import { ChevronDown, ArrowLeft, Eye, RotateCcw, Filter, Search, X, ShoppingBag, Sparkles } from 'lucide-react';
+import { ChevronDown, ChevronsUpDown, ArrowLeft, Eye, RotateCcw, Filter, Search, X, ShoppingBag, Sparkles } from 'lucide-react';
 import ShimmerImage from './ShimmerImage';
 
 const isVideoUrl = (url) => url && (url.startsWith('data:video/') || url.match(/\.(mp4|mov|webm)($|\?)/i));
@@ -49,6 +48,35 @@ export default function FullCatalogView({ products, isLoading, onBackToHome, onS
   const topsDropdownRef = useRef(null);
   const bottomsDropdownRef = useRef(null);
 
+  // Dynamic subtypes collected from active products list (case-insensitive deduplication)
+  const topsSubtypes = useMemo(() => {
+    const uniqueMap = new Map();
+    activeList
+      .filter(p => p.mainCategory === 'top' && p.subType)
+      .forEach(p => {
+        const trimmed = p.subType.trim();
+        const key = trimmed.toLowerCase();
+        if (!uniqueMap.has(key)) {
+          uniqueMap.set(key, trimmed);
+        }
+      });
+    return Array.from(uniqueMap.values()).sort();
+  }, [activeList]);
+
+  const bottomsSubtypes = useMemo(() => {
+    const uniqueMap = new Map();
+    activeList
+      .filter(p => p.mainCategory === 'bottom' && p.subType)
+      .forEach(p => {
+        const trimmed = p.subType.trim();
+        const key = trimmed.toLowerCase();
+        if (!uniqueMap.has(key)) {
+          uniqueMap.set(key, trimmed);
+        }
+      });
+    return Array.from(uniqueMap.values()).sort();
+  }, [activeList]);
+
   // Close dropdowns on click outside
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -64,12 +92,16 @@ export default function FullCatalogView({ products, isLoading, onBackToHome, onS
   }, []);
 
   const handleToggleTopSubtype = (subType) => {
+    setSelectedBottoms([]); // Clear bottoms
+    setMainCategoryFilter('all'); // Clear main category filter, let subtype take over
     setSelectedTops(prev =>
       prev.includes(subType) ? prev.filter(item => item !== subType) : [...prev, subType]
     );
   };
 
   const handleToggleBottomSubtype = (subType) => {
+    setSelectedTops([]); // Clear tops
+    setMainCategoryFilter('all'); // Clear main category filter, let subtype take over
     setSelectedBottoms(prev =>
       prev.includes(subType) ? prev.filter(item => item !== subType) : [...prev, subType]
     );
@@ -104,14 +136,16 @@ export default function FullCatalogView({ products, isLoading, onBackToHome, onS
       list = list.filter(p => p.mainCategory === 'bottom');
     }
 
-    // Filter by Tops Subtypes if any checked
+    // Filter by Tops Subtypes if any checked (case-insensitive)
     if (selectedTops.length > 0) {
-      list = list.filter(p => p.mainCategory === 'top' && selectedTops.includes(p.subType));
+      const selectedTopsLower = selectedTops.map(s => s.toLowerCase());
+      list = list.filter(p => p.mainCategory === 'top' && p.subType && selectedTopsLower.includes(p.subType.trim().toLowerCase()));
     }
 
-    // Filter by Bottoms Subtypes if any checked
+    // Filter by Bottoms Subtypes if any checked (case-insensitive)
     if (selectedBottoms.length > 0) {
-      list = list.filter(p => p.mainCategory === 'bottom' && selectedBottoms.includes(p.subType));
+      const selectedBottomsLower = selectedBottoms.map(s => s.toLowerCase());
+      list = list.filter(p => p.mainCategory === 'bottom' && p.subType && selectedBottomsLower.includes(p.subType.trim().toLowerCase()));
     }
 
     // Sorting
@@ -152,36 +186,17 @@ export default function FullCatalogView({ products, isLoading, onBackToHome, onS
           {/* Left: Category Dropdowns (Tops & Bottoms) */}
           <div className="flex items-center gap-3 flex-wrap">
 
-            {/* Quick Main Filter Pills */}
-            <div className="flex items-center gap-1.5  p-1 rounded-none mr-2">
-              <button
-                onClick={() => setMainCategoryFilter('all')}
-                className={`px-3.5 py-1.5 rounded-none text-[11px] uppercase tracking-wider font-semibold transition-all ${mainCategoryFilter === 'all'
-                  ? 'bg-[#ccc2c3] text-white shadow-sm'
-                  : 'text-[#705B56] hover:text-[#2C1E1B]'
-                  }`}
-              >
-                All
-              </button>
-              <button
-                onClick={() => setMainCategoryFilter('top')}
-                className={`px-3.5 py-1.5 rounded-none text-[11px] uppercase tracking-wider font-semibold transition-all ${mainCategoryFilter === 'top'
-                  ? 'bg-[#ccc2c3] text-white shadow-sm'
-                  : 'text-[#705B56] hover:text-[#2C1E1B]'
-                  }`}
-              >
-                Tops
-              </button>
-              <button
-                onClick={() => setMainCategoryFilter('bottom')}
-                className={`px-3.5 py-1.5 rounded-none text-[11px] uppercase tracking-wider font-semibold transition-all ${mainCategoryFilter === 'bottom'
-                  ? 'bg-[#ccc2c3] text-white shadow-sm'
-                  : 'text-[#705B56] hover:text-[#2C1E1B]'
-                  }`}
-              >
-                Bottoms
-              </button>
-            </div>
+            {/* ALL Pill */}
+            <button
+              onClick={handleClearFilters}
+              className={`px-4 py-2 rounded-none text-[10px] font-semibold uppercase tracking-widest transition-all border ${
+                selectedTops.length === 0 && selectedBottoms.length === 0 && mainCategoryFilter === 'all'
+                  ? 'bg-[#ccc2c3] text-white border-[#ccc2c3] shadow-xs'
+                  : 'bg-white text-[#2C1E1B] border-[#E8DCD7] hover:border-[#2C1E1B]'
+              }`}
+            >
+              ALL
+            </button>
 
             {/* 1. TOPS DROPDOWN WITH CHECKBOXES */}
             <div className="relative" ref={topsDropdownRef}>
@@ -190,18 +205,19 @@ export default function FullCatalogView({ products, isLoading, onBackToHome, onS
                   setIsTopsOpen(!isTopsOpen);
                   setIsBottomsOpen(false);
                 }}
-                className={`px-4 py-2.5 rounded-none text-xs font-semibold uppercase tracking-wider flex items-center gap-2 border transition-all ${selectedTops.length > 0 || mainCategoryFilter === 'top'
-                  ? 'bg-[#ccc2c3] text-white border-[#2C1E1B] shadow-md'
-                  : 'bg-white text-[#2C1E1B] border-[#E8DCD7] hover:border-[#2C1E1B]'
-                  }`}
+                className={`px-3.5 py-2 rounded-none text-[10px] font-semibold uppercase tracking-widest flex items-center gap-1.5 border transition-all ${
+                  selectedTops.length > 0 || mainCategoryFilter === 'top'
+                    ? 'bg-white text-[#2C1E1B] border-[#2C1E1B] shadow-xs font-bold'
+                    : 'bg-white text-[#2C1E1B] border-[#E8DCD7] hover:border-[#2C1E1B]'
+                }`}
               >
-                <span>Tops</span>
-                {selectedTops.length > 0 && (
-                  <span className="bg-[#B86B60] text-white text-[10px] w-4 h-4 rounded-none flex items-center justify-center font-bold">
-                    {selectedTops.length}
+                <span>TOPS</span>
+                {(selectedTops.length > 0 || (mainCategoryFilter === 'top' && selectedTops.length === 0)) && (
+                  <span className="bg-[#B86B60] text-white text-[9px] w-4 h-4 rounded-none flex items-center justify-center font-bold">
+                    {selectedTops.length > 0 ? selectedTops.length : 'All'}
                   </span>
                 )}
-                <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-300 ${isTopsOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`w-3 h-3 text-[#705B56] transition-transform duration-300 ${isTopsOpen ? 'rotate-180' : ''}`} />
               </button>
 
               {/* Tops Checkbox Dropdown Box */}
@@ -212,31 +228,55 @@ export default function FullCatalogView({ products, isLoading, onBackToHome, onS
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 10, scale: 0.98 }}
                     transition={{ duration: 0.2 }}
-                    className="absolute top-full left-0 mt-2 w-64 bg-white rounded-none p-4 shadow-2xl border border-[#E8DCD7] z-40"
+                    className="absolute top-full left-0 mt-2 w-52 bg-white rounded-none p-3 shadow-2xl border border-[#E8DCD7] z-40"
                   >
-                    <div className="flex items-center justify-between pb-2 mb-2 border-b border-[#E8DCD7] rounded-none">
-                      <span className="text-[11px] uppercase tracking-widest font-bold text-[#2C1E1B]">Top Categories</span>
-                      {selectedTops.length > 0 && (
+                    <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-[#E8DCD7] rounded-none">
+                      <span className="text-[10px] uppercase tracking-widest font-bold text-[#2C1E1B]">Top Categories</span>
+                      {(selectedTops.length > 0 || mainCategoryFilter === 'top') && (
                         <button
-                          onClick={() => setSelectedTops([])}
-                          className="text-[10px] text-[#B86B60] hover:underline uppercase font-medium rounded-none"
+                          onClick={() => {
+                            setSelectedTops([]);
+                            if (mainCategoryFilter === 'top') {
+                              setMainCategoryFilter('all');
+                            }
+                          }}
+                          className="text-[9px] text-[#B86B60] hover:underline uppercase font-medium rounded-none"
                         >
                           Reset Tops
                         </button>
                       )}
                     </div>
 
-                    <div className="space-y-2">
-                      {TOP_SUBTYPES.map((sub) => (
+                    <div className="space-y-1.5 max-h-60 overflow-y-auto">
+                      {/* All Tops Checkbox */}
+                      <label className="flex items-center gap-2 p-1 rounded-none hover:bg-[#FAF5F2] cursor-pointer text-[11px] text-[#2C1E1B] transition-colors select-none border-b border-[#E8DCD7]/40 pb-1.5 mb-1">
+                        <input
+                          type="checkbox"
+                          checked={mainCategoryFilter === 'top' && selectedTops.length === 0}
+                          onChange={() => {
+                            if (mainCategoryFilter === 'top' && selectedTops.length === 0) {
+                              setMainCategoryFilter('all');
+                            } else {
+                              setMainCategoryFilter('top');
+                              setSelectedTops([]);
+                              setSelectedBottoms([]);
+                            }
+                          }}
+                          className="w-3.5 h-3.5 rounded-none accent-[#2C1E1B] cursor-pointer"
+                        />
+                        <span className="font-bold">All Tops</span>
+                      </label>
+
+                      {topsSubtypes.map((sub) => (
                         <label
                           key={sub}
-                          className="flex items-center gap-3 p-1.5 rounded-none hover:bg-[#FAF5F2] cursor-pointer text-xs text-[#2C1E1B] transition-colors select-none"
+                          className="flex items-center gap-2 p-1 rounded-none hover:bg-[#FAF5F2] cursor-pointer text-[11px] text-[#2C1E1B] transition-colors select-none"
                         >
                           <input
                             type="checkbox"
                             checked={selectedTops.includes(sub)}
                             onChange={() => handleToggleTopSubtype(sub)}
-                            className="w-4 h-4 rounded-none accent-[#2C1E1B] cursor-pointer"
+                            className="w-3.5 h-3.5 rounded-none accent-[#2C1E1B] cursor-pointer"
                           />
                           <span className="font-medium">{sub}</span>
                         </label>
@@ -254,18 +294,19 @@ export default function FullCatalogView({ products, isLoading, onBackToHome, onS
                   setIsBottomsOpen(!isBottomsOpen);
                   setIsTopsOpen(false);
                 }}
-                className={`px-4 py-2.5 rounded-none text-xs font-semibold uppercase tracking-wider flex items-center gap-2 border transition-all ${selectedBottoms.length > 0 || mainCategoryFilter === 'bottom'
-                  ? 'bg-[#ccc2c3] text-white border-[#2C1E1B] shadow-md'
-                  : 'bg-white text-[#2C1E1B] border-[#E8DCD7] hover:border-[#2C1E1B]'
-                  }`}
+                className={`px-3.5 py-2 rounded-none text-[10px] font-semibold uppercase tracking-widest flex items-center gap-1.5 border transition-all ${
+                  selectedBottoms.length > 0 || mainCategoryFilter === 'bottom'
+                    ? 'bg-white text-[#2C1E1B] border-[#2C1E1B] shadow-xs font-bold'
+                    : 'bg-white text-[#2C1E1B] border-[#E8DCD7] hover:border-[#2C1E1B]'
+                }`}
               >
-                <span>Bottoms</span>
-                {selectedBottoms.length > 0 && (
-                  <span className="bg-[#B86B60] text-white text-[10px] w-4 h-4 rounded-none flex items-center justify-center font-bold">
-                    {selectedBottoms.length}
+                <span>BOTTOMS</span>
+                {(selectedBottoms.length > 0 || (mainCategoryFilter === 'bottom' && selectedBottoms.length === 0)) && (
+                  <span className="bg-[#B86B60] text-white text-[9px] w-4 h-4 rounded-none flex items-center justify-center font-bold">
+                    {selectedBottoms.length > 0 ? selectedBottoms.length : 'All'}
                   </span>
                 )}
-                <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-300 ${isBottomsOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`w-3 h-3 text-[#705B56] transition-transform duration-300 ${isBottomsOpen ? 'rotate-180' : ''}`} />
               </button>
 
               {/* Bottoms Checkbox Dropdown Box */}
@@ -276,31 +317,55 @@ export default function FullCatalogView({ products, isLoading, onBackToHome, onS
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 10, scale: 0.98 }}
                     transition={{ duration: 0.2 }}
-                    className="absolute top-full left-0 mt-2 w-64 bg-white rounded-none p-4 shadow-2xl border border-[#E8DCD7] z-40"
+                    className="absolute top-full left-0 mt-2 w-52 bg-white rounded-none p-3 shadow-2xl border border-[#E8DCD7] z-40"
                   >
-                    <div className="flex items-center justify-between pb-2 mb-2 border-b border-[#E8DCD7] rounded-none">
-                      <span className="text-[11px] uppercase tracking-widest font-bold text-[#2C1E1B]">Bottom Categories</span>
-                      {selectedBottoms.length > 0 && (
+                    <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-[#E8DCD7] rounded-none">
+                      <span className="text-[10px] uppercase tracking-widest font-bold text-[#2C1E1B]">Bottom Categories</span>
+                      {(selectedBottoms.length > 0 || mainCategoryFilter === 'bottom') && (
                         <button
-                          onClick={() => setSelectedBottoms([])}
-                          className="text-[10px] text-[#B86B60] hover:underline uppercase font-medium rounded-none"
+                          onClick={() => {
+                            setSelectedBottoms([]);
+                            if (mainCategoryFilter === 'bottom') {
+                              setMainCategoryFilter('all');
+                            }
+                          }}
+                          className="text-[9px] text-[#B86B60] hover:underline uppercase font-medium rounded-none"
                         >
                           Reset Bottoms
                         </button>
                       )}
                     </div>
 
-                    <div className="space-y-2">
-                      {BOTTOM_SUBTYPES.map((sub) => (
+                    <div className="space-y-1.5 max-h-60 overflow-y-auto">
+                      {/* All Bottoms Checkbox */}
+                      <label className="flex items-center gap-2 p-1 rounded-none hover:bg-[#FAF5F2] cursor-pointer text-[11px] text-[#2C1E1B] transition-colors select-none border-b border-[#E8DCD7]/40 pb-1.5 mb-1">
+                        <input
+                          type="checkbox"
+                          checked={mainCategoryFilter === 'bottom' && selectedBottoms.length === 0}
+                          onChange={() => {
+                            if (mainCategoryFilter === 'bottom' && selectedBottoms.length === 0) {
+                              setMainCategoryFilter('all');
+                            } else {
+                              setMainCategoryFilter('bottom');
+                              setSelectedBottoms([]);
+                              setSelectedTops([]);
+                            }
+                          }}
+                          className="w-3.5 h-3.5 rounded-none accent-[#2C1E1B] cursor-pointer"
+                        />
+                        <span className="font-bold">All Bottoms</span>
+                      </label>
+
+                      {bottomsSubtypes.map((sub) => (
                         <label
                           key={sub}
-                          className="flex items-center gap-3 p-1.5 rounded-none hover:bg-[#FAF5F2] cursor-pointer text-xs text-[#2C1E1B] transition-colors select-none"
+                          className="flex items-center gap-2 p-1 rounded-none hover:bg-[#FAF5F2] cursor-pointer text-[11px] text-[#2C1E1B] transition-colors select-none"
                         >
                           <input
                             type="checkbox"
                             checked={selectedBottoms.includes(sub)}
                             onChange={() => handleToggleBottomSubtype(sub)}
-                            className="w-4 h-4 rounded-none accent-[#2C1E1B] cursor-pointer"
+                            className="w-3.5 h-3.5 rounded-none accent-[#2C1E1B] cursor-pointer"
                           />
                           <span className="font-medium">{sub}</span>
                         </label>
@@ -309,6 +374,23 @@ export default function FullCatalogView({ products, isLoading, onBackToHome, onS
                   </motion.div>
                 )}
               </AnimatePresence>
+            </div>
+
+            {/* Sort Select */}
+            <div className="relative">
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="bg-white border border-[#E8DCD7] hover:border-[#2C1E1B] text-[10px] text-[#2C1E1B] font-semibold rounded-none pl-3 pr-8 py-2 focus:outline-none focus:border-[#2C1E1B] cursor-pointer shadow-xs appearance-none tracking-wider uppercase"
+              >
+                <option value="featured">Featured Order</option>
+                <option value="price-low">Price: Low to High</option>
+                <option value="price-high">Price: High to Low</option>
+                <option value="discount">Highest Discount</option>
+              </select>
+              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
+                <ChevronsUpDown className="w-3 h-3 text-[#705B56]" />
+              </div>
             </div>
 
             {/* Clear All Filters Button */}
@@ -321,45 +403,6 @@ export default function FullCatalogView({ products, isLoading, onBackToHome, onS
               </button>
             )}
           </div>
-
-          {/* Right: Search & Sort Options */}
-          <div className="flex items-center gap-4 flex-wrap w-full lg:w-auto justify-end">
-
-            {/* Search Input inside Catalog */}
-            <div className="relative w-full sm:w-60">
-              {/* <Search className="w-3.5 h-3.5 text-[#705B56] absolute left-3 top-1/2 -translate-y-1/2" /> */}
-              {/* <input
-                type="text"
-                placeholder="Search catalog..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-8 py-2.5 rounded-none bg-white border border-[#E8DCD7] text-xs text-[#2C1E1B] placeholder-[#A38E88] focus:outline-none focus:border-[#2C1E1B] shadow-xs"
-              /> */}
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#2C1E1B] p-0.5"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span className="text-xs uppercase tracking-wider text-[#705B56] font-medium hidden sm:inline">Sort:</span>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="bg-white border border-[#E8DCD7] text-xs text-[#2C1E1B] font-semibold rounded-none px-4 py-2.5 focus:outline-none focus:border-[#2C1E1B] cursor-pointer shadow-xs"
-              >
-                <option value="featured">Featured Order</option>
-                <option value="price-low">Price: Low to High</option>
-                <option value="price-high">Price: High to Low</option>
-                <option value="discount">Highest Discount</option>
-              </select>
-            </div>
-          </div>
-
         </div>
       </div>
 
