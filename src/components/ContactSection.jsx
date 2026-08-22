@@ -159,12 +159,12 @@ export default function ContactSection() {
                 animate={{ opacity: 1, scale: 1 }}
                 className="text-center py-10 rounded-none"
               >
-                <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-none flex items-center justify-center mx-auto mb-4 shadow-sm">
-                  <Check className="w-6 h-6" />
+                <div className="w-14 h-14 bg-[#fff3f7] text-emerald-600 rounded-none flex items-center justify-center mx-auto mb-4 shadow-sm">
+                  <Check className="w-6 h-6" color="black" />
                 </div>
                 <h3 className="font-editorial text-3xl text-[#2C1E1B] mb-2 font-normal">Message Received</h3>
                 <p className="text-xs text-[#705B56] leading-relaxed">
-                  Thank you for connecting with the Aura Atelier. Our concierge advisor will contact you shortly.
+                  Thank you for connecting with AURA. We’ll be in touch shortly via email. Stay fabulous, darling!
                 </p>
               </motion.div>
             ) : (
