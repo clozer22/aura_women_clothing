@@ -2116,7 +2116,6 @@ export default function AdminPortal({
               </button>
 
               <div className="mb-6 flex-shrink-0">
-                <span className="font-brand text-xs uppercase tracking-widest text-[#B86B60] block mb-1">CONCIERGE INVENTORY</span>
                 <h3 className="font-editorial text-2xl sm:text-3xl text-[#2C1E1B] font-normal leading-tight">
                   Bulk Update Size Chart
                 </h3>
