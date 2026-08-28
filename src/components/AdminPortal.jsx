@@ -27,6 +27,8 @@ export default function AdminPortal({
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all'); // 'all' | 'top' | 'bottom'
 
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
+
   // Dynamic profile loaded from admin_profiles table
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [profile, setProfile] = useState({
@@ -367,31 +369,22 @@ export default function AdminPortal({
     }
   };
 
-  // Monitor Supabase session changes
+  // Monitor Supabase session changes using a single listener
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-    });
+    let active = true;
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session) {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('Supabase Auth Event:', event);
+      if (active) {
         setSession(session);
-      } else if (event === 'SIGNED_OUT') {
-        setSession(null);
-      } else {
-        // Double check with server to prevent transient storage or token refresh drops from causing premature logouts
-        try {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (!user) {
-            setSession(null);
-          }
-        } catch (e) {
-          setSession(null);
-        }
+        setIsCheckingSession(false);
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   // Load products and profile details once authenticated
@@ -864,6 +857,18 @@ export default function AdminPortal({
       initFeatured();
     }
   }, [session, productList, featuredCount]);
+
+  // 0. RENDER CONNECTING SCREEN WHILE INITIALIZING SESSION
+  if (isCheckingSession) {
+    return (
+      <div className="min-h-screen bg-[#FAF0EC] flex items-center justify-center p-6 select-none font-sans">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-t-transparent border-[#B86B60] rounded-full animate-spin" />
+          <span className="text-[10px] uppercase tracking-widest font-bold text-[#705B56]">Connecting to Atelier...</span>
+        </div>
+      </div>
+    );
+  }
 
   // 1. RENDER SECURE LOGIN SCREEN IF NOT AUTHENTICATED
   if (!session) {
