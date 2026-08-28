@@ -373,8 +373,22 @@ export default function AdminPortal({
       setSession(session);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session) {
+        setSession(session);
+      } else if (event === 'SIGNED_OUT') {
+        setSession(null);
+      } else {
+        // Double check with server to prevent transient storage or token refresh drops from causing premature logouts
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) {
+            setSession(null);
+          }
+        } catch (e) {
+          setSession(null);
+        }
+      }
     });
 
     return () => subscription.unsubscribe();
