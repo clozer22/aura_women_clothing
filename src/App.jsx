@@ -29,12 +29,34 @@ export default function App() {
 
   const [showSplash, setShowSplash] = useState(true);
 
-  // Real-time products state loaded from database
-  const [dbProducts, setDbProducts] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  // Read initial cache from sessionStorage to allow instantaneous loads with 0ms delay
+  const getCachedProducts = () => {
+    try {
+      const cached = sessionStorage.getItem('aura_products_cache');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const getCachedConfig = () => {
+    try {
+      const cached = sessionStorage.getItem('aura_storefront_config_cache');
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const initialProducts = getCachedProducts();
+  const initialConfig = getCachedConfig();
+
+  // Real-time products state loaded from database (initialized from cache if available)
+  const [dbProducts, setDbProducts] = useState(initialProducts);
+  const [isLoading, setIsLoading] = useState(initialProducts.length === 0);
 
   // Dynamic customization configs (loaded from Supabase / storefront_config)
-  const [heroConfig, setHeroConfig] = useState({
+  const [heroConfig, setHeroConfig] = useState(initialConfig || {
     id: null,
     posterUrl: null,
     title: 'Aura',
@@ -52,9 +74,11 @@ export default function App() {
     }, 3000);
   };
 
-  // Fetch products from database
+  // Fetch products from database (stale-while-revalidate in background)
   const fetchProducts = async () => {
-    setIsLoading(true);
+    if (dbProducts.length === 0) {
+      setIsLoading(true);
+    }
     try {
       const { data, error } = await supabase
         .from('products')
@@ -64,6 +88,9 @@ export default function App() {
       if (error) throw error;
       if (data) {
         setDbProducts(data);
+        try {
+          sessionStorage.setItem('aura_products_cache', JSON.stringify(data));
+        } catch {}
       }
     } catch (err) {
       console.warn('Fallback to local mock data. Supabase products fetch error:', err.message);
@@ -83,7 +110,7 @@ export default function App() {
 
       if (error) throw error;
       if (data) {
-        setHeroConfig({
+        const configData = {
           id: data.id,
           posterUrl: data.posterUrl,
           title: data.title,
@@ -92,7 +119,11 @@ export default function App() {
           aboutTitle: data.about_title || 'Oh What?',
           aboutSubtitle: data.about_subtitle || 'Sakura Blossom - Milky Lavender',
           aboutDescription: data.about_description || 'The Brightening Secret. Lavender blushes are a viral beauty secret for a reason! This milky purple is a dream for fair skin and Asian skin tones, as the purple pigment acts as a color corrector to neutralize sallow or yellow tones, leaving a bright, "ethereal" glow.\n\nOn white skin with cool undertones, it creates a unique, high-fashion pastel flush. For darker skin, it can be used as a targeted brightening topper over a deeper blush to add a modern, multidimensional finish.',
-        });
+        };
+        setHeroConfig(configData);
+        try {
+          sessionStorage.setItem('aura_storefront_config_cache', JSON.stringify(configData));
+        } catch {}
       }
     } catch (err) {
       console.warn('Fallback to default hero. Supabase config fetch error:', err.message);
@@ -229,41 +260,43 @@ export default function App() {
       />
 
       <main>
-        {currentView === 'home' ? (
-          <>
-            {/* Hero Banner with Custom Config */}
-            <Hero config={heroConfig} />
+        {/* Home View - kept in DOM to preserve rendered images and scroll state */}
+        <div className={currentView === 'home' ? 'block' : 'hidden'} aria-hidden={currentView !== 'home'}>
+          {/* Hero Banner with Custom Config */}
+          <Hero config={heroConfig} />
 
-            {/* Continuous Scrolling Marquee Ticker */}
-            <MarqueeTicker />
+          {/* Continuous Scrolling Marquee Ticker */}
+          <MarqueeTicker />
 
-            <div className="w-full flex items-center justify-center pt-[4rem] pb-7 bg-white">
-              <h2
-                className="font-brand font-light text-[2.2rem] sm:text-[5rem] tracking-[0.25em] leading-none text-[#705B56] block uppercase text-center select-none"
-              >
-                {heroConfig.aboutTitle || 'About Aura'}
-              </h2>
+          <div className="w-full flex items-center justify-center pt-[4rem] pb-7 bg-white">
+            <h2
+              className="font-brand font-light text-[2.2rem] sm:text-[5rem] tracking-[0.25em] leading-none text-[#705B56] block uppercase text-center select-none"
+            >
+              {heroConfig.aboutTitle || 'About Aura'}
+            </h2>
+          </div>
+          <AboutSection config={heroConfig} />
+          <div className="w-full flex flex-col items-center justify-center py-5 px-3 bg-white pb-16">
+            <div className='max-w-2xl'>
+              <p className="text-xs sm:text-sm text-[#705B56] font-sans text-center leading-relaxed">
+                {heroConfig.aboutDescription || ''}
+              </p>
             </div>
-            <AboutSection config={heroConfig} />
-            <div className="w-full flex flex-col items-center justify-center py-5 px-3 bg-white pb-16">
-              <div className='max-w-2xl'>
-                <p className="text-xs sm:text-sm text-[#705B56] font-sans text-center leading-relaxed">
-                  {heroConfig.aboutDescription || ''}
-                </p>
-              </div>
-            </div>
-            {/* Product Catalog Grid */}
-            <ProductCatalog
-              products={activeProducts}
-              isLoading={isLoading}
-              onSelectProduct={(product) => setSelectedProduct(product)}
-              onViewFullCatalog={navigateToFullCatalog}
-            />
+          </div>
+          {/* Product Catalog Grid */}
+          <ProductCatalog
+            products={activeProducts}
+            isLoading={isLoading}
+            onSelectProduct={(product) => setSelectedProduct(product)}
+            onViewFullCatalog={navigateToFullCatalog}
+          />
 
-            {/* Atelier Contact Us Section */}
-            <ContactSection />
-          </>
-        ) : (
+          {/* Atelier Contact Us Section */}
+          <ContactSection />
+        </div>
+
+        {/* Full Catalog View - kept in DOM so navigating back and forth has 0ms delay and zero re-fetching */}
+        <div className={currentView === 'full-catalog' ? 'block' : 'hidden'} aria-hidden={currentView !== 'full-catalog'}>
           <FullCatalogView
             products={activeProducts}
             isLoading={isLoading}
@@ -271,7 +304,7 @@ export default function App() {
             onSelectProduct={(product) => setSelectedProduct(product)}
             initialSearchQuery={catalogSearchQuery}
           />
-        )}
+        </div>
       </main>
 
       {/* Footer */}

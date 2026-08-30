@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="14" fill="#FAF0EC"/>
+  <text x="50%" y="54%" dominant-baseline="central" text-anchor="middle" font-family="'Bodoni Moda', 'Playfair Display', serif" font-size="34" font-weight="600" fill="#2C1E1B" letter-spacing="-1">A</text>
+  <circle cx="48" cy="18" r="3.5" fill="#D99B91"/>
+</svg>

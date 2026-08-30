@@ -482,9 +482,16 @@ export default function FullCatalogView({ products, isLoading, onBackToHome, onS
                     {/* Right: Price & Status */}
                     <div className="text-right whitespace-nowrap">
                       {isSoldOut ? (
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                          SOLD OUT
-                        </span>
+                        <span className="font-bold text-gray-400">SOLD OUT</span>
+                      ) : product.originalPrice ? (
+                        <div className="flex flex-col items-end">
+                          <span className="line-through text-gray-400 text-[10px]">
+                            ₱{Number(product.originalPrice)?.toLocaleString()}
+                          </span>
+                          <span className="font-bold text-[#B86B60]">
+                            ₱{Number(product.price)?.toLocaleString()}
+                          </span>
+                        </div>
                       ) : (
                         <div className="flex items-baseline gap-1.5 justify-end">
                           <span className="font-bold text-[#2C1E1B]">

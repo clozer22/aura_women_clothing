@@ -1,0 +1,10 @@
+# User-Agent Rules for Aura Women's Clothing Storefront
+User-agent: *
+Allow: /
+Disallow: /admin-dashboard
+
+# Crawl-delay for polite crawling
+Crawl-delay: 1
+
+# XML Sitemap Location
+Sitemap: https://aurashophere.com/sitemap.xml

@@ -1,13 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 
+import defaultHeroBanner from '../images/aura-banner.jpg';
+
 const DEFAULT_CONFIG = {
-  posterUrl: '',
+  posterUrl: defaultHeroBanner,
   title: 'Aura',
 };
 
 export default function Hero({ config }) {
-  const activeConfig = { ...DEFAULT_CONFIG, ...config };
+  const activeConfig = {
+    ...DEFAULT_CONFIG,
+    ...config,
+    posterUrl: config?.posterUrl || DEFAULT_CONFIG.posterUrl,
+  };
   const [mediaLoaded, setMediaLoaded] = useState(false);
   const mediaRef = useRef(null);
 
