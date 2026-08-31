@@ -1,19 +1,26 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Star, Sparkles, Check } from 'lucide-react';
+import { X, Star, Sparkles, Check, Heart, ArrowRight, ShoppingBag } from 'lucide-react';
 import sizeChartImg from '../images/size_chart.png';
+import { addToWishlist, isInWishlist } from '../lib/wishlistManager';
 
 const isVideoUrl = (url) => url && (url.startsWith('data:video/') || url.match(/\.(mp4|mov|webm)($|\?)/i));
 
-export default function QuickViewModal({ product, onClose }) {
+export default function QuickViewModal({ product, onClose, onBuyNow, onOpenWishlist }) {
   if (!product) return null;
 
-  // Safeguard array transformations for colors
-  const colorsArray = Array.isArray(product.colors) ? product.colors : [];
-  const [selectedColor, setSelectedColor] = useState(colorsArray[0]);
   const [showSizeChart, setShowSizeChart] = useState(false);
 
-  // Safeguard array transformations for sizes
+  const rawSizes = typeof product.sizes === 'string'
+    ? product.sizes.split(',').map((s) => s.trim()).filter(Boolean)
+    : Array.isArray(product.sizes)
+    ? product.sizes
+    : ['Standard'];
+
+  const [selectedSize, setSelectedSize] = useState(rawSizes[0] || 'Standard');
+  const [isWishlisted, setIsWishlisted] = useState(isInWishlist(product.id));
+
+  // Interactive sizes
   const renderSizes = () => {
     if (!product.sizes) {
       return <span className="text-xs text-[#705B56]">Free Size</span>;
@@ -30,14 +37,24 @@ export default function QuickViewModal({ product, onClose }) {
       return <span className="text-xs text-[#705B56]">Free Size</span>;
     }
 
-    return sizeItems.map((s, idx) => (
-      <span
-        key={idx}
-        className="px-4 py-2 bg-white text-[#705B56] border border-[#E8DCD7] text-xs font-semibold uppercase tracking-wider"
-      >
-        {String(s).trim()}
-      </span>
-    ));
+    return sizeItems.map((s, idx) => {
+      const cleanSize = String(s).trim();
+      const isSelected = selectedSize === cleanSize;
+      return (
+        <button
+          key={idx}
+          type="button"
+          onClick={() => setSelectedSize(cleanSize)}
+          className={`px-4 py-2 border text-xs font-semibold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+            isSelected
+              ? 'bg-[#2C1E1B] text-white border-[#2C1E1B]'
+              : 'bg-white text-[#705B56] border-[#E8DCD7] hover:border-[#B86B60]'
+          }`}
+        >
+          {cleanSize}
+        </button>
+      );
+    });
   };
 
   // Safeguard array transformations for details
@@ -57,41 +74,60 @@ export default function QuickViewModal({ product, onClose }) {
       </>
     );
   };
+  const handleToggleWishlist = () => {
+    addToWishlist(product, selectedSize, 'Standard');
+    setIsWishlisted(true);
+    if (onOpenWishlist) {
+      onOpenWishlist();
+    }
+  };
+
+  const handleBuyNow = () => {
+    if (onBuyNow) {
+      onBuyNow({
+        id: product.id,
+        name: product.name,
+        image: product.image,
+        price: product.price || 0,
+        size: selectedSize,
+        color: 'Standard',
+        quantity: 1,
+      });
+      onClose();
+    }
+  };
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
-
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-hidden">
         {/* Backdrop */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.3 }}
-          className="fixed inset-0 bg-[#2C1E1B]/60 backdrop-blur-md"
+          className="fixed inset-0 bg-[#2C1E1B]/70 backdrop-blur-sm"
           onClick={onClose}
         />
 
-        {/* Modal Container */}
+        {/* Modal Window */}
         <motion.div
-          initial={{ opacity: 0, scale: 0.94, y: 20 }}
+          initial={{ opacity: 0, scale: 0.96, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.94, y: 20 }}
-          transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-          className="relative z-10 w-full max-w-4xl bg-[#fff3f7] rounded-none shadow-2xl border border-white/80 flex flex-col md:flex-row md:h-[650px] md:max-h-[85vh] overflow-y-auto md:overflow-hidden my-auto"
-          onClick={(e) => e.stopPropagation()}
+          exit={{ opacity: 0, scale: 0.96, y: 15 }}
+          transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+          className="relative z-10 bg-[#FAF5F2] max-w-4xl w-full h-[92vh] sm:h-[88vh] md:h-[82vh] max-h-[850px] shadow-2xl flex flex-col md:flex-row overflow-hidden border border-[#E8DCD7] rounded-none"
         >
           {/* Close Button */}
           <button
             onClick={onClose}
-            className="fixed md:absolute top-6 right-6 md:top-4 md:right-4 z-30 p-2.5 rounded-none bg-white/80 hover:bg-white text-[#2C1E1B] shadow-lg border border-white transition-all focus:outline-none flex items-center justify-center"
-            aria-label="Close modal"
+            className="absolute top-4 right-4 z-20 p-2 bg-[#FAF5F2] hover:bg-white text-[#2C1E1B] transition-colors rounded-none border border-[#E8DCD7]"
+            aria-label="Close dialog"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
 
-          {/* Left Column: Product Image/Video Gallery */}
-          <div className="w-full md:w-1/2 relative bg-[#F3EAE6] h-[280px] sm:h-[350px] md:h-full flex-shrink-0 overflow-hidden">
+          {/* Left Column: Visual Media Display */}
+          <div className="w-full md:w-1/2 h-64 sm:h-80 md:h-full bg-[#FAF5F2] relative overflow-hidden flex-shrink-0">
             {isVideoUrl(product.image) ? (
               <video
                 src={product.image}
@@ -120,12 +156,8 @@ export default function QuickViewModal({ product, onClose }) {
                 {product.name}
               </h2>
 
-              {/* Metadata Row: Category, Rating & Solds */}
+              {/* Metadata Row: Rating & Solds */}
               <div className="flex flex-wrap items-center gap-3 text-xs text-[#705B56] mb-4">
-                {/* <span className="uppercase tracking-[0.2em] font-semibold text-[#B86B60]">
-                  {product.category}
-                </span> */}
-                <span className="text-[#E8DCD7]">|</span>
                 <div className="flex items-center gap-1 text-[#D4AF37]">
                   <Star className="w-3.5 h-3.5 fill-current" />
                   <span className="font-bold text-[#2C1E1B]">{product.rating || '4.9'}</span>
@@ -154,30 +186,51 @@ export default function QuickViewModal({ product, onClose }) {
                 />
               </div>
 
-              {/* Size Selector - Clickable View Sizes button */}
+              {/* Size Selector */}
               <div className="mb-6">
-                <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#2C1E1B]">Select Size:</span>
                   <button
                     onClick={() => setShowSizeChart(true)}
-                    className="px-6 py-2.5 bg-white text-[#705B56] hover:bg-[#FAF5F2] border border-[#E8DCD7] text-xs font-semibold uppercase tracking-wider transition-all duration-200 cursor-pointer"
+                    className="text-[11px] text-[#B86B60] hover:underline uppercase tracking-wider font-semibold cursor-pointer"
                   >
-                    View Sizes
+                    View Size Chart
                   </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {renderSizes()}
                 </div>
               </div>
 
             </div>
 
-            {/* Direct Shopee Checkout Redirect */}
-            <div className="pt-4 border-t border-[#E8DCD7] flex-shrink-0">
+            {/* Action Buttons: Buy Now on top, Add to Wishlist below */}
+            <div className="pt-4 border-t border-[#E8DCD7] flex-shrink-0 space-y-2.5">
+              {/* Buy Now Button (Top) */}
               <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => window.open(product.shopeeLink || 'https://shopee.ph', '_blank', 'noopener,noreferrer')}
-                className="w-full py-4 px-6 font-brand  rounded-none text-xs font-semibold uppercase tracking-[0.2em] bg-[#ccc2c3] text-white transition-all duration-300 shadow-xl flex items-center justify-center gap-2 cursor-pointer"
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.99 }}
+                type="button"
+                onClick={handleBuyNow}
+                className="w-full py-4 px-6 font-brand rounded-none text-xs font-bold uppercase tracking-[0.2em] bg-[#2C1E1B] hover:bg-[#B86B60] text-white transition-all duration-300 shadow-md flex items-center justify-center gap-2 cursor-pointer"
               >
-                <span>Buy Here</span>
+                <span>Buy Now</span>
+                <ArrowRight className="w-4 h-4" />
               </motion.button>
+
+              {/* Add to Wishlist Button (Below Buy Now) */}
+              <button
+                type="button"
+                onClick={handleToggleWishlist}
+                className={`w-full py-3.5 px-6 rounded-none text-xs font-semibold uppercase tracking-[0.18em] transition-all flex items-center justify-center gap-2 border cursor-pointer ${
+                  isWishlisted
+                    ? 'bg-[#FAF0EC] border-[#B86B60] text-[#B86B60]'
+                    : 'bg-white border-[#2C1E1B] text-[#2C1E1B] hover:border-[#B86B60] hover:text-[#B86B60]'
+                }`}
+              >
+                <Heart className={`w-4 h-4 ${isWishlisted ? 'fill-[#B86B60] text-[#B86B60]' : ''}`} />
+                <span>{isWishlisted ? 'Wishlisted' : 'Add to Wishlist'}</span>
+              </button>
             </div>
 
           </div>

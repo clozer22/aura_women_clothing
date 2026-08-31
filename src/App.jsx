@@ -11,21 +11,52 @@ import Footer from './components/Footer';
 import FullCatalogView from './components/FullCatalogView';
 import AdminPortal from './components/AdminPortal';
 import SplashScreen from './components/SplashScreen';
+import WishlistDrawer from './components/WishlistDrawer';
+import CheckoutPage from './components/CheckoutPage';
+import OrderConfirmed from './components/OrderConfirmed';
+import OrderHistory from './components/OrderHistory';
 import { PRODUCTS } from './data/products';
 import { supabase } from './lib/supabaseClient';
+import { getWishlist } from './lib/wishlistManager';
 
 export default function App() {
   const getInitialView = () => {
     const path = window.location.pathname;
     if (path === '/admin-dashboard') return 'admin';
     if (path === '/full-catalog') return 'full-catalog';
+    if (path === '/checkout') return 'checkout';
+    if (path === '/orders') return 'orders';
+    if (path === '/order-confirmed') return 'order-confirmed';
     return 'home';
+  };
+
+  const getInitialOrder = () => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const ref = params.get('ref');
+      const savedOrders = JSON.parse(localStorage.getItem('aura_guest_orders') || '[]');
+      if (ref) {
+        const found = savedOrders.find((o) => o.order_reference === ref);
+        if (found) {
+          found.payment_status = 'PAID';
+          found.status = 'PROCESSING';
+          localStorage.setItem('aura_guest_orders', JSON.stringify(savedOrders));
+          return found;
+        }
+      }
+      return savedOrders[0] || null;
+    } catch (e) {
+      return null;
+    }
   };
 
   const [currentView, setCurrentView] = useState(getInitialView());
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
   const [catalogSearchQuery, setCatalogSearchQuery] = useState('');
+  const [wishlistDrawerOpen, setWishlistDrawerOpen] = useState(false);
+  const [checkoutItems, setCheckoutItems] = useState([]);
+  const [completedOrder, setCompletedOrder] = useState(getInitialOrder());
 
   const [showSplash, setShowSplash] = useState(true);
 
@@ -152,6 +183,26 @@ export default function App() {
         setCurrentView('admin');
       } else if (path === '/full-catalog') {
         setCurrentView('full-catalog');
+      } else if (path === '/checkout') {
+        setCurrentView('checkout');
+      } else if (path === '/orders') {
+        setCurrentView('orders');
+      } else if (path === '/order-confirmed') {
+        const params = new URLSearchParams(window.location.search);
+        const ref = params.get('ref');
+        if (ref) {
+          try {
+            const savedOrders = JSON.parse(localStorage.getItem('aura_guest_orders') || '[]');
+            const found = savedOrders.find((o) => o.order_reference === ref);
+            if (found) {
+              found.payment_status = 'PAID';
+              found.status = 'PROCESSING';
+              localStorage.setItem('aura_guest_orders', JSON.stringify(savedOrders));
+              setCompletedOrder(found);
+            }
+          } catch (e) {}
+        }
+        setCurrentView('order-confirmed');
       } else {
         setCurrentView('home');
       }
@@ -194,9 +245,48 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const navigateToCheckout = (items) => {
+    const validItems = Array.isArray(items) && items.length > 0 ? items : getWishlist();
+    if (validItems.length === 0) {
+      showToast('Your wishlist / bag is currently empty.');
+      return;
+    }
+    setCheckoutItems(validItems);
+    setCurrentView('checkout');
+    window.history.pushState(null, '', '/checkout');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const navigateToOrders = () => {
+    setCurrentView('orders');
+    window.history.pushState(null, '', '/orders');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleOrderCompleted = (order) => {
+    setCompletedOrder(order);
+    setCurrentView('order-confirmed');
+    window.history.pushState(null, '', '/order-confirmed');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleBuyNow = (productWithVariant) => {
+    navigateToCheckout([
+      {
+        id: productWithVariant.id,
+        name: productWithVariant.name,
+        image: productWithVariant.image,
+        price: productWithVariant.price,
+        size: productWithVariant.size || 'Standard',
+        color: productWithVariant.color || 'Standard',
+        quantity: productWithVariant.quantity || 1,
+      },
+    ]);
+  };
+
   // Resolve active products list from database (filter out ARCHIVE)
   const allProducts = dbProducts;
-  const activeProducts = allProducts.filter(p => p.statusBadge !== 'ARCHIVE');
+  const activeProducts = allProducts.filter((p) => p.statusBadge !== 'ARCHIVE');
 
   // Render full-screen Admin View if selected
   if (currentView === 'admin') {
@@ -213,6 +303,37 @@ export default function App() {
           fetchProducts();
           fetchStorefrontConfig();
         }}
+      />
+    );
+  }
+
+  // Render full-screen Checkout View
+  if (currentView === 'checkout') {
+    return (
+      <CheckoutPage
+        checkoutItems={checkoutItems.length > 0 ? checkoutItems : getWishlist()}
+        onBackToShop={navigateToHome}
+        onOrderCompleted={handleOrderCompleted}
+      />
+    );
+  }
+
+  // Render full-screen Order Confirmation View
+  if (currentView === 'order-confirmed') {
+    return (
+      <OrderConfirmed
+        order={completedOrder}
+        onContinueShopping={navigateToHome}
+        onViewOrders={navigateToOrders}
+      />
+    );
+  }
+
+  // Render full-screen Order History View
+  if (currentView === 'orders') {
+    return (
+      <OrderHistory
+        onBackToShop={navigateToHome}
       />
     );
   }
@@ -251,6 +372,8 @@ export default function App() {
         onNavigateHome={navigateToHome}
         onNavigateFullCatalog={navigateToFullCatalog}
         onNavigateAdmin={navigateToAdmin}
+        onNavigateOrders={navigateToOrders}
+        onOpenWishlist={() => setWishlistDrawerOpen(true)}
         currentView={currentView}
         onSearch={(query) => {
           setCatalogSearchQuery(query);
@@ -315,8 +438,20 @@ export default function App() {
         <QuickViewModal
           product={selectedProduct}
           onClose={() => setSelectedProduct(null)}
+          onBuyNow={handleBuyNow}
+          onOpenWishlist={() => setWishlistDrawerOpen(true)}
         />
       )}
+
+      {/* Right Slide-out Wishlist Navigation Drawer */}
+      <WishlistDrawer
+        isOpen={wishlistDrawerOpen}
+        onClose={() => setWishlistDrawerOpen(false)}
+        onProceedToCheckout={(items) => navigateToCheckout(items)}
+        onAddToCart={(item) => {
+          showToast(`${item.name} moved to bag`);
+        }}
+      />
 
     </div>
   );

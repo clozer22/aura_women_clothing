@@ -1,16 +1,33 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Info, Sliders, Mail, Menu, X, Search, ShoppingBag } from 'lucide-react';
+import { Info, Sliders, Mail, Menu, X, Search, ShoppingBag, Heart, Package } from 'lucide-react';
 import cartBasketIcon from '../images/icons/CART BASKET.png';
+import { getWishlist, subscribeWishlist } from '../lib/wishlistManager';
 
-export default function Navbar({ onNavigateHome, onNavigateFullCatalog, onNavigateAdmin, currentView, onSearch }) {
+export default function Navbar({
+  onNavigateHome,
+  onNavigateFullCatalog,
+  onNavigateAdmin,
+  onNavigateOrders,
+  onOpenWishlist,
+  currentView,
+  onSearch,
+}) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showSearchInput, setShowSearchInput] = useState(false);
   const [searchVal, setSearchVal] = useState('');
+  const [wishlistCount, setWishlistCount] = useState(getWishlist().length);
 
   const searchContainerRef = useRef(null);
   const mobileSearchRef = useRef(null);
   const mobileSearchBtnRef = useRef(null);
+
+  useEffect(() => {
+    const unsub = subscribeWishlist((items) => {
+      setWishlistCount(items.length);
+    });
+    return () => unsub();
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -35,6 +52,8 @@ export default function Navbar({ onNavigateHome, onNavigateFullCatalog, onNaviga
 
   const navLinks = [
     { name: 'About', href: '#about', isSection: true, icon: Info },
+    { name: 'Shop', isShop: true, icon: ShoppingBag },
+    { name: 'Orders', isOrders: true, icon: Package },
     { name: 'Contact', href: '#contact', isSection: true, icon: Mail },
   ];
 
@@ -42,6 +61,20 @@ export default function Navbar({ onNavigateHome, onNavigateFullCatalog, onNaviga
     if (link.isPortal) {
       e.preventDefault();
       onNavigateAdmin();
+      setMobileMenuOpen(false);
+      setShowSearchInput(false);
+    } else if (link.isShop) {
+      e.preventDefault();
+      if (onNavigateFullCatalog) {
+        onNavigateFullCatalog();
+      }
+      setMobileMenuOpen(false);
+      setShowSearchInput(false);
+    } else if (link.isOrders) {
+      e.preventDefault();
+      if (onNavigateOrders) {
+        onNavigateOrders();
+      }
       setMobileMenuOpen(false);
       setShowSearchInput(false);
     } else if (link.isSection) {
@@ -106,16 +139,21 @@ export default function Navbar({ onNavigateHome, onNavigateFullCatalog, onNaviga
           ))}
         </nav>
 
-        {/* Desktop Actions Row (Search + Catalog Cart Icon) */}
+        {/* Desktop Actions Row (Search + Cart Basket Trigger for Drawer) */}
         <div className="flex items-center border-l border-[#E8DCD7] pl-6 ml-2 gap-4">
-          {/* Catalog Cart Icon */}
+          {/* Cart Basket Icon: Triggers Side Navigation Drawer */}
           <button
-            onClick={onNavigateFullCatalog}
-            className="text-[#B86B60] hover:text-[#2C1E1B] p-1 focus:outline-none transition-colors flex items-center justify-center"
-            title="View Catalog"
-            aria-label="View Catalog"
+            onClick={onOpenWishlist}
+            className="text-[#B86B60] hover:text-[#2C1E1B] p-1 focus:outline-none transition-colors relative flex items-center justify-center cursor-pointer"
+            title="Shopping Bag"
+            aria-label="View Shopping Bag"
           >
             <img src={cartBasketIcon} alt="Cart" className="w-[70px] h-[70px] object-contain" />
+            {wishlistCount > 0 && (
+              <span className="absolute top-2 right-2 bg-[#B86B60] text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-bold shadow-md">
+                {wishlistCount}
+              </span>
+            )}
           </button>
 
           {/* Search Toggle Icon */}
@@ -176,7 +214,7 @@ export default function Navbar({ onNavigateHome, onNavigateFullCatalog, onNaviga
         </motion.button>
       </div>
 
-      {/* Mobile Actions: Search + Cart (Visible on mobile only, right aligned) */}
+      {/* Mobile Actions: Search + Cart Basket (Visible on mobile only, right aligned) */}
       <div className="flex md:hidden items-center gap-1.5 sm:gap-2">
         {/* Mobile Search Button */}
         <button
@@ -191,13 +229,18 @@ export default function Navbar({ onNavigateHome, onNavigateFullCatalog, onNaviga
           <Search className="w-[35px] h-[35px] stroke-[1.6]" />
         </button>
 
-        {/* Mobile Catalog Cart Button */}
+        {/* Mobile Cart Basket: Triggers Side Navigation Drawer */}
         <button
-          onClick={onNavigateFullCatalog}
-          className="p-1 text-[#2C1E1B] bg-transparent border-none focus:outline-none flex items-center justify-center rounded-none"
-          aria-label="View Catalog"
+          onClick={onOpenWishlist}
+          className="p-1 text-[#2C1E1B] bg-transparent border-none focus:outline-none flex items-center justify-center rounded-none relative cursor-pointer"
+          aria-label="View Shopping Bag"
         >
           <img src={cartBasketIcon} alt="Cart" className="w-[55px] h-[55px] object-contain" />
+          {wishlistCount > 0 && (
+            <span className="absolute top-1 right-1 bg-[#B86B60] text-white text-[9px] w-4 h-4 rounded-full flex items-center justify-center font-bold shadow-md">
+              {wishlistCount}
+            </span>
+          )}
         </button>
       </div>
 
