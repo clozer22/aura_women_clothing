@@ -71,7 +71,7 @@ export default function Footer({ onNavigateAdmin, onClickItem }) {
             © 2026, Aura Women's Clothing
           </span>
           <span className="text-[9px] font-sans uppercase tracking-[0.15em] text-[#ccc2c3] block pt-1.5">
-            Powered by WeBuildWeb
+            Powered by WeBuildWeb • v{typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.3.0'}
           </span>
 
           {/* Subtly hidden Admin Portal trigger inside copyright or as a tiny dot for the developer */}

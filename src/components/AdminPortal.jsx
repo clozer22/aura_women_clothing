@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { User, ShoppingBag, Sliders, ArrowLeft, Search, Plus, X, Globe, Save, Trash2, LogOut, Upload, AlertTriangle, XCircle, Check, Edit, Star, Menu } from 'lucide-react';
 import { PRODUCTS } from '../data/products';
@@ -120,10 +120,10 @@ export default function AdminPortal({
       const fileName = `${type}_media_${Date.now()}.${fileExt}`;
       const filePath = `${fileName}`;
 
-      // Upload to bucket 'storefront'
+      // Upload to bucket 'storefront' with 1-year CDN & browser caching
       const { data, error: uploadError } = await supabase.storage
         .from('storefront')
-        .upload(filePath, file, { cacheControl: '3600', upsert: true });
+        .upload(filePath, file, { cacheControl: '31536000', upsert: false });
 
       if (!uploadError && data) {
         // Get public URL
@@ -200,7 +200,7 @@ export default function AdminPortal({
 
       const { data, error: uploadError } = await supabase.storage
         .from('storefront')
-        .upload(filePath, file, { cacheControl: '3600', upsert: true });
+        .upload(filePath, file, { cacheControl: '31536000', upsert: false });
 
       if (!uploadError && data) {
         const { data: { publicUrl } } = supabase.storage
@@ -293,7 +293,7 @@ export default function AdminPortal({
 
       const { data, error: uploadError } = await supabase.storage
         .from('storefront')
-        .upload(filePath, file, { cacheControl: '3600', upsert: true });
+        .upload(filePath, file, { cacheControl: '31536000', upsert: false });
 
       if (!uploadError && data) {
         const { data: { publicUrl } } = supabase.storage
@@ -340,7 +340,7 @@ export default function AdminPortal({
 
       const { data, error: uploadError } = await supabase.storage
         .from('storefront')
-        .upload(filePath, file, { cacheControl: '3600', upsert: true });
+        .upload(filePath, file, { cacheControl: '31536000', upsert: false });
 
       if (!uploadError && data) {
         const { data: { publicUrl } } = supabase.storage
@@ -689,7 +689,7 @@ export default function AdminPortal({
 
       const { data, error: uploadError } = await supabase.storage
         .from('storefront')
-        .upload(filePath, file, { cacheControl: '3600', upsert: true });
+        .upload(filePath, file, { cacheControl: '31536000', upsert: false });
 
       if (!uploadError && data) {
         const { data: { publicUrl } } = supabase.storage
@@ -824,9 +824,12 @@ export default function AdminPortal({
   };
 
   // Auto-initialize first 6 active products as featured if none are selected in the database
+  const hasInitializedFeaturedRef = useRef(false);
   useEffect(() => {
     const initFeatured = async () => {
+      if (hasInitializedFeaturedRef.current) return;
       if (productList.length > 0 && featuredCount === 0) {
+        hasInitializedFeaturedRef.current = true;
         const firstSixActive = productList
           .filter(p => p.statusBadge !== 'ARCHIVE')
           .slice(0, 6);
@@ -853,7 +856,7 @@ export default function AdminPortal({
       }
     };
 
-    if (session && productList.length > 0) {
+    if (session && productList.length > 0 && !hasInitializedFeaturedRef.current) {
       initFeatured();
     }
   }, [session, productList, featuredCount]);
@@ -1187,6 +1190,10 @@ export default function AdminPortal({
             <LogOut className="w-3.5 h-3.5" />
             <span>Log Out</span>
           </button>
+
+          <span className="text-[9px] font-mono tracking-widest text-[#2C1E1B]/60 text-center block pt-1 uppercase">
+            Aura Atelier • v{typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.3.0'}
+          </span>
         </div>
       </aside>
 
@@ -1517,6 +1524,8 @@ export default function AdminPortal({
                         <img
                           src={p.image}
                           alt={p.name}
+                          loading="lazy"
+                          decoding="async"
                           className="w-10 h-12 object-cover border border-[#E8DCD7] rounded-none"
                         />
                       </td>

@@ -51,6 +51,7 @@ export default function ShimmerImage({
           ref={imgRef}
           src={src}
           alt={alt}
+          loading="lazy"
           decoding="async"
           onLoad={handleLoad}
           className={`w-full h-full transition-opacity duration-500 ease-out ${
