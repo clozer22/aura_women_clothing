@@ -52,25 +52,34 @@ TO anon, authenticated
 WITH CHECK (true);
 
 
+-- Grant table permissions
+GRANT ALL ON TABLE public.user_profiles TO postgres, service_role;
+GRANT SELECT, INSERT, UPDATE ON TABLE public.user_profiles TO authenticated, anon;
+
+
 -- 2. AUTOMATIC DATABASE TRIGGER: Create user_profile upon Auth sign-up
 CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS trigger AS $$
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
 DECLARE
   is_google boolean;
   default_name text;
   avatar text;
 BEGIN
-  -- Detect if user signed in via Google OAuth
-  is_google := (new.raw_app_meta_data->>'provider' = 'google') OR 
-               (new.app_metadata->>'provider' = 'google');
+  -- Safe provider detection (auth.users only has raw_app_meta_data, NOT app_metadata)
+  is_google := coalesce(new.raw_app_meta_data->>'provider', '') = 'google';
   
-  -- Extract full name and avatar from user metadata
+  -- Extract full name safely
   default_name := coalesce(
     new.raw_user_meta_data->>'full_name',
     new.raw_user_meta_data->>'name',
-    split_part(new.email, '@', 1)
+    split_part(coalesce(new.email, 'client'), '@', 1)
   );
 
+  -- Extract avatar safely
   avatar := coalesce(
     new.raw_user_meta_data->>'avatar_url',
     new.raw_user_meta_data->>'picture',
@@ -88,7 +97,7 @@ BEGIN
   )
   VALUES (
     new.id,
-    new.email,
+    coalesce(new.email, ''),
     default_name,
     avatar,
     'customer',
@@ -101,8 +110,13 @@ BEGIN
     updated_at = now();
 
   RETURN new;
+EXCEPTION
+  WHEN OTHERS THEN
+    -- Fallback: Do not block Supabase auth user creation if an error occurs
+    RAISE WARNING 'handle_new_user trigger error: %', SQLERRM;
+    RETURN new;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
 
 -- Recreate trigger on auth.users table
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
@@ -114,3 +128,4 @@ CREATE TRIGGER on_auth_user_created
 -- 3. LINK ORDERS TO USER PROFILES (Optional user_id in orders)
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_orders_user_id ON public.orders(user_id);
+
