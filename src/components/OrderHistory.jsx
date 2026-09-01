@@ -13,8 +13,10 @@ import {
   Clock,
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
+import { useAuth } from '../context/AuthContext';
 
 export default function OrderHistory({ onBackToShop }) {
+  const { user } = useAuth();
   const [orders, setOrders] = useState([]);
   const [activeTab, setActiveTab] = useState('ALL');
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -31,10 +33,11 @@ export default function OrderHistory({ onBackToShop }) {
       } catch (e) {}
 
       try {
-        const { data, error } = await supabase
-          .from('orders')
-          .select('*')
-          .order('created_at', { ascending: false });
+        let query = supabase.from('orders').select('*').order('created_at', { ascending: false });
+        if (user?.id) {
+          query = query.or(`user_id.eq.${user.id},customer_email.eq.${user.email}`);
+        }
+        const { data, error } = await query;
 
         if (!error && data && data.length > 0) {
           // Merge deduplicating by order_reference

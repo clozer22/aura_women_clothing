@@ -1,8 +1,23 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Info, Sliders, Mail, Menu, X, Search, ShoppingBag, Heart, Package } from 'lucide-react';
+import {
+  Info,
+  Sliders,
+  Mail,
+  Menu,
+  X,
+  Search,
+  ShoppingBag,
+  Heart,
+  Package,
+  User,
+  LogOut,
+  KeyRound,
+  ShieldCheck,
+} from 'lucide-react';
 import cartBasketIcon from '../images/icons/CART BASKET.png';
 import { getWishlist, subscribeWishlist } from '../lib/wishlistManager';
+import { useAuth } from '../context/AuthContext';
 
 export default function Navbar({
   onNavigateHome,
@@ -10,17 +25,23 @@ export default function Navbar({
   onNavigateAdmin,
   onNavigateOrders,
   onOpenWishlist,
+  onOpenAuth,
+  onOpenProfile,
   currentView,
   onSearch,
 }) {
+  const { user, profile, role, signOut } = useAuth();
+
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showSearchInput, setShowSearchInput] = useState(false);
   const [searchVal, setSearchVal] = useState('');
   const [wishlistCount, setWishlistCount] = useState(getWishlist().length);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   const searchContainerRef = useRef(null);
   const mobileSearchRef = useRef(null);
   const mobileSearchBtnRef = useRef(null);
+  const userMenuRef = useRef(null);
 
   useEffect(() => {
     const unsub = subscribeWishlist((items) => {
@@ -31,14 +52,20 @@ export default function Navbar({
 
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (!showSearchInput) return;
+      if (showSearchInput) {
+        const clickedInsideDesktop = searchContainerRef.current && searchContainerRef.current.contains(event.target);
+        const clickedInsideMobileDropdown = mobileSearchRef.current && mobileSearchRef.current.contains(event.target);
+        const clickedInsideMobileBtn = mobileSearchBtnRef.current && mobileSearchBtnRef.current.contains(event.target);
 
-      const clickedInsideDesktop = searchContainerRef.current && searchContainerRef.current.contains(event.target);
-      const clickedInsideMobileDropdown = mobileSearchRef.current && mobileSearchRef.current.contains(event.target);
-      const clickedInsideMobileBtn = mobileSearchBtnRef.current && mobileSearchBtnRef.current.contains(event.target);
+        if (!clickedInsideDesktop && !clickedInsideMobileDropdown && !clickedInsideMobileBtn) {
+          setShowSearchInput(false);
+        }
+      }
 
-      if (!clickedInsideDesktop && !clickedInsideMobileDropdown && !clickedInsideMobileBtn) {
-        setShowSearchInput(false);
+      if (userMenuOpen) {
+        if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
+          setUserMenuOpen(false);
+        }
       }
     };
 
@@ -48,7 +75,7 @@ export default function Navbar({
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('touchstart', handleClickOutside);
     };
-  }, [showSearchInput]);
+  }, [showSearchInput, userMenuOpen]);
 
   const navLinks = [
     { name: 'About', href: '#about', isSection: true, icon: Info },
@@ -139,8 +166,129 @@ export default function Navbar({
           ))}
         </nav>
 
-        {/* Desktop Actions Row (Search + Cart Basket Trigger for Drawer) */}
+        {/* Desktop Actions Row (Search + User Account + Cart Basket Trigger) */}
         <div className="flex items-center border-l border-[#E8DCD7] pl-6 ml-2 gap-4">
+          {/* User Account / Profile Trigger */}
+          <div className="relative" ref={userMenuRef}>
+            {user ? (
+              <button
+                type="button"
+                onClick={() => setUserMenuOpen(!userMenuOpen)}
+                className="w-9 h-9 rounded-full bg-[#2C1E1B] text-white flex items-center justify-center text-xs font-bold font-brand tracking-wider hover:bg-[#B86B60] transition-colors cursor-pointer shadow-sm relative"
+                title="Account Menu"
+                aria-label="Account Menu"
+              >
+                {profile?.full_name ? profile.full_name.charAt(0).toUpperCase() : user.email.charAt(0).toUpperCase()}
+                {profile?.has_set_password === false && (
+                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-amber-500 rounded-full border-2 border-white" title="Password setup recommended" />
+                )}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onOpenAuth}
+                className="text-[#2C1E1B] hover:text-[#B86B60] p-1.5 focus:outline-none transition-colors flex items-center gap-1.5 text-xs uppercase font-bold tracking-wider cursor-pointer"
+                title="Sign In / Register"
+                aria-label="Sign In or Register"
+              >
+                <User className="w-5 h-5 stroke-[1.8]" />
+                <span className="hidden lg:inline text-[11px]">Sign In</span>
+              </button>
+            )}
+
+            {/* User Dropdown Menu */}
+            <AnimatePresence>
+              {user && userMenuOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  transition={{ duration: 0.2 }}
+                  className="absolute right-0 mt-3 w-64 bg-white border border-[#E8DCD7] shadow-xl p-4 rounded-none z-50 text-left space-y-3"
+                >
+                  <div className="pb-3 border-b border-[#E8DCD7]">
+                    <p className="text-xs font-bold text-[#2C1E1B] truncate">
+                      {profile?.full_name || 'Valued Client'}
+                    </p>
+                    <p className="text-[11px] text-[#705B56] truncate">{user.email}</p>
+                    <div className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 bg-[#FAF5F2] border border-[#E8DCD7] text-[9px] uppercase font-bold tracking-wider text-[#B86B60]">
+                      <ShieldCheck className="w-3 h-3" />
+                      <span>{role?.toUpperCase()}</span>
+                    </div>
+                  </div>
+
+                  {profile?.has_set_password === false && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUserMenuOpen(false);
+                        onOpenProfile();
+                      }}
+                      className="w-full p-2 bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-semibold text-left flex items-center gap-2 hover:bg-amber-100 transition-colors cursor-pointer"
+                    >
+                      <KeyRound className="w-3.5 h-3.5 flex-shrink-0" />
+                      <span>Set Password (Action Needed)</span>
+                    </button>
+                  )}
+
+                  <div className="space-y-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUserMenuOpen(false);
+                        onOpenProfile();
+                      }}
+                      className="w-full text-left py-1.5 px-2 text-xs text-[#2C1E1B] hover:bg-[#FAF5F2] flex items-center gap-2 transition-colors cursor-pointer"
+                    >
+                      <User className="w-3.5 h-3.5 text-[#705B56]" />
+                      <span>Profile & Security</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUserMenuOpen(false);
+                        onNavigateOrders();
+                      }}
+                      className="w-full text-left py-1.5 px-2 text-xs text-[#2C1E1B] hover:bg-[#FAF5F2] flex items-center gap-2 transition-colors cursor-pointer"
+                    >
+                      <Package className="w-3.5 h-3.5 text-[#705B56]" />
+                      <span>My Orders</span>
+                    </button>
+
+                    {(role === 'admin' || role === 'superadmin') && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUserMenuOpen(false);
+                          onNavigateAdmin();
+                        }}
+                        className="w-full text-left py-1.5 px-2 text-xs text-[#B86B60] hover:bg-[#FAF5F2] flex items-center gap-2 transition-colors cursor-pointer font-bold"
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        <span>Admin Studio</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="pt-2 border-t border-[#E8DCD7]">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setUserMenuOpen(false);
+                        await signOut();
+                      }}
+                      className="w-full text-left py-1.5 px-2 text-xs text-rose-700 hover:bg-rose-50 flex items-center gap-2 transition-colors cursor-pointer font-semibold"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
           {/* Cart Basket Icon: Triggers Side Navigation Drawer */}
           <button
             onClick={onOpenWishlist}
@@ -214,8 +362,31 @@ export default function Navbar({
         </motion.button>
       </div>
 
-      {/* Mobile Actions: Search + Cart Basket (Visible on mobile only, right aligned) */}
-      <div className="flex md:hidden items-center gap-1.5 sm:gap-2">
+      {/* Mobile Actions: User + Search + Cart Basket (Visible on mobile only, right aligned) */}
+      <div className="flex md:hidden items-center gap-2">
+        {/* Mobile User Account Button */}
+        {user ? (
+          <button
+            onClick={onOpenProfile}
+            className="w-7 h-7 rounded-full bg-[#2C1E1B] text-white flex items-center justify-center text-[10px] font-bold font-brand tracking-wider relative cursor-pointer"
+            title="Account"
+            aria-label="Account"
+          >
+            {profile?.full_name ? profile.full_name.charAt(0).toUpperCase() : user.email.charAt(0).toUpperCase()}
+            {profile?.has_set_password === false && (
+              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-amber-500 rounded-full border border-white" />
+            )}
+          </button>
+        ) : (
+          <button
+            onClick={onOpenAuth}
+            className="p-1 text-[#2C1E1B] bg-transparent border-none focus:outline-none flex items-center justify-center cursor-pointer"
+            aria-label="Sign In"
+          >
+            <User className="w-6 h-6 stroke-[1.6]" />
+          </button>
+        )}
+
         {/* Mobile Search Button */}
         <button
           ref={mobileSearchBtnRef}

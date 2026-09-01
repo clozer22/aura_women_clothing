@@ -19,12 +19,14 @@ import {
 } from '../lib/phAddressApi';
 import { createXenditInvoice } from '../lib/xendit';
 import { supabase } from '../lib/supabaseClient';
+import { useAuth } from '../context/AuthContext';
 
 export default function CheckoutPage({
   checkoutItems = [],
   onBackToShop,
   onOrderCompleted,
 }) {
+  const { user, profile } = useAuth();
   const [currentStep, setCurrentStep] = useState(1); // 1: Shipping, 2: Review, 3: Payment
 
   // Form State
@@ -76,6 +78,18 @@ export default function CheckoutPage({
       }
     } catch (e) {}
   }, []);
+
+  // Pre-fill logged-in customer info
+  useEffect(() => {
+    if (user) {
+      setFormData((prev) => ({
+        ...prev,
+        fullName: prev.fullName || profile?.full_name || user.user_metadata?.full_name || '',
+        email: prev.email || user.email || '',
+        phone: prev.phone || profile?.phone || '',
+      }));
+    }
+  }, [user, profile]);
 
   // Fetch initial Regions
   useEffect(() => {
@@ -279,6 +293,7 @@ export default function CheckoutPage({
         payment_method: paymentMethod,
         payment_status: 'PENDING',
         status: 'PENDING',
+        user_id: user?.id || null,
         xendit_invoice_id: invoiceResult.invoiceId || null,
         xendit_invoice_url: invoiceResult.invoiceUrl || null,
         created_at: new Date().toISOString(),

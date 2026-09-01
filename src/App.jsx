@@ -18,8 +18,12 @@ import OrderHistory from './components/OrderHistory';
 import { PRODUCTS } from './data/products';
 import { supabase } from './lib/supabaseClient';
 import { getWishlist } from './lib/wishlistManager';
+import { AuthProvider } from './context/AuthContext';
+import CustomerAuthModal from './components/CustomerAuthModal';
+import CustomerProfileModal from './components/CustomerProfileModal';
+import PasswordPromptBanner from './components/PasswordPromptBanner';
 
-export default function App() {
+function MainApp() {
   const getInitialView = () => {
     const path = window.location.pathname;
     if (path === '/admin-dashboard') return 'admin';
@@ -57,6 +61,8 @@ export default function App() {
   const [wishlistDrawerOpen, setWishlistDrawerOpen] = useState(false);
   const [checkoutItems, setCheckoutItems] = useState([]);
   const [completedOrder, setCompletedOrder] = useState(getInitialOrder());
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
 
   const [showSplash, setShowSplash] = useState(true);
 
@@ -367,6 +373,9 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      {/* Password Creation Prompt for Google Users */}
+      <PasswordPromptBanner onOpenProfile={() => setProfileModalOpen(true)} />
+
       {/* Main Floating Glass Navbar */}
       <Navbar
         onNavigateHome={navigateToHome}
@@ -374,6 +383,8 @@ export default function App() {
         onNavigateAdmin={navigateToAdmin}
         onNavigateOrders={navigateToOrders}
         onOpenWishlist={() => setWishlistDrawerOpen(true)}
+        onOpenAuth={() => setAuthModalOpen(true)}
+        onOpenProfile={() => setProfileModalOpen(true)}
         currentView={currentView}
         onSearch={(query) => {
           setCatalogSearchQuery(query);
@@ -453,6 +464,29 @@ export default function App() {
         }}
       />
 
+      {/* Customer Authentication Modal (Google / Email / OTP) */}
+      <CustomerAuthModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        onSuccess={() => {
+          showToast('Welcome to Aura');
+        }}
+      />
+
+      {/* Customer Profile & Password Setup Modal */}
+      <CustomerProfileModal
+        isOpen={profileModalOpen}
+        onClose={() => setProfileModalOpen(false)}
+      />
+
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <MainApp />
+    </AuthProvider>
   );
 }
