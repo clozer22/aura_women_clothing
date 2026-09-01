@@ -2,7 +2,9 @@
  * Xendit Payment Gateway Integration Service
  */
 
-const XENDIT_API_KEY = import.meta.env.VITE_XENDIT_API_KEY;
+const XENDIT_API_KEY =
+  import.meta.env.VITE_XENDIT_API_KEY ||
+  'xnd_development_G4K4iGkpjDrzT6EQIDzZShzp7oK77GiaEhAYWPCIC4e0ROvsmVSSi2tZZKScBK';
 
 /**
  * Creates a Xendit Invoice for checkout
@@ -24,10 +26,6 @@ export async function createXenditInvoice({
   items = [],
   paymentMethod = 'GCASH',
 }) {
-  if (!XENDIT_API_KEY) {
-    console.warn('VITE_XENDIT_API_KEY is not defined in environment.');
-  }
-
   // Determine allowed payment methods based on customer's choice
   let paymentMethods = ['GCASH', 'PAYMAYA', 'CREDIT_CARD', 'SHOPEEPAY', 'GRABPAY'];
   if (paymentMethod === 'GCASH') {
@@ -37,6 +35,12 @@ export async function createXenditInvoice({
   } else if (paymentMethod === 'CARD') {
     paymentMethods = ['CREDIT_CARD'];
   }
+
+  const stagingUrl = 'https://aura-women-clothing-mzaa2w9w2-clozer22s-projects.vercel.app';
+  const currentOrigin =
+    typeof window !== 'undefined' && window.location.origin && window.location.origin !== 'null'
+      ? window.location.origin
+      : stagingUrl;
 
   const payload = {
     external_id: orderNumber || `AC-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
@@ -61,17 +65,16 @@ export async function createXenditInvoice({
     })),
     payment_methods: paymentMethods,
     currency: 'PHP',
-    success_redirect_url: typeof window !== 'undefined' ? `${window.location.origin}/order-confirmed?ref=${orderNumber}` : 'http://localhost:3000/order-confirmed',
-    failure_redirect_url: typeof window !== 'undefined' ? `${window.location.origin}/checkout` : 'http://localhost:3000/checkout',
+    success_redirect_url: `${currentOrigin}/order-confirmed?ref=${orderNumber}`,
+    failure_redirect_url: `${currentOrigin}/checkout`,
   };
 
   const basicAuth = btoa(`${XENDIT_API_KEY}:`);
 
-  // We use local Vite proxy /api/xendit during dev to avoid browser CORS errors
-  const endpoint = '/api/xendit/v2/invoices';
-
+  // Direct Xendit API call (supports CORS natively with Access-Control-Allow-Origin: *)
+  let response;
   try {
-    const response = await fetch(endpoint, {
+    response = await fetch('https://api.xendit.co/v2/invoices', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -79,33 +82,35 @@ export async function createXenditInvoice({
       },
       body: JSON.stringify(payload),
     });
-
-    if (!response.ok) {
-      const errBody = await response.json().catch(() => ({}));
-      console.error('Xendit Invoice Creation Failed:', errBody);
-      throw new Error(errBody.message || `Xendit Error (${response.status})`);
-    }
-
-    const data = await response.json();
-    return {
-      success: true,
-      invoiceId: data.id,
-      invoiceUrl: data.invoice_url,
-      status: data.status,
-      externalId: data.external_id,
-      data,
-    };
-  } catch (error) {
-    console.error('Error creating Xendit invoice:', error);
-    // If the proxy fails (or during offline preview), provide a simulated successful invoice
-    return {
-      success: true,
-      simulated: true,
-      invoiceId: `xen_test_${Math.random().toString(36).substring(2, 9)}`,
-      invoiceUrl: 'https://checkout-staging.xendit.co/web/test-checkout',
-      status: 'PENDING',
-      externalId: payload.external_id,
-      message: error.message,
-    };
+  } catch (directErr) {
+    console.warn('Direct Xendit API call failed, attempting relative proxy:', directErr);
+    response = await fetch('/api/xendit/v2/invoices', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Basic ${basicAuth}`,
+      },
+      body: JSON.stringify(payload),
+    });
   }
+
+  if (!response.ok) {
+    const errBody = await response.json().catch(() => ({}));
+    console.error('Xendit Invoice Creation Failed:', errBody);
+    throw new Error(errBody.message || `Xendit Error (${response.status})`);
+  }
+
+  const data = await response.json();
+  if (!data.invoice_url) {
+    throw new Error('Xendit did not return a valid payment invoice URL');
+  }
+
+  return {
+    success: true,
+    invoiceId: data.id,
+    invoiceUrl: data.invoice_url,
+    status: data.status,
+    externalId: data.external_id,
+    data,
+  };
 }
