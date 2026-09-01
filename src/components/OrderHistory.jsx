@@ -22,44 +22,43 @@ export default function OrderHistory({ onBackToShop }) {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Load orders from LocalStorage + Supabase
+  // Load orders strictly for the authenticated user and clean up legacy storage
   useEffect(() => {
+    try {
+      localStorage.removeItem('aura_guest_orders');
+    } catch (e) {}
+
     async function loadOrders() {
+      // If user is not yet logged in or session is loading, do not query all orders
+      if (!user) {
+        setOrders([]);
+        setIsLoading(false);
+        return;
+      }
+
       setIsLoading(true);
-      let localOrders = [];
       try {
-        const raw = localStorage.getItem('aura_guest_orders');
-        localOrders = raw ? JSON.parse(raw) : [];
-      } catch (e) {}
+        const { data, error } = await supabase
+          .from('orders')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
 
-      try {
-        let query = supabase.from('orders').select('*').order('created_at', { ascending: false });
-        if (user?.id) {
-          query = query.or(`user_id.eq.${user.id},customer_email.eq.${user.email}`);
-        }
-        const { data, error } = await query;
-
-        if (!error && data && data.length > 0) {
-          // Merge deduplicating by order_reference
-          const combined = [...localOrders];
-          data.forEach((dbOrder) => {
-            if (!combined.some((o) => o.order_reference === dbOrder.order_reference)) {
-              combined.push(dbOrder);
-            }
-          });
-          setOrders(combined);
+        if (!error && data) {
+          setOrders(data);
         } else {
-          setOrders(localOrders);
+          setOrders([]);
         }
       } catch (err) {
-        setOrders(localOrders);
+        console.error('Failed to fetch user orders:', err);
+        setOrders([]);
       } finally {
         setIsLoading(false);
       }
     }
 
     loadOrders();
-  }, []);
+  }, [user]);
 
   const tabs = [
     { id: 'ALL', label: 'All Orders' },

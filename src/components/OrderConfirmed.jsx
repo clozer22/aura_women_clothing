@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   Check,
@@ -9,6 +9,7 @@ import {
   ArrowRight,
   ShoppingBag,
 } from 'lucide-react';
+import { removeItemsFromWishlist, clearWishlist } from '../lib/wishlistManager';
 
 export default function OrderConfirmed({ order, onContinueShopping, onViewOrders }) {
   const [copied, setCopied] = useState(false);
@@ -16,12 +17,21 @@ export default function OrderConfirmed({ order, onContinueShopping, onViewOrders
   // Fallback to most recent order if order prop is not yet in state
   const activeOrder = order || (() => {
     try {
-      const orders = JSON.parse(localStorage.getItem('aura_guest_orders') || '[]');
-      return orders[0] || null;
+      const raw = localStorage.getItem('aura_last_order');
+      return raw ? JSON.parse(raw) : null;
     } catch (e) {
       return null;
     }
   })();
+
+  // Clear purchased items from active cart and database on confirmation
+  useEffect(() => {
+    if (activeOrder && Array.isArray(activeOrder.items) && activeOrder.items.length > 0) {
+      removeItemsFromWishlist(activeOrder.items);
+    } else {
+      clearWishlist();
+    }
+  }, []);
 
   if (!activeOrder) {
     return (

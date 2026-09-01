@@ -20,6 +20,7 @@ import {
 import { createXenditInvoice } from '../lib/xendit';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
+import { removeItemsFromWishlist } from '../lib/wishlistManager';
 
 export default function CheckoutPage({
   checkoutItems = [],
@@ -299,11 +300,10 @@ export default function CheckoutPage({
         created_at: new Date().toISOString(),
       };
 
-      // 3. Save to Local Storage for immediate guest access
+      // 3. Save single active order for confirmation redirect
       try {
-        const existingOrders = JSON.parse(localStorage.getItem('aura_guest_orders') || '[]');
-        const filtered = existingOrders.filter((o) => o.order_reference !== orderReference);
-        localStorage.setItem('aura_guest_orders', JSON.stringify([newOrder, ...filtered]));
+        localStorage.removeItem('aura_guest_orders');
+        localStorage.setItem('aura_last_order', JSON.stringify(newOrder));
       } catch (err) {}
 
       // 4. Try saving to Supabase orders table
@@ -313,9 +313,9 @@ export default function CheckoutPage({
         console.warn('Notice: Could not insert to Supabase orders table:', dbErr.message);
       }
 
-      // Clear wishlist after order placement
+      // Clear checked-out items from active cart and Supabase database
       try {
-        localStorage.removeItem('aura_guest_wishlist');
+        await removeItemsFromWishlist(checkoutItems);
       } catch (e) {}
 
       // 5. REDIRECT TO XENDIT PAYMENT GATEWAY FOR ACTUAL PAYMENT

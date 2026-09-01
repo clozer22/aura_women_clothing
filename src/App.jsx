@@ -18,12 +18,14 @@ import OrderHistory from './components/OrderHistory';
 import { PRODUCTS } from './data/products';
 import { supabase } from './lib/supabaseClient';
 import { getWishlist } from './lib/wishlistManager';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import CustomerAuthModal from './components/CustomerAuthModal';
-import CustomerProfileModal from './components/CustomerProfileModal';
+import CustomerProfilePage from './components/CustomerProfilePage';
 import PasswordPromptBanner from './components/PasswordPromptBanner';
 
 function MainApp() {
+  const { user } = useAuth();
+
   const getInitialView = () => {
     const path = window.location.pathname;
     if (path === '/admin-dashboard') return 'admin';
@@ -31,24 +33,26 @@ function MainApp() {
     if (path === '/checkout') return 'checkout';
     if (path === '/orders') return 'orders';
     if (path === '/order-confirmed') return 'order-confirmed';
+    if (path === '/profile') return 'profile';
     return 'home';
   };
 
   const getInitialOrder = () => {
     try {
+      localStorage.removeItem('aura_guest_orders');
       const params = new URLSearchParams(window.location.search);
       const ref = params.get('ref');
-      const savedOrders = JSON.parse(localStorage.getItem('aura_guest_orders') || '[]');
-      if (ref) {
-        const found = savedOrders.find((o) => o.order_reference === ref);
-        if (found) {
-          found.payment_status = 'PAID';
-          found.status = 'PROCESSING';
-          localStorage.setItem('aura_guest_orders', JSON.stringify(savedOrders));
-          return found;
+      const last = localStorage.getItem('aura_last_order');
+      const lastOrder = last ? JSON.parse(last) : null;
+      if (lastOrder && (!ref || lastOrder.order_reference === ref)) {
+        if (ref) {
+          lastOrder.payment_status = 'PAID';
+          lastOrder.status = 'PROCESSING';
+          localStorage.setItem('aura_last_order', JSON.stringify(lastOrder));
         }
+        return lastOrder;
       }
-      return savedOrders[0] || null;
+      return lastOrder || null;
     } catch (e) {
       return null;
     }
@@ -60,9 +64,9 @@ function MainApp() {
   const [catalogSearchQuery, setCatalogSearchQuery] = useState('');
   const [wishlistDrawerOpen, setWishlistDrawerOpen] = useState(false);
   const [checkoutItems, setCheckoutItems] = useState([]);
+  const [pendingCheckoutItems, setPendingCheckoutItems] = useState(null);
   const [completedOrder, setCompletedOrder] = useState(getInitialOrder());
   const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [profileModalOpen, setProfileModalOpen] = useState(false);
 
   const [showSplash, setShowSplash] = useState(true);
 
@@ -257,6 +261,17 @@ function MainApp() {
       showToast('Your wishlist / bag is currently empty.');
       return;
     }
+
+    // Require login to checkout: guests can browse, but checking out triggers auth modal
+    if (!user) {
+      setPendingCheckoutItems(validItems);
+      setWishlistDrawerOpen(false);
+      setSelectedProduct(null);
+      setAuthModalOpen(true);
+      showToast('Please sign in or create an account to proceed to checkout.');
+      return;
+    }
+
     setCheckoutItems(validItems);
     setCurrentView('checkout');
     window.history.pushState(null, '', '/checkout');
@@ -266,6 +281,12 @@ function MainApp() {
   const navigateToOrders = () => {
     setCurrentView('orders');
     window.history.pushState(null, '', '/orders');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const navigateToProfile = () => {
+    setCurrentView('profile');
+    window.history.pushState(null, '', '/profile');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -313,8 +334,38 @@ function MainApp() {
     );
   }
 
-  // Render full-screen Checkout View
+  // Render full-screen Checkout View (Guarded: login required)
   if (currentView === 'checkout') {
+    if (!user) {
+      return (
+        <div className="min-h-screen bg-[#FAF5F2] flex items-center justify-center p-4">
+          <div className="bg-white border border-[#E8DCD7] p-8 max-w-md w-full text-center shadow-xl">
+            <span className="text-[10px] font-brand uppercase tracking-[0.25em] text-[#B86B60] font-bold block mb-1">
+              AUTHENTICATION REQUIRED
+            </span>
+            <h2 className="font-brand text-2xl text-[#2C1E1B] mb-2">Sign In to Checkout</h2>
+            <p className="text-xs text-[#705B56] mb-6 leading-relaxed">
+              Please sign in with Google or your email account to proceed with your checkout and track your order.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={navigateToHome}
+                className="flex-1 py-3 border border-[#2C1E1B] text-xs font-bold uppercase tracking-wider text-[#2C1E1B] hover:bg-[#FAF5F2] cursor-pointer"
+              >
+                Return to Shop
+              </button>
+              <button
+                onClick={() => setAuthModalOpen(true)}
+                className="flex-1 py-3 bg-[#2C1E1B] text-white text-xs font-bold uppercase tracking-wider hover:bg-[#B86B60] cursor-pointer"
+              >
+                Sign In
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <CheckoutPage
         checkoutItems={checkoutItems.length > 0 ? checkoutItems : getWishlist()}
@@ -340,6 +391,16 @@ function MainApp() {
     return (
       <OrderHistory
         onBackToShop={navigateToHome}
+      />
+    );
+  }
+
+  // Render full-screen Customer Profile & Settings View
+  if (currentView === 'profile') {
+    return (
+      <CustomerProfilePage
+        onBackToShop={navigateToHome}
+        onNavigateOrders={navigateToOrders}
       />
     );
   }
@@ -374,7 +435,7 @@ function MainApp() {
       </AnimatePresence>
 
       {/* Password Creation Prompt for Google Users */}
-      <PasswordPromptBanner onOpenProfile={() => setProfileModalOpen(true)} />
+      <PasswordPromptBanner onOpenProfile={navigateToProfile} />
 
       {/* Main Floating Glass Navbar */}
       <Navbar
@@ -384,7 +445,7 @@ function MainApp() {
         onNavigateOrders={navigateToOrders}
         onOpenWishlist={() => setWishlistDrawerOpen(true)}
         onOpenAuth={() => setAuthModalOpen(true)}
-        onOpenProfile={() => setProfileModalOpen(true)}
+        onOpenProfile={navigateToProfile}
         currentView={currentView}
         onSearch={(query) => {
           setCatalogSearchQuery(query);
@@ -470,13 +531,15 @@ function MainApp() {
         onClose={() => setAuthModalOpen(false)}
         onSuccess={() => {
           showToast('Welcome to Aura');
+          if (pendingCheckoutItems && pendingCheckoutItems.length > 0) {
+            const items = [...pendingCheckoutItems];
+            setPendingCheckoutItems(null);
+            setCheckoutItems(items);
+            setCurrentView('checkout');
+            window.history.pushState(null, '', '/checkout');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
         }}
-      />
-
-      {/* Customer Profile & Password Setup Modal */}
-      <CustomerProfileModal
-        isOpen={profileModalOpen}
-        onClose={() => setProfileModalOpen(false)}
       />
 
     </div>

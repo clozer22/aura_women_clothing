@@ -166,9 +166,65 @@ export default function Navbar({
           ))}
         </nav>
 
-        {/* Desktop Actions Row (Search + User Account + Cart Basket Trigger) */}
+        {/* Desktop Actions Row (Search + Cart Basket + Profile in far right corner) */}
         <div className="flex items-center border-l border-[#E8DCD7] pl-6 ml-2 gap-4">
-          {/* User Account / Profile Trigger */}
+          {/* 1. Search Toggle Icon */}
+          <div className="flex items-center" ref={searchContainerRef}>
+            <button
+              onClick={() => setShowSearchInput(!showSearchInput)}
+              className="text-[#2C1E1B] hover:text-[#B86B60] p-1.5 focus:outline-none transition-colors flex items-center justify-center cursor-pointer"
+              aria-label="Toggle search input"
+              title="Search catalog"
+            >
+              <Search className="w-[25px] h-[25px] stroke-[1.75]" />
+            </button>
+            <AnimatePresence>
+              {showSearchInput && (
+                <motion.div
+                  initial={{ width: 0, opacity: 0 }}
+                  animate={{ width: 180, opacity: 1 }}
+                  exit={{ width: 0, opacity: 0 }}
+                  transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+                  className="border-b border-[#E8DCD7] focus-within:border-[#2C1E1B] px-1 py-0.5 overflow-hidden flex items-center ml-2"
+                >
+                  <input
+                    type="text"
+                    placeholder="Search catalog..."
+                    value={searchVal}
+                    onChange={(e) => setSearchVal(e.target.value)}
+                    onKeyDown={handleSearchSubmit}
+                    className="w-full bg-transparent border-none text-[11px] text-[#2C1E1B] placeholder-[#A38E88] focus:outline-none py-0.5"
+                    autoFocus
+                  />
+                  {searchVal && (
+                    <button
+                      onClick={() => setSearchVal('')}
+                      className="text-[10px] text-[#A38E88] hover:text-[#2C1E1B] ml-1 p-0.5"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* 2. Cart Basket Icon: Balanced in size with Profile */}
+          <button
+            onClick={onOpenWishlist}
+            className="text-[#B86B60] hover:text-[#2C1E1B] p-1 focus:outline-none transition-colors relative flex items-center justify-center cursor-pointer"
+            title="Shopping Bag"
+            aria-label="View Shopping Bag"
+          >
+            <img src={cartBasketIcon} alt="Cart" className="w-[55px] h-[55px] object-contain" />
+            {wishlistCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-[#B86B60] text-white text-[9px] w-4 h-4 rounded-full flex items-center justify-center font-bold shadow-md">
+                {wishlistCount}
+              </span>
+            )}
+          </button>
+
+          {/* 3. User Account / Profile Trigger (Far Right Corner) */}
           <div className="relative" ref={userMenuRef}>
             {user ? (
               <button
@@ -180,7 +236,7 @@ export default function Navbar({
               >
                 {profile?.full_name ? profile.full_name.charAt(0).toUpperCase() : user.email.charAt(0).toUpperCase()}
                 {profile?.has_set_password === false && (
-                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-amber-500 rounded-full border-2 border-white" title="Password setup recommended" />
+                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-amber-500 rounded-full border-2 border-white" title="Password setup recommended" />
                 )}
               </button>
             ) : (
@@ -191,7 +247,7 @@ export default function Navbar({
                 title="Sign In / Register"
                 aria-label="Sign In or Register"
               >
-                <User className="w-5 h-5 stroke-[1.8]" />
+                <User className="w-[22px] h-[22px] stroke-[1.75]" />
                 <span className="hidden lg:inline text-[11px]">Sign In</span>
               </button>
             )}
@@ -241,7 +297,7 @@ export default function Navbar({
                       className="w-full text-left py-1.5 px-2 text-xs text-[#2C1E1B] hover:bg-[#FAF5F2] flex items-center gap-2 transition-colors cursor-pointer"
                     >
                       <User className="w-3.5 h-3.5 text-[#705B56]" />
-                      <span>Profile & Security</span>
+                      <span>Profile & Settings</span>
                     </button>
 
                     <button
@@ -288,61 +344,6 @@ export default function Navbar({
               )}
             </AnimatePresence>
           </div>
-
-          {/* Cart Basket Icon: Triggers Side Navigation Drawer */}
-          <button
-            onClick={onOpenWishlist}
-            className="text-[#B86B60] hover:text-[#2C1E1B] p-1 focus:outline-none transition-colors relative flex items-center justify-center cursor-pointer"
-            title="Shopping Bag"
-            aria-label="View Shopping Bag"
-          >
-            <img src={cartBasketIcon} alt="Cart" className="w-[70px] h-[70px] object-contain" />
-            {wishlistCount > 0 && (
-              <span className="absolute top-2 right-2 bg-[#B86B60] text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-bold shadow-md">
-                {wishlistCount}
-              </span>
-            )}
-          </button>
-
-          {/* Search Toggle Icon */}
-          <div className="flex items-center" ref={searchContainerRef}>
-            <button
-              onClick={() => setShowSearchInput(!showSearchInput)}
-              className="text-[#2C1E1B] hover:text-[#2C1E1B] p-1 focus:outline-none transition-colors flex items-center justify-center"
-              aria-label="Toggle search input"
-            >
-              <Search className="w-[40px] h-[40px] stroke-[1.6]" />
-            </button>
-            <AnimatePresence>
-              {showSearchInput && (
-                <motion.div
-                  initial={{ width: 0, opacity: 0 }}
-                  animate={{ width: 180, opacity: 1 }}
-                  exit={{ width: 0, opacity: 0 }}
-                  transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-                  className="border-b border-[#E8DCD7] focus-within:border-[#2C1E1B] px-1 py-0.5 overflow-hidden flex items-center ml-2"
-                >
-                  <input
-                    type="text"
-                    placeholder="Search catalog..."
-                    value={searchVal}
-                    onChange={(e) => setSearchVal(e.target.value)}
-                    onKeyDown={handleSearchSubmit}
-                    className="w-full bg-transparent border-none text-[11px] text-[#2C1E1B] placeholder-[#A38E88] focus:outline-none py-0.5"
-                    autoFocus
-                  />
-                  {searchVal && (
-                    <button
-                      onClick={() => setSearchVal('')}
-                      className="text-[10px] text-[#A38E88] hover:text-[#2C1E1B] ml-1 p-0.5"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
         </div>
       </div>
 
@@ -362,13 +363,40 @@ export default function Navbar({
         </motion.button>
       </div>
 
-      {/* Mobile Actions: User + Search + Cart Basket (Visible on mobile only, right aligned) */}
-      <div className="flex md:hidden items-center gap-2">
-        {/* Mobile User Account Button */}
+      {/* Mobile Actions: Search + Cart Basket + User Profile in far right corner */}
+      <div className="flex md:hidden items-center gap-3">
+        {/* 1. Mobile Search Button */}
+        <button
+          ref={mobileSearchBtnRef}
+          onClick={() => {
+            setShowSearchInput(!showSearchInput);
+            setMobileMenuOpen(false);
+          }}
+          className="p-1 text-[#2C1E1B] bg-transparent border-none focus:outline-none flex items-center justify-center rounded-none"
+          aria-label="Toggle Mobile Search"
+        >
+          <Search className="w-5 h-5 stroke-[1.75]" />
+        </button>
+
+        {/* 2. Mobile Cart Basket */}
+        <button
+          onClick={onOpenWishlist}
+          className="p-1 text-[#2C1E1B] bg-transparent border-none focus:outline-none flex items-center justify-center rounded-none relative cursor-pointer"
+          aria-label="View Shopping Bag"
+        >
+          <img src={cartBasketIcon} alt="Cart" className="w-[28px] h-[28px] object-contain" />
+          {wishlistCount > 0 && (
+            <span className="absolute -top-1 -right-1 bg-[#B86B60] text-white text-[8px] w-3.5 h-3.5 rounded-full flex items-center justify-center font-bold shadow-md">
+              {wishlistCount}
+            </span>
+          )}
+        </button>
+
+        {/* 3. Mobile User Account Button (Far Right Corner) */}
         {user ? (
           <button
             onClick={onOpenProfile}
-            className="w-7 h-7 rounded-full bg-[#2C1E1B] text-white flex items-center justify-center text-[10px] font-bold font-brand tracking-wider relative cursor-pointer"
+            className="w-8 h-8 rounded-full bg-[#2C1E1B] text-white flex items-center justify-center text-[10px] font-bold font-brand tracking-wider relative cursor-pointer"
             title="Account"
             aria-label="Account"
           >
@@ -383,36 +411,9 @@ export default function Navbar({
             className="p-1 text-[#2C1E1B] bg-transparent border-none focus:outline-none flex items-center justify-center cursor-pointer"
             aria-label="Sign In"
           >
-            <User className="w-6 h-6 stroke-[1.6]" />
+            <User className="w-5 h-5 stroke-[1.75]" />
           </button>
         )}
-
-        {/* Mobile Search Button */}
-        <button
-          ref={mobileSearchBtnRef}
-          onClick={() => {
-            setShowSearchInput(!showSearchInput);
-            setMobileMenuOpen(false);
-          }}
-          className="p-1 text-[#2C1E1B] bg-transparent border-none focus:outline-none flex items-center justify-center rounded-none"
-          aria-label="Toggle Mobile Search"
-        >
-          <Search className="w-[35px] h-[35px] stroke-[1.6]" />
-        </button>
-
-        {/* Mobile Cart Basket: Triggers Side Navigation Drawer */}
-        <button
-          onClick={onOpenWishlist}
-          className="p-1 text-[#2C1E1B] bg-transparent border-none focus:outline-none flex items-center justify-center rounded-none relative cursor-pointer"
-          aria-label="View Shopping Bag"
-        >
-          <img src={cartBasketIcon} alt="Cart" className="w-[55px] h-[55px] object-contain" />
-          {wishlistCount > 0 && (
-            <span className="absolute top-1 right-1 bg-[#B86B60] text-white text-[9px] w-4 h-4 rounded-full flex items-center justify-center font-bold shadow-md">
-              {wishlistCount}
-            </span>
-          )}
-        </button>
       </div>
 
       {/* Mobile Slide-down Search Bar */}

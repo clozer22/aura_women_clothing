@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import { setWishlistUser } from '../lib/wishlistManager';
 
 const AuthContext = createContext(null);
 
@@ -68,6 +69,7 @@ export function AuthProvider({ children }) {
     supabase.auth.getSession().then(({ data: { session } }) => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
+      setWishlistUser(currentUser);
       if (currentUser) {
         fetchProfile(currentUser);
       }
@@ -80,6 +82,7 @@ export function AuthProvider({ children }) {
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
+      setWishlistUser(currentUser);
       if (currentUser) {
         await fetchProfile(currentUser);
       } else {
@@ -175,6 +178,7 @@ export function AuthProvider({ children }) {
 
   // Sign Out
   const signOut = async () => {
+    setWishlistUser(null);
     await supabase.auth.signOut();
     setUser(null);
     setProfile(null);
