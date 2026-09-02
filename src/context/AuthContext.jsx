@@ -4,6 +4,21 @@ import { setWishlistUser } from '../lib/wishlistManager';
 
 const AuthContext = createContext(null);
 
+export const isAdminEmail = (email) => {
+  if (!email) return false;
+  const lower = email.toLowerCase().trim();
+  return lower.endsWith('@admin.com') || lower.endsWith('@superadmin.com') || lower.endsWith('@aura.com');
+};
+
+export const getAdminRole = (email) => {
+  if (!email) return 'Admin';
+  const lower = email.toLowerCase().trim();
+  if (lower.endsWith('@superadmin.com')) return 'Super Admin';
+  if (lower.endsWith('@admin.com')) return 'Admin';
+  if (lower.includes('super')) return 'Super Admin';
+  return 'Admin';
+};
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
@@ -12,7 +27,7 @@ export function AuthProvider({ children }) {
 
   // Fetch or create profile from public.user_profiles
   const fetchProfile = async (currentUser) => {
-    if (!currentUser) {
+    if (!currentUser || isAdminEmail(currentUser.email)) {
       setProfile(null);
       return;
     }
@@ -68,10 +83,17 @@ export function AuthProvider({ children }) {
     // 1. Initial Session Check
     supabase.auth.getSession().then(({ data: { session } }) => {
       const currentUser = session?.user ?? null;
-      setUser(currentUser);
-      setWishlistUser(currentUser);
-      if (currentUser) {
-        fetchProfile(currentUser);
+      if (currentUser && isAdminEmail(currentUser.email)) {
+        // Admin accounts must NOT be logged in as customers on the storefront
+        setUser(null);
+        setWishlistUser(null);
+        setProfile(null);
+      } else {
+        setUser(currentUser);
+        setWishlistUser(currentUser);
+        if (currentUser) {
+          fetchProfile(currentUser);
+        }
       }
       setLoading(false);
     });
@@ -81,12 +103,19 @@ export function AuthProvider({ children }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
       const currentUser = session?.user ?? null;
-      setUser(currentUser);
-      setWishlistUser(currentUser);
-      if (currentUser) {
-        await fetchProfile(currentUser);
-      } else {
+      if (currentUser && isAdminEmail(currentUser.email)) {
+        // Admin accounts must NOT be logged in as customers on the storefront
+        setUser(null);
+        setWishlistUser(null);
         setProfile(null);
+      } else {
+        setUser(currentUser);
+        setWishlistUser(currentUser);
+        if (currentUser) {
+          await fetchProfile(currentUser);
+        } else {
+          setProfile(null);
+        }
       }
       setLoading(false);
     });
@@ -119,6 +148,9 @@ export function AuthProvider({ children }) {
 
   // Sign Up with Email and Password (triggers OTP email from Supabase)
   const signUpWithEmail = async ({ email, password, fullName }) => {
+    if (isAdminEmail(email)) {
+      throw new Error('Admin domain accounts (@admin.com, @superadmin.com) cannot be registered as customers.');
+    }
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -167,6 +199,9 @@ export function AuthProvider({ children }) {
 
   // Direct Sign In with Email & Password
   const signInWithEmail = async ({ email, password }) => {
+    if (isAdminEmail(email)) {
+      throw new Error('Admin accounts cannot log in as customers. Please use your personal email or log in via the Admin Dashboard.');
+    }
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,

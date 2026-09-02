@@ -80,13 +80,13 @@ export default function CheckoutPage({
     } catch (e) {}
   }, []);
 
-  // Pre-fill logged-in customer info
+  // Pre-fill logged-in customer info (email is strictly locked to authenticated user)
   useEffect(() => {
     if (user) {
       setFormData((prev) => ({
         ...prev,
         fullName: prev.fullName || profile?.full_name || user.user_metadata?.full_name || '',
-        email: prev.email || user.email || '',
+        email: user.email || prev.email || '',
         phone: prev.phone || profile?.phone || '',
       }));
     }
@@ -221,7 +221,20 @@ export default function CheckoutPage({
   const validateShippingForm = () => {
     const errors = {};
     if (!formData.fullName.trim()) errors.fullName = 'Full name is required';
-    if (!formData.phone.trim()) errors.phone = 'Phone number is required';
+
+    // Strict 11-digit Philippine Mobile Number (09XXXXXXXXX)
+    const cleanPhone = (formData.phone || '').replace(/\D/g, '');
+    const phPhoneRegex = /^09\d{9}$/;
+    if (!cleanPhone) {
+      errors.phone = 'Mobile number is required for courier delivery';
+    } else if (cleanPhone.length !== 11 || !phPhoneRegex.test(cleanPhone)) {
+      errors.phone = 'Must be exactly 11 digits starting with 09 (e.g. 09171234567)';
+    }
+
+    if (!user?.email && (!formData.email || !formData.email.includes('@'))) {
+      errors.email = 'Valid account email required';
+    }
+
     if (!formData.street.trim()) errors.street = 'Street address is required';
     if (!formData.regionCode) errors.regionCode = 'Region is required';
     if (!formData.cityCode && !formData.cityName) errors.cityCode = 'City is required';
@@ -463,31 +476,49 @@ export default function CheckoutPage({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-[11px] uppercase font-bold tracking-wider text-[#705B56] mb-1.5">
-                        Phone Number *
+                        Recipient Mobile Number *
                       </label>
                       <input
                         type="tel"
-                        placeholder="+63 917 123 4567"
+                        maxLength={11}
+                        placeholder="09171234567"
                         value={formData.phone}
-                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                        className="w-full px-3.5 py-2.5 bg-[#FAF5F2] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B] transition-colors rounded-none"
+                        onChange={(e) => {
+                          const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 11);
+                          setFormData({ ...formData, phone: digitsOnly });
+                        }}
+                        className={`w-full px-3.5 py-2.5 bg-[#FAF5F2] border text-xs text-[#2C1E1B] focus:outline-none transition-colors rounded-none ${
+                          formErrors.phone
+                            ? 'border-rose-400 focus:border-rose-500'
+                            : 'border-[#E8DCD7] focus:border-[#2C1E1B]'
+                        }`}
                       />
-                      {formErrors.phone && (
+                      {formErrors.phone ? (
                         <span className="text-[10px] text-rose-600 mt-1 block">{formErrors.phone}</span>
+                      ) : (
+                        <span className="text-[10px] text-[#A38E88] mt-1 block">
+                          Exact 11 digits (e.g. 09171234567) for courier delivery SMS/call
+                        </span>
                       )}
                     </div>
 
                     <div>
-                      <label className="block text-[11px] uppercase font-bold tracking-wider text-[#705B56] mb-1.5">
-                        Email Address (for receipts)
+                      <label className="block text-[11px] uppercase font-bold tracking-wider text-[#705B56] mb-1.5 flex items-center justify-between">
+                        <span>Account Email *</span>
+                        <span className="text-[10px] text-emerald-700 font-semibold flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" /> Verified
+                        </span>
                       </label>
                       <input
                         type="email"
-                        placeholder="client@example.com"
-                        value={formData.email}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        className="w-full px-3.5 py-2.5 bg-[#FAF5F2] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B] transition-colors rounded-none"
+                        readOnly
+                        value={user?.email || formData.email}
+                        className="w-full px-3.5 py-2.5 bg-[#F0EBE7] border border-[#E8DCD7] text-xs text-[#5C4A45] font-medium cursor-not-allowed rounded-none select-all"
+                        title="Your order receipt and tracking are permanently tied to your verified account email."
                       />
+                      <span className="text-[10px] text-[#A38E88] mt-1 block">
+                        Official order receipts & tracking alerts are sent here.
+                      </span>
                     </div>
                   </div>
 

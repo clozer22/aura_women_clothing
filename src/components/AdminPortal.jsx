@@ -1,11 +1,83 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, ShoppingBag, Sliders, ArrowLeft, Search, Plus, X, Globe, Save, Trash2, LogOut, Upload, AlertTriangle, XCircle, Check, Edit, Star, Menu } from 'lucide-react';
+import { User, ShoppingBag, Sliders, ArrowLeft, Search, Plus, X, Globe, Save, Trash2, LogOut, Upload, AlertTriangle, XCircle, Check, Edit, Star, Menu, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { PRODUCTS } from '../data/products';
 import { supabase } from '../lib/supabaseClient';
 import RichTextEditor from './RichTextEditor';
 
 const isVideoUrl = (url) => url && (url.startsWith('data:video/') || url.match(/\.(mp4|mov|webm)($|\?)/i));
+
+export const isAdminEmail = (email) => {
+  if (!email) return false;
+  const lower = email.toLowerCase().trim();
+  return lower.endsWith('@admin.com') || lower.endsWith('@superadmin.com') || lower.endsWith('@aura.com');
+};
+
+export const getAdminRole = (email) => {
+  if (!email) return 'Admin';
+  const lower = email.toLowerCase().trim();
+  if (lower.endsWith('@superadmin.com')) return 'Super Admin';
+  if (lower.endsWith('@admin.com')) return 'Admin';
+  if (lower.includes('super')) return 'Super Admin';
+  return 'Admin';
+};
+
+// Persistent Module-Level & SessionStorage Page Cache (survives re-renders and reloads)
+const memoryPageCache = new Map();
+
+const getPageFromCache = (key) => {
+  if (memoryPageCache.has(key)) {
+    return memoryPageCache.get(key);
+  }
+  try {
+    const raw = sessionStorage.getItem(`aura_p_cache_${key}`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      memoryPageCache.set(key, parsed);
+      return parsed;
+    }
+  } catch (e) {
+    // ignore
+  }
+  return null;
+};
+
+const setPageToCache = (key, data, count) => {
+  const payload = { data, count, timestamp: Date.now() };
+  memoryPageCache.set(key, payload);
+  try {
+    sessionStorage.setItem(`aura_p_cache_${key}`, JSON.stringify(payload));
+  } catch (e) {
+    // ignore
+  }
+};
+
+const clearAllPageCache = () => {
+  memoryPageCache.clear();
+  try {
+    const keysToRemove = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i);
+      if (k && k.startsWith('aura_p_cache_')) {
+        keysToRemove.push(k);
+      }
+    }
+    keysToRemove.forEach(k => sessionStorage.removeItem(k));
+  } catch (e) {
+    // ignore
+  }
+};
+
+const updateFeaturedInPageCache = (productId, isFeatured) => {
+  memoryPageCache.forEach((val, key) => {
+    if (Array.isArray(val.data)) {
+      val.data = val.data.map(p => p.id === productId ? { ...p, isFeatured } : p);
+      try {
+        sessionStorage.setItem(`aura_p_cache_${key}`, JSON.stringify(val));
+      } catch (e) { }
+    }
+  });
+};
 
 export default function AdminPortal({
   onClosePortal,
@@ -14,6 +86,8 @@ export default function AdminPortal({
   onRefreshData
 }) {
   const [session, setSession] = useState(null);
+  const isAdmin = !!(session?.user?.email && isAdminEmail(session.user.email));
+  const adminRole = getAdminRole(session?.user?.email);
 
   // Login credentials states
   const [authEmail, setAuthEmail] = useState('');
@@ -26,6 +100,14 @@ export default function AdminPortal({
   const [productList, setProductList] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all'); // 'all' | 'top' | 'bottom'
+
+  // Server-Side Range Pagination States
+  const isInitialFilterMount = useRef(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
+  const [totalProductsCount, setTotalProductsCount] = useState(0);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(false);
+  const [featuredCount, setFeaturedCount] = useState(0);
 
   const [isCheckingSession, setIsCheckingSession] = useState(true);
 
@@ -123,7 +205,7 @@ export default function AdminPortal({
       // Upload to bucket 'storefront'
       const { data, error: uploadError } = await supabase.storage
         .from('storefront')
-        .upload(filePath, file, { cacheControl: '3600', upsert: true });
+        .upload(filePath, file, { cacheControl: '31536000', upsert: true });
 
       if (!uploadError && data) {
         // Get public URL
@@ -200,7 +282,7 @@ export default function AdminPortal({
 
       const { data, error: uploadError } = await supabase.storage
         .from('storefront')
-        .upload(filePath, file, { cacheControl: '3600', upsert: true });
+        .upload(filePath, file, { cacheControl: '31536000', upsert: true });
 
       if (!uploadError && data) {
         const { data: { publicUrl } } = supabase.storage
@@ -293,7 +375,7 @@ export default function AdminPortal({
 
       const { data, error: uploadError } = await supabase.storage
         .from('storefront')
-        .upload(filePath, file, { cacheControl: '3600', upsert: true });
+        .upload(filePath, file, { cacheControl: '31536000', upsert: true });
 
       if (!uploadError && data) {
         const { data: { publicUrl } } = supabase.storage
@@ -340,7 +422,7 @@ export default function AdminPortal({
 
       const { data, error: uploadError } = await supabase.storage
         .from('storefront')
-        .upload(filePath, file, { cacheControl: '3600', upsert: true });
+        .upload(filePath, file, { cacheControl: '31536000', upsert: true });
 
       if (!uploadError && data) {
         const { data: { publicUrl } } = supabase.storage
@@ -387,24 +469,11 @@ export default function AdminPortal({
     };
   }, []);
 
-  // Load products and profile details once authenticated
-  const fetchAdminData = async () => {
+  // 1. Fetch admin profile details
+  const fetchAdminProfile = async () => {
     if (!session?.user) return;
     setIsLoadingProfile(true);
     try {
-      // 1. Fetch products from database
-      const { data: prodData, error: prodErr } = await supabase
-        .from('products')
-        .select('*')
-        .order('createdAt', { ascending: false });
-      if (prodErr) throw prodErr;
-      if (prodData) {
-        setProductList(prodData);
-      } else {
-        setProductList([]);
-      }
-
-      // 2. Fetch admin profile details
       const { data: profData, error: profErr } = await supabase
         .from('admin_profiles')
         .select('*')
@@ -424,29 +493,118 @@ export default function AdminPortal({
         setEditProfileForm(profObj);
       }
     } catch (err) {
-      console.warn('Supabase fetch failed. Falling back to empty array:', err.message);
-      setProductList([]);
+      console.warn('Admin profile fetch notice:', err.message);
     } finally {
       setIsLoadingProfile(false);
     }
   };
 
-  useEffect(() => {
-    if (session) {
-      fetchAdminData();
+  // 2. Fetch products using Server-Side Range Pagination with Persistent Page Caching
+  const fetchProductsPage = async (page = 1, search = searchQuery, category = categoryFilter, forceRefresh = false) => {
+    if (!session?.user) return;
+
+    const cacheKey = `p_${page}_s_${(search || '').trim().toLowerCase()}_c_${category || 'all'}`;
+
+    // 1. Instant zero-delay return if already cached in memory or sessionStorage
+    if (!forceRefresh) {
+      const cached = getPageFromCache(cacheKey);
+      if (cached) {
+        setProductList(cached.data);
+        setTotalProductsCount(cached.count);
+        setIsLoadingProducts(false);
+        return;
+      }
     }
-  }, [session]);
+
+    setIsLoadingProducts(true);
+    try {
+      let query = supabase
+        .from('products')
+        .select('*', { count: 'exact' });
+
+      if (search && search.trim()) {
+        const s = search.trim();
+        query = query.or(`name.ilike.%${s}%,subType.ilike.%${s}%`);
+      }
+      if (category && category !== 'all') {
+        query = query.eq('mainCategory', category);
+      }
+
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+
+      const { data, count, error } = await query
+        .order('createdAt', { ascending: false })
+        .range(from, to);
+
+      if (error) throw error;
+      const items = data || [];
+      const total = count || 0;
+
+      // Cache this page's result persistently
+      setPageToCache(cacheKey, items, total);
+
+      setProductList(items);
+      setTotalProductsCount(total);
+
+      // Fetch featured count separately
+      const { count: fCount } = await supabase
+        .from('products')
+        .select('*', { count: 'exact', head: true })
+        .eq('isFeatured', true);
+      setFeaturedCount(fCount || 0);
+    } catch (err) {
+      console.warn('Supabase paginated fetch failed:', err.message);
+      setProductList([]);
+      setTotalProductsCount(0);
+    } finally {
+      setIsLoadingProducts(false);
+    }
+  };
+
+  // Initial load when session is active and user has admin authorization
+  useEffect(() => {
+    if (session && isAdmin) {
+      fetchAdminProfile();
+      fetchProductsPage(1, '', 'all');
+    }
+  }, [session, isAdmin]);
+
+  // Handle Search and Filter changes with debouncing (resets to page 1, skips first mount)
+  useEffect(() => {
+    if (isInitialFilterMount.current) {
+      isInitialFilterMount.current = false;
+      return;
+    }
+    if (session && isAdmin) {
+      setCurrentPage(1);
+      const timer = setTimeout(() => {
+        fetchProductsPage(1, searchQuery, categoryFilter);
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [searchQuery, categoryFilter]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setAuthError(null);
+
+    if (!isAdminEmail(authEmail)) {
+      setAuthError('Access Denied: Only @admin.com or @superadmin.com accounts are authorized.');
+      return;
+    }
+
     setIsLoggingIn(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: authEmail,
         password: authPassword,
       });
       if (error) throw error;
+      if (data?.user && !isAdminEmail(data.user.email)) {
+        await supabase.auth.signOut();
+        throw new Error('Access Denied: Account does not have administrator privileges.');
+      }
     } catch (err) {
       setAuthError(err.message);
     } finally {
@@ -457,6 +615,8 @@ export default function AdminPortal({
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setSession(null);
+    setAuthEmail('');
+    setAuthPassword('');
   };
 
   // Filter products based on search & category
@@ -555,7 +715,9 @@ export default function AdminPortal({
 
       setIsAddModalOpen(false);
 
-      // Refresh home views
+      // Invalidate persistent page cache and force-refresh paginated catalog
+      clearAllPageCache();
+      await fetchProductsPage(currentPage, searchQuery, categoryFilter, true);
       if (onRefreshData) onRefreshData();
 
       // Reset Form
@@ -580,6 +742,19 @@ export default function AdminPortal({
       setEditingProductId(null);
     } catch (err) {
       triggerNotification('error', 'Database Write Failed', `Check your Supabase settings. Details: ${err.message}`);
+    }
+  };
+
+  // Pagination navigation handler
+  const totalPages = Math.max(1, Math.ceil(totalProductsCount / pageSize));
+
+  const handlePageChange = (newPage) => {
+    if (newPage < 1 || newPage > totalPages || newPage === currentPage || isLoadingProducts) return;
+    setCurrentPage(newPage);
+    fetchProductsPage(newPage, searchQuery, categoryFilter);
+    const tableContainer = document.getElementById('admin-products-table-container');
+    if (tableContainer) {
+      tableContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   };
 
@@ -614,9 +789,10 @@ export default function AdminPortal({
           const { error } = await supabase.from('products').delete().eq('id', id);
           if (error) throw error;
 
-          setProductList(productList.filter(p => p.id !== id));
           // Remove from selection if deleted
           setSelectedProductIds(prev => prev.filter(item => item !== id));
+          clearAllPageCache();
+          await fetchProductsPage(currentPage, searchQuery, categoryFilter, true);
           if (onRefreshData) onRefreshData();
           triggerNotification('success', 'Product Deleted', 'The garment has been removed from inventory successfully.');
         } catch (err) {
@@ -660,8 +836,9 @@ export default function AdminPortal({
 
           if (error) throw error;
 
-          setProductList(productList.filter(p => !selectedProductIds.includes(p.id)));
           setSelectedProductIds([]);
+          clearAllPageCache();
+          await fetchProductsPage(currentPage, searchQuery, categoryFilter, true);
           if (onRefreshData) onRefreshData();
           triggerNotification('success', 'Products Deleted', 'The selected garments have been removed from inventory successfully.');
         } catch (err) {
@@ -729,7 +906,8 @@ export default function AdminPortal({
 
       if (error) throw error;
 
-      // Update local state
+      // Update local state and purge page cache
+      clearAllPageCache();
       setProductList(prevList =>
         prevList.map(p =>
           selectedProductIds.includes(p.id) ? { ...p, sizeChart: bulkSizeChart } : p
@@ -796,8 +974,6 @@ export default function AdminPortal({
     }
   };
 
-  const featuredCount = productList.filter(p => p.isFeatured).length;
-
   const handleToggleFeatured = async (id, isChecked) => {
     if (isChecked && featuredCount >= 6) {
       triggerNotification('warning', 'Limit Reached', 'You can only select up to 6 featured items for the homepage collection.');
@@ -812,6 +988,10 @@ export default function AdminPortal({
       if (error) throw error;
 
       setProductList(prevList => prevList.map(p => p.id === id ? { ...p, isFeatured: isChecked } : p));
+      setFeaturedCount(prev => isChecked ? prev + 1 : Math.max(0, prev - 1));
+
+      // Keep persistent cached pages in sync with featured state
+      updateFeaturedInPageCache(id, isChecked);
       triggerNotification(
         'success',
         isChecked ? 'Garment Featured' : 'Garment Unfeatured',
@@ -822,41 +1002,6 @@ export default function AdminPortal({
       triggerNotification('error', 'Update Failed', err.message);
     }
   };
-
-  // Auto-initialize first 6 active products as featured if none are selected in the database
-  useEffect(() => {
-    const initFeatured = async () => {
-      if (productList.length > 0 && featuredCount === 0) {
-        const firstSixActive = productList
-          .filter(p => p.statusBadge !== 'ARCHIVE')
-          .slice(0, 6);
-
-        if (firstSixActive.length > 0) {
-          const idsToFeature = firstSixActive.map(p => p.id);
-
-          // 1. Update local state so checkboxes check instantly in the UI
-          setProductList(prevList =>
-            prevList.map(p => idsToFeature.includes(p.id) ? { ...p, isFeatured: true } : p)
-          );
-          // 2. Persist to database so they remain checked on page reload
-          const { error } = await supabase
-            .from('products')
-            .update({ isFeatured: true })
-            .in('id', idsToFeature);
-
-          if (error) {
-            console.warn('Supabase auto-feature sync failed:', error.message);
-          } else {
-            if (onRefreshData) onRefreshData();
-          }
-        }
-      }
-    };
-
-    if (session && productList.length > 0) {
-      initFeatured();
-    }
-  }, [session, productList, featuredCount]);
 
   // 0. RENDER CONNECTING SCREEN WHILE INITIALIZING SESSION
   if (isCheckingSession) {
@@ -870,7 +1015,36 @@ export default function AdminPortal({
     );
   }
 
-  // 1. RENDER SECURE LOGIN SCREEN IF NOT AUTHENTICATED
+  // 1. RENDER ACCESS DENIED IF LOGGED IN WITH NON-ADMIN / CUSTOMER ACCOUNT
+  if (session && !isAdmin) {
+    return (
+      <div className="min-h-screen bg-[#FAF0EC] flex items-center justify-center p-6 select-none font-sans">
+        <div className="w-full max-w-md bg-white border border-rose-200 shadow-xl p-8 rounded-none text-center">
+          <div className="w-12 h-12 bg-rose-50 text-rose-600 mx-auto mb-4 flex items-center justify-center border border-rose-200">
+            <AlertTriangle className="w-6 h-6" />
+          </div>
+          <span className="text-[10px] tracking-[0.2em] uppercase font-bold text-rose-700 block mb-1">
+            ACCESS RESTRICTED
+          </span>
+          <h2 className="font-brand text-2xl text-[#2C1E1B] mb-2">Administrator Access Only</h2>
+          <p className="text-xs text-[#705B56] mb-4 leading-relaxed">
+            This dashboard is strictly reserved for Atelier administrators (<strong className="text-[#2C1E1B]">@admin.com</strong> or <strong className="text-[#2C1E1B]">@superadmin.com</strong>). Your current account does not have administrative privileges.
+          </p>
+          <div className="bg-[#FAF5F2] border border-[#E8DCD7] p-3 text-xs text-[#2C1E1B] mb-6 font-mono break-all">
+            Logged in as: {session.user?.email} (Customer)
+          </div>
+          <button
+            onClick={handleLogout}
+            className="w-full py-3.5 bg-[#2C1E1B] hover:bg-rose-950 text-white text-xs font-semibold uppercase tracking-wider transition-all cursor-pointer shadow-sm"
+          >
+            Sign Out & Switch to Admin
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. RENDER SECURE LOGIN SCREEN IF NOT AUTHENTICATED
   if (!session) {
     return (
       <div className="min-h-screen bg-[#FAF0EC] flex items-center justify-center p-6 select-none font-sans">
@@ -879,6 +1053,7 @@ export default function AdminPortal({
             <div className="text-center mb-8">
               <span className="font-brand text-4xl text-[#2C1E1B] tracking-widest block mb-2">AURA</span>
               <span className="text-[10px] tracking-[0.2em] uppercase font-semibold text-[#B86B60]">Atelier Secure Login</span>
+              <p className="text-[10px] text-[#A38E88] mt-1">Authorized for @admin.com and @superadmin.com</p>
             </div>
 
             <form onSubmit={handleLogin} className="space-y-5">
@@ -890,12 +1065,12 @@ export default function AdminPortal({
 
               <div>
                 <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold text-[#705B56] mb-2">
-                  Atelier Email
+                  Atelier Email (@admin.com / @superadmin.com)
                 </label>
                 <input
                   type="email"
                   required
-                  placeholder="admin@aura.com"
+                  placeholder="admin@aura.com or name@admin.com"
                   value={authEmail}
                   onChange={(e) => setAuthEmail(e.target.value)}
                   className="w-full px-4 py-3 rounded-none bg-white border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B] transition-colors placeholder-[#A8928B]/60"
@@ -919,21 +1094,11 @@ export default function AdminPortal({
               <button
                 type="submit"
                 disabled={isLoggingIn}
-                className="w-full py-4 rounded-none bg-[#2C1E1B] hover:bg-[#B86B60] text-white text-[11px] font-semibold uppercase tracking-[0.2em] transition-all duration-300 flex items-center justify-center gap-2 shadow-lg disabled:opacity-50"
+                className="w-full py-4 rounded-none bg-[#2C1E1B] hover:bg-[#B86B60] text-white text-[11px] font-semibold uppercase tracking-[0.2em] transition-all duration-300 flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 cursor-pointer"
               >
                 {isLoggingIn ? 'Verifying Credentials...' : 'Access Portal'}
               </button>
             </form>
-          </div>
-
-          <div className="mt-8 pt-6 border-t border-[#E8DCD7]/60">
-            <button
-              onClick={onClosePortal}
-              className="w-full py-3 bg-white text-[#705B56] hover:text-[#2C1E1B] rounded-none text-[10px] font-semibold uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 border border-[#E8DCD7]/60"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Return to Shop</span>
-            </button>
           </div>
         </div>
       </div>
@@ -956,7 +1121,7 @@ export default function AdminPortal({
 
         <div className="flex items-center gap-2">
           <span className="text-xl font-brand tracking-widest text-[#2C1E1B]">Aura</span>
-          <span className="text-[8px] tracking-[0.18em] uppercase font-sans text-[#2C1E1B] bg-white/50 px-1.5 py-0.5 rounded-none font-semibold">Admin</span>
+          <span className="text-[8px] tracking-[0.18em] uppercase font-sans text-[#2C1E1B] bg-white/50 px-1.5 py-0.5 rounded-none font-semibold">{adminRole}</span>
         </div>
 
         <div className="w-9" /> {/* Visual spacer */}
@@ -1070,16 +1235,8 @@ export default function AdminPortal({
               {/* Bottom Actions */}
               <div className="pt-6 border-t border-white/10 flex flex-col gap-2 w-full mt-8">
                 <button
-                  onClick={onClosePortal}
-                  className="py-3 w-full bg-white text-[#2C1E1B] rounded-none text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-2"
-                >
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  <span>Return to Shop</span>
-                </button>
-
-                <button
                   onClick={handleLogout}
-                  className="py-3 w-full bg-white text-[#2C1E1B] rounded-none text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-2 border"
+                  className="py-3.5 w-full bg-white text-[#2C1E1B] rounded-none text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-2 border cursor-pointer hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200"
                 >
                   <LogOut className="w-3.5 h-3.5" />
                   <span>Log Out</span>
@@ -1096,7 +1253,7 @@ export default function AdminPortal({
           {/* Logo Identity */}
           <div className="flex items-center gap-2.5 pb-6 border-b border-white/10">
             <span className="text-2xl font-brand tracking-widest text-[#2C1E1B]">Aura</span>
-            <span className="text-[9px] tracking-[0.18em] uppercase font-sans text-[#2C1E1B] bg-white/50 px-2 py-0.5 rounded-none font-semibold">Admin</span>
+            <span className="text-[9px] tracking-[0.18em] uppercase font-sans text-[#2C1E1B] bg-white/50 px-2 py-0.5 rounded-none font-semibold">{adminRole}</span>
           </div>
 
           {/* Profile Card Summary */}
@@ -1171,17 +1328,8 @@ export default function AdminPortal({
         {/* Bottom Actions */}
         <div className="pt-6 border-t border-white/10 flex flex-col gap-2 w-full">
           <button
-            onClick={onClosePortal}
-            className="py-3.5 w-full bg-white text-[#2C1E1B] rounded-none text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-2 border border-white/10"
-            title="Return to Shop"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Return to Shop</span>
-          </button>
-
-          <button
             onClick={handleLogout}
-            className="py-3.5 w-full bg-white text-[#2C1E1B] rounded-none text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-2 border"
+            className="py-3.5 w-full bg-white text-[#2C1E1B] rounded-none text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-2 border cursor-pointer hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200"
             title="Log Out"
           >
             <LogOut className="w-3.5 h-3.5" />
@@ -1431,7 +1579,7 @@ export default function AdminPortal({
             </div>
 
             {/* Table */}
-            <div className="bg-white border border-[#E8DCD7] shadow-sm overflow-x-auto rounded-none relative">
+            <div id="admin-products-table-container" className="bg-white border border-[#E8DCD7] shadow-sm overflow-x-auto rounded-none relative">
               {selectedProductIds.length > 0 && (
                 <div className="bg-[#FAF5F2] p-3 border-b border-[#E8DCD7] flex items-center justify-between px-6 sticky left-0 right-0 z-10 shadow-sm animate-fadeIn">
                   <span className="text-xs font-semibold text-[#705B56]">
@@ -1464,8 +1612,8 @@ export default function AdminPortal({
                     <th className="p-4 text-center w-12">
                       <input
                         type="checkbox"
-                        checked={filteredProducts.length > 0 && filteredProducts.every(p => selectedProductIds.includes(p.id))}
-                        onChange={() => handleSelectAllFiltered(filteredProducts)}
+                        checked={productList.length > 0 && productList.every(p => selectedProductIds.includes(p.id))}
+                        onChange={() => handleSelectAllFiltered(productList)}
                         className="w-4 h-4 rounded-none accent-[#2C1E1B] cursor-pointer"
                         title="Select All on page"
                       />
@@ -1485,7 +1633,7 @@ export default function AdminPortal({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E8DCD7]/60 text-xs font-semibold text-[#2C1E1B]">
-                  {filteredProducts.map((p) => (
+                  {productList.map((p) => (
                     <tr key={p.id} className={`hover:bg-[#FAF5F2]/40 transition-colors ${selectedProductIds.includes(p.id) ? 'bg-[#FAF0EC]' : ''}`}>
                       <td className="p-4 text-center">
                         <input
@@ -1517,6 +1665,8 @@ export default function AdminPortal({
                         <img
                           src={p.image}
                           alt={p.name}
+                          loading="lazy"
+                          decoding="async"
                           className="w-10 h-12 object-cover border border-[#E8DCD7] rounded-none"
                         />
                       </td>
@@ -1570,14 +1720,14 @@ export default function AdminPortal({
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => handleEditProductClick(p)}
-                            className="p-2 rounded-none text-[#705B56] hover:text-white hover:bg-[#705B56] border border-[#E8DCD7] transition-colors focus:outline-none flex items-center justify-center"
+                            className="p-2 rounded-none text-[#705B56] hover:text-white hover:bg-[#705B56] border border-[#E8DCD7] transition-colors focus:outline-none flex items-center justify-center cursor-pointer"
                             title="Edit Product"
                           >
                             <Edit className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => handleDeleteProduct(p.id)}
-                            className="p-2 rounded-none text-red-700 hover:text-white hover:bg-red-700 border border-red-200 transition-colors focus:outline-none flex items-center justify-center"
+                            className="p-2 rounded-none text-red-700 hover:text-white hover:bg-red-700 border border-red-200 transition-colors focus:outline-none flex items-center justify-center cursor-pointer"
                             title="Delete Product"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -1588,9 +1738,71 @@ export default function AdminPortal({
                   ))}
                 </tbody>
               </table>
-              {filteredProducts.length === 0 && (
-                <div className="text-center py-12 text-gray-400 text-xs">No garments found matching query.</div>
+
+              {isLoadingProducts && (
+                <div className="py-16 flex flex-col items-center justify-center gap-3 text-xs text-[#705B56] bg-white">
+                  <Loader2 className="w-6 h-6 animate-spin text-[#B86B60]" />
+                  <span className="tracking-wider uppercase font-semibold text-[10px]">Loading garments...</span>
+                </div>
               )}
+
+              {!isLoadingProducts && productList.length === 0 && (
+                <div className="text-center py-16 text-[#A38E88] text-xs bg-white">
+                  No garments found matching the selected query.
+                </div>
+              )}
+
+              {/* Luxury Pagination Controls (10 items per page) */}
+              <div className="bg-[#FAF5F2] border-t border-[#E8DCD7] px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="text-xs text-[#705B56] font-medium">
+                  Showing <span className="font-bold text-[#2C1E1B]">{totalProductsCount === 0 ? 0 : (currentPage - 1) * pageSize + 1}</span> to <span className="font-bold text-[#2C1E1B]">{Math.min(currentPage * pageSize, totalProductsCount)}</span> of <span className="font-bold text-[#2C1E1B]">{totalProductsCount}</span> garments (10 per page)
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage <= 1 || isLoadingProducts}
+                    className="px-3 py-1.5 border border-[#E8DCD7] text-xs font-semibold text-[#2C1E1B] bg-white hover:bg-[#FAF0EC] disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer flex items-center gap-1"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                    <span>Previous</span>
+                  </button>
+
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: totalPages }, (_, i) => i + 1)
+                      .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+                      .map((p, idx, arr) => {
+                        const prev = arr[idx - 1];
+                        return (
+                          <React.Fragment key={p}>
+                            {prev && p - prev > 1 && (
+                              <span className="px-1 text-xs text-[#705B56]">...</span>
+                            )}
+                            <button
+                              onClick={() => handlePageChange(p)}
+                              disabled={isLoadingProducts}
+                              className={`w-7 h-7 text-xs font-bold transition-all cursor-pointer ${currentPage === p
+                                  ? 'bg-[#2C1E1B] text-white shadow-sm'
+                                  : 'bg-white border border-[#E8DCD7] text-[#705B56] hover:bg-[#FAF0EC]'
+                                }`}
+                            >
+                              {p}
+                            </button>
+                          </React.Fragment>
+                        );
+                      })}
+                  </div>
+
+                  <button
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage >= totalPages || isLoadingProducts}
+                    className="px-3 py-1.5 border border-[#E8DCD7] text-xs font-semibold text-[#2C1E1B] bg-white hover:bg-[#FAF0EC] disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer flex items-center gap-1"
+                  >
+                    <span>Next</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
             </div>
           </motion.div>
         )}

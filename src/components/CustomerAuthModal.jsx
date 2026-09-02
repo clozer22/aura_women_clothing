@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Mail, Lock, User, ArrowRight, ShieldCheck, KeyRound, Loader2, CheckCircle2 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, isAdminEmail } from '../context/AuthContext';
 
 export default function CustomerAuthModal({ isOpen, onClose, onSuccess, initialMode = 'signin' }) {
   const { signInWithGoogle, signUpWithEmail, verifyEmailOtp, resendEmailOtp, signInWithEmail } = useAuth();
@@ -58,6 +58,11 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess, initialM
       return;
     }
 
+    if (isAdminEmail(email)) {
+      setErrorMsg('Admin accounts cannot sign in as customers. Please use a personal email or log in via the Admin Dashboard.');
+      return;
+    }
+
     setIsLoading(true);
     setErrorMsg('');
     try {
@@ -83,6 +88,10 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess, initialM
     }
     if (!email || !email.includes('@')) {
       setErrorMsg('Please provide a valid email address.');
+      return;
+    }
+    if (isAdminEmail(email)) {
+      setErrorMsg('Admin domain emails cannot be registered as customer accounts. Please use a personal email (e.g. @gmail.com).');
       return;
     }
     if (password.length < 6) {

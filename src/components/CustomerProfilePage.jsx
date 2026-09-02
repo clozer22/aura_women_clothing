@@ -371,13 +371,15 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
                   <div className="relative">
                     <Phone className="w-4 h-4 text-[#A38E88] absolute left-3.5 top-3.5" />
                     <input
-                      type="text"
+                      type="tel"
+                      maxLength={11}
                       value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="+63 917 123 4567"
+                      onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                      placeholder="09171234567"
                       className="w-full pl-10 pr-3.5 py-3 bg-[#FAF5F2] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B] rounded-none transition-colors"
                     />
                   </div>
+                  <span className="text-[10px] text-[#A38E88] mt-1 block">Exact 11 digits (e.g. 09171234567)</span>
                 </div>
 
                 <div>
