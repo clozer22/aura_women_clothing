@@ -14,8 +14,8 @@ This document details how to configure your Supabase project, initialize the dat
 In the root directory of this project, you will find a file named `.env`. It is already populated with your unique project credentials:
 
 ```env
-VITE_SUPABASE_URL=https://sylfhockkibohntgcswb.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN5bGZob2Nra2lib2hudGdjc3diIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxMzA3MjIsImV4cCI6MjEwMDcwNjcyMn0.audxFrkyQoBMhkN72WGF0LP_ip7eYnpCHVwkY3RXfVs
+VITE_SUPABASE_URL=https://<your-project-ref>.supabase.co
+VITE_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY_HERE
 ```
 
 These parameters will load automatically into Vite during your development and build tasks.
@@ -26,7 +26,7 @@ These parameters will load automatically into Vite during your development and b
 To create the necessary tables (`products`, `storefront_config`, `admin_profiles`) and seed them with default garments:
 
 1. Log in to your [Supabase Console](https://supabase.com/dashboard).
-2. Open your project **`sylfhockkibohntgcswb`**.
+2. Open your project **`pcmlleeuxbymomjxhwlv`**.
 3. In the left navigation sidebar, click on **SQL Editor** (the console code block terminal icon).
 4. Click **"New query"** at the top.
 5. Open your local file [schema.sql](file:///Users/mj.aballe/Development/aura-clothing/schema.sql) in your text editor and **copy all of its contents**.
