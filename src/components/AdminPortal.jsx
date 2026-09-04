@@ -1,9 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useTransition, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, ShoppingBag, Sliders, ArrowLeft, Search, Plus, X, Globe, Save, Trash2, LogOut, Upload, AlertTriangle, XCircle, Check, Edit, Star, Menu, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { User, ShoppingBag, Sliders, ArrowLeft, Search, Plus, X, Globe, Save, Trash2, LogOut, Upload, AlertTriangle, XCircle, Check, Edit, Star, Menu, ChevronLeft, ChevronRight, Loader2, LayoutDashboard, TrendingUp, Package, ShieldCheck, Users, CheckCircle2, DollarSign, Boxes, ArrowUpRight, Sparkles, RefreshCw } from 'lucide-react';
 import { PRODUCTS } from '../data/products';
 import { supabase } from '../lib/supabaseClient';
-import RichTextEditor from './RichTextEditor';
+import { invalidateProductsCache, saveCachedProducts, getCachedProducts } from '../lib/productCache';
+import AdminDashboardTab from './admin/AdminDashboardTab';
+import AdminProductsTab from './admin/AdminProductsTab';
+import AdminCustomizerTab from './admin/AdminCustomizerTab';
+import AdminProfileTab from './admin/AdminProfileTab';
+import AdminProductModal from './admin/AdminProductModal';
+import AdminBulkModal from './admin/AdminBulkModal';
 
 const isVideoUrl = (url) => url && (url.startsWith('data:video/') || url.match(/\.(mp4|mov|webm)($|\?)/i));
 
@@ -96,7 +102,26 @@ export default function AdminPortal({
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   // Dashboard states
-  const [activeTab, setActiveTab] = useState('products'); // 'profile' | 'products' | 'customize'
+  const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard' | 'products' | 'customize' | 'profile'
+  const [isPendingTab, startTabTransition] = useTransition();
+
+  const handleTabChange = useCallback((tab) => {
+    startTabTransition(() => {
+      setActiveTab(tab);
+    });
+  }, []);
+  const [dashboardStats, setDashboardStats] = useState({
+    totalSales: 0,
+    paidOrdersCount: 0,
+    totalStock: 0,
+    totalProducts: 0,
+    lowStockCount: 0,
+    lowStockItems: [],
+    adminCount: 1,
+    verifiedUserCount: 0,
+    recentOrders: [],
+  });
+  const [isLoadingStats, setIsLoadingStats] = useState(true);
   const [productList, setProductList] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all'); // 'all' | 'top' | 'bottom'
@@ -159,6 +184,7 @@ export default function AdminPortal({
   const [isUploadingAboutMedia, setIsUploadingAboutMedia] = useState(false);
   const [isUploadingProductImage, setIsUploadingProductImage] = useState(false);
   const [isUploadingSizeChart, setIsUploadingSizeChart] = useState(false);
+  const [isSavingTheme, setIsSavingTheme] = useState(false);
   const [notification, setNotification] = useState(null); // { type: 'success' | 'error' | 'warning', title: string, message: string }
   const [confirmDialog, setConfirmDialog] = useState(null); // { message: string, onConfirm: () => void }
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
@@ -483,19 +509,150 @@ export default function AdminPortal({
       if (profErr) throw profErr;
       if (profData) {
         const profObj = {
-          name: profData.name || 'Elena Vance',
-          role_title: profData.role_title || 'Owner & Head Atelier Designer',
+          name: profData.name || session.user.user_metadata?.full_name || 'Administrator',
+          role_title: profData.role_title || (adminRole === 'Super Admin' ? 'Super Administrator' : 'Administrator'),
           avatar_url: profData.avatar_url || '',
           bio: profData.bio || 'Bespoke designer commanding elegance for the modern profile.',
           email: session.user.email
         };
         setProfile(profObj);
         setEditProfileForm(profObj);
+      } else {
+        const defaultProf = {
+          name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Administrator',
+          role_title: adminRole === 'Super Admin' ? 'Super Administrator' : 'Administrator',
+          avatar_url: '',
+          bio: 'Bespoke designer commanding elegance for the modern profile.',
+          email: session.user.email
+        };
+        setProfile(defaultProf);
+        setEditProfileForm(defaultProf);
       }
     } catch (err) {
       console.warn('Admin profile fetch notice:', err.message);
+      const defaultProf = {
+        name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Administrator',
+        role_title: adminRole === 'Super Admin' ? 'Super Administrator' : 'Administrator',
+        avatar_url: '',
+        bio: 'Bespoke designer commanding elegance for the modern profile.',
+        email: session.user.email
+      };
+      setProfile(defaultProf);
+      setEditProfileForm(defaultProf);
     } finally {
       setIsLoadingProfile(false);
+    }
+  };
+
+  // 0. Fetch high-level analytics & metrics for the Main Dashboard
+  const fetchDashboardStats = async () => {
+    if (!session?.user) return;
+    setIsLoadingStats(true);
+    try {
+      // 1. Fetch all products for stock calculations, low stock alerts, and pagination pre-warming
+      const { data: prodsData, error: prodsErr } = await supabase
+        .from('products')
+        .select('*')
+        .order('createdAt', { ascending: false });
+
+      let totalStock = 0;
+      let lowStockItems = [];
+      let totalProducts = 0;
+
+      if (!prodsErr && prodsData) {
+        totalProducts = prodsData.length;
+        totalStock = prodsData.reduce((acc, p) => acc + (Number(p.qty) || 0), 0);
+        lowStockItems = [...prodsData].filter(p => (Number(p.qty) || 0) <= 10).sort((a, b) => (Number(a.qty) || 0) - (Number(b.qty) || 0));
+
+        // Synchronize featured count directly from catalog
+        const fCount = prodsData.filter(p => p.isFeatured).length;
+        setFeaturedCount(fCount);
+
+        // Pre-warm all page cache entries so pagination is 100% instantaneous
+        saveCachedProducts(prodsData);
+        const totalP = Math.ceil(totalProducts / pageSize);
+        for (let p = 1; p <= totalP; p++) {
+          const pKey = `p_${p}_s__c_all`;
+          const pSlice = prodsData.slice((p - 1) * pageSize, p * pageSize);
+          setPageToCache(pKey, pSlice, totalProducts);
+        }
+      }
+
+      // 2. Fetch orders for total sales revenue & recent activity
+      let totalSales = 0;
+      let paidOrdersCount = 0;
+      let recentOrders = [];
+      try {
+        const { data: ordersData, error: ordersErr } = await supabase
+          .from('orders')
+          .select('id, order_reference, customer_name, customer_email, total_amount, payment_status, status, created_at, items')
+          .order('created_at', { ascending: false });
+
+        if (!ordersErr && ordersData) {
+          recentOrders = ordersData.slice(0, 6);
+          ordersData.forEach(o => {
+            const isPaid = (o.payment_status || '').toUpperCase() === 'PAID' ||
+              (o.status || '').toUpperCase() === 'COMPLETED' ||
+              (o.status || '').toUpperCase() === 'DELIVERED';
+            if (isPaid) {
+              totalSales += Number(o.total_amount) || 0;
+              paidOrdersCount += 1;
+            }
+          });
+        }
+      } catch (ordErr) {
+        console.warn('Orders fetch note:', ordErr.message);
+      }
+
+      // 3. Count active administrators
+      let adminCount = 1;
+      try {
+        const { data: adminData } = await supabase
+          .from('admin_profiles')
+          .select('id, email');
+
+        const adminSet = new Set((adminData || []).map(a => a.id || a.email).filter(Boolean));
+        if (session?.user?.id) adminSet.add(session.user.id);
+        if (session?.user?.email) adminSet.add(session.user.email);
+        adminCount = Math.max(1, adminSet.size);
+      } catch (admErr) {
+        console.warn('Admin count note:', admErr.message);
+      }
+
+      // 4. Count verified customer users (excluding admin accounts)
+      let verifiedUserCount = 0;
+      try {
+        const { data: userData, error: userErr } = await supabase
+          .from('user_profiles')
+          .select('id, email, role');
+
+        if (!userErr && userData) {
+          const verifiedUsers = userData.filter(u => {
+            if (!u.email) return false;
+            if (isAdminEmail(u.email)) return false;
+            return true;
+          });
+          verifiedUserCount = verifiedUsers.length;
+        }
+      } catch (uErr) {
+        console.warn('User profiles note:', uErr.message);
+      }
+
+      setDashboardStats({
+        totalSales,
+        paidOrdersCount,
+        totalStock,
+        totalProducts,
+        lowStockCount: lowStockItems.length,
+        lowStockItems,
+        adminCount,
+        verifiedUserCount,
+        recentOrders,
+      });
+    } catch (err) {
+      console.warn('Dashboard stats fetch failed:', err.message);
+    } finally {
+      setIsLoadingStats(false);
     }
   };
 
@@ -503,7 +660,9 @@ export default function AdminPortal({
   const fetchProductsPage = async (page = 1, search = searchQuery, category = categoryFilter, forceRefresh = false) => {
     if (!session?.user) return;
 
-    const cacheKey = `p_${page}_s_${(search || '').trim().toLowerCase()}_c_${category || 'all'}`;
+    const normalizedSearch = (search || '').trim().toLowerCase();
+    const normalizedCat = category || 'all';
+    const cacheKey = `p_${page}_s_${normalizedSearch}_c_${normalizedCat}`;
 
     // 1. Instant zero-delay return if already cached in memory or sessionStorage
     if (!forceRefresh) {
@@ -514,6 +673,23 @@ export default function AdminPortal({
         setIsLoadingProducts(false);
         return;
       }
+
+      // Check fallback from full catalog cache if query is default
+      if (!normalizedSearch && normalizedCat === 'all') {
+        const allCached = getCachedProducts();
+        if (allCached && allCached.length > 0) {
+          const from = (page - 1) * pageSize;
+          const to = from + pageSize;
+          const pageItems = allCached.slice(from, to);
+          if (pageItems.length > 0 || from === 0) {
+            setPageToCache(cacheKey, pageItems, allCached.length);
+            setProductList(pageItems);
+            setTotalProductsCount(allCached.length);
+            setIsLoadingProducts(false);
+            return;
+          }
+        }
+      }
     }
 
     setIsLoadingProducts(true);
@@ -522,12 +698,11 @@ export default function AdminPortal({
         .from('products')
         .select('*', { count: 'exact' });
 
-      if (search && search.trim()) {
-        const s = search.trim();
-        query = query.or(`name.ilike.%${s}%,subType.ilike.%${s}%`);
+      if (normalizedSearch) {
+        query = query.or(`name.ilike.%${normalizedSearch}%,subType.ilike.%${normalizedSearch}%`);
       }
-      if (category && category !== 'all') {
-        query = query.eq('mainCategory', category);
+      if (normalizedCat !== 'all') {
+        query = query.eq('mainCategory', normalizedCat);
       }
 
       const from = (page - 1) * pageSize;
@@ -547,12 +722,28 @@ export default function AdminPortal({
       setProductList(items);
       setTotalProductsCount(total);
 
-      // Fetch featured count separately
-      const { count: fCount } = await supabase
-        .from('products')
-        .select('*', { count: 'exact', head: true })
-        .eq('isFeatured', true);
-      setFeaturedCount(fCount || 0);
+      // Prefetch adjacent next page silently in background
+      const nextPage = page + 1;
+      const maxPages = Math.ceil(total / pageSize);
+      if (nextPage <= maxPages) {
+        const nextCacheKey = `p_${nextPage}_s_${normalizedSearch}_c_${normalizedCat}`;
+        if (!getPageFromCache(nextCacheKey)) {
+          const nextFrom = (nextPage - 1) * pageSize;
+          const nextTo = nextFrom + pageSize - 1;
+          let nextQuery = supabase.from('products').select('*', { count: 'exact' });
+          if (normalizedSearch) {
+            nextQuery = nextQuery.or(`name.ilike.%${normalizedSearch}%,subType.ilike.%${normalizedSearch}%`);
+          }
+          if (normalizedCat !== 'all') {
+            nextQuery = nextQuery.eq('mainCategory', normalizedCat);
+          }
+          nextQuery.order('createdAt', { ascending: false }).range(nextFrom, nextTo).then(({ data: nextData }) => {
+            if (nextData) {
+              setPageToCache(nextCacheKey, nextData, total);
+            }
+          }).catch(() => {});
+        }
+      }
     } catch (err) {
       console.warn('Supabase paginated fetch failed:', err.message);
       setProductList([]);
@@ -562,13 +753,30 @@ export default function AdminPortal({
     }
   };
 
+  const adminInitializedForUser = useRef(null);
+  const currentPageRef = useRef(currentPage);
+  currentPageRef.current = currentPage;
+  const searchQueryRef = useRef(searchQuery);
+  searchQueryRef.current = searchQuery;
+  const categoryFilterRef = useRef(categoryFilter);
+  categoryFilterRef.current = categoryFilter;
+
   // Initial load when session is active and user has admin authorization
   useEffect(() => {
-    if (session && isAdmin) {
+    if (session?.user?.id && isAdmin) {
+      // Prevent refetching/resetting to page 1 when browser tab re-focuses or token refreshes for the same user
+      if (adminInitializedForUser.current === session.user.id) {
+        return;
+      }
+      adminInitializedForUser.current = session.user.id;
+
       fetchAdminProfile();
-      fetchProductsPage(1, '', 'all');
+      fetchDashboardStats();
+      fetchProductsPage(currentPageRef.current || 1, searchQueryRef.current || '', categoryFilterRef.current || 'all');
+    } else if (!session) {
+      adminInitializedForUser.current = null;
     }
-  }, [session, isAdmin]);
+  }, [session?.user?.id, isAdmin]);
 
   // Handle Search and Filter changes with debouncing (resets to page 1, skips first mount)
   useEffect(() => {
@@ -590,7 +798,7 @@ export default function AdminPortal({
     setAuthError(null);
 
     if (!isAdminEmail(authEmail)) {
-      setAuthError('Access Denied: Only @admin.com or @superadmin.com accounts are authorized.');
+      setAuthError('Access Denied: You do not have permission to access the Atelier administrator dashboard.');
       return;
     }
 
@@ -717,7 +925,9 @@ export default function AdminPortal({
 
       // Invalidate persistent page cache and force-refresh paginated catalog
       clearAllPageCache();
+      invalidateProductsCache();
       await fetchProductsPage(currentPage, searchQuery, categoryFilter, true);
+      fetchDashboardStats();
       if (onRefreshData) onRefreshData();
 
       // Reset Form
@@ -748,15 +958,53 @@ export default function AdminPortal({
   // Pagination navigation handler
   const totalPages = Math.max(1, Math.ceil(totalProductsCount / pageSize));
 
-  const handlePageChange = (newPage) => {
-    if (newPage < 1 || newPage > totalPages || newPage === currentPage || isLoadingProducts) return;
-    setCurrentPage(newPage);
-    fetchProductsPage(newPage, searchQuery, categoryFilter);
+  const handlePageChange = useCallback((newPage) => {
+    if (newPage < 1 || newPage > totalPages || newPage === currentPage) return;
+    startTabTransition(() => {
+      setCurrentPage(newPage);
+      fetchProductsPage(newPage, searchQuery, categoryFilter);
+    });
     const tableContainer = document.getElementById('admin-products-table-container');
     if (tableContainer) {
-      tableContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const rect = tableContainer.getBoundingClientRect();
+      if (rect.top < 0) {
+        tableContainer.scrollIntoView({ behavior: 'auto', block: 'start' });
+      }
     }
-  };
+  }, [totalPages, currentPage, searchQuery, categoryFilter]);
+
+  const handleSearchChange = useCallback((val) => {
+    setSearchQuery(val);
+  }, []);
+
+  const handleCategoryChange = useCallback((cat) => {
+    startTabTransition(() => {
+      setCategoryFilter(cat);
+    });
+  }, []);
+
+  const handleOpenAddProduct = useCallback(() => {
+    setEditingProductId(null);
+    setNewProduct({
+      name: '',
+      category: 'Suits & Coats',
+      mainCategory: 'top',
+      subType: '',
+      price: '',
+      qty: '',
+      colorsRaw: '',
+      sizes: 'XXS-XS, S-M, L, XL',
+      image: '',
+      sizeChart: '',
+      descriptionLabel: 'Description',
+      description: '',
+      shopeeLink: '',
+      rating: '5.0',
+      solds: '0',
+      statusBadge: ''
+    });
+    setIsAddModalOpen(true);
+  }, []);
 
   const handleEditProductClick = (product) => {
     setEditingProductId(product.id);
@@ -792,7 +1040,9 @@ export default function AdminPortal({
           // Remove from selection if deleted
           setSelectedProductIds(prev => prev.filter(item => item !== id));
           clearAllPageCache();
+          invalidateProductsCache();
           await fetchProductsPage(currentPage, searchQuery, categoryFilter, true);
+          fetchDashboardStats();
           if (onRefreshData) onRefreshData();
           triggerNotification('success', 'Product Deleted', 'The garment has been removed from inventory successfully.');
         } catch (err) {
@@ -838,7 +1088,9 @@ export default function AdminPortal({
 
           setSelectedProductIds([]);
           clearAllPageCache();
+          invalidateProductsCache();
           await fetchProductsPage(currentPage, searchQuery, categoryFilter, true);
+          fetchDashboardStats();
           if (onRefreshData) onRefreshData();
           triggerNotification('success', 'Products Deleted', 'The selected garments have been removed from inventory successfully.');
         } catch (err) {
@@ -866,7 +1118,7 @@ export default function AdminPortal({
 
       const { data, error: uploadError } = await supabase.storage
         .from('storefront')
-        .upload(filePath, file, { cacheControl: '3600', upsert: true });
+        .upload(filePath, file, { cacheControl: '31536000', upsert: true });
 
       if (!uploadError && data) {
         const { data: { publicUrl } } = supabase.storage
@@ -924,6 +1176,8 @@ export default function AdminPortal({
   };
 
   const handleApplyCustomizations = async () => {
+    if (isSavingTheme || isUploadingPoster || isUploadingAboutMedia) return;
+    setIsSavingTheme(true);
     try {
       const { error } = await supabase
         .from('storefront_config')
@@ -941,10 +1195,13 @@ export default function AdminPortal({
       if (error) throw error;
 
       onUpdateHeroConfig(localHeroConfig);
+      invalidateProductsCache();
       if (onRefreshData) onRefreshData();
       triggerNotification('success', 'Theme Saved', 'Theme configurations applied to frontpage successfully!');
     } catch (err) {
       triggerNotification('error', 'Save Failed', err.message);
+    } finally {
+      setIsSavingTheme(false);
     }
   };
 
@@ -992,6 +1249,7 @@ export default function AdminPortal({
 
       // Keep persistent cached pages in sync with featured state
       updateFeaturedInPageCache(id, isChecked);
+      invalidateProductsCache();
       triggerNotification(
         'success',
         isChecked ? 'Garment Featured' : 'Garment Unfeatured',
@@ -1028,7 +1286,7 @@ export default function AdminPortal({
           </span>
           <h2 className="font-brand text-2xl text-[#2C1E1B] mb-2">Administrator Access Only</h2>
           <p className="text-xs text-[#705B56] mb-4 leading-relaxed">
-            This dashboard is strictly reserved for Atelier administrators (<strong className="text-[#2C1E1B]">@admin.com</strong> or <strong className="text-[#2C1E1B]">@superadmin.com</strong>). Your current account does not have administrative privileges.
+            This dashboard is strictly reserved for authorized Atelier administrators. Your current account does not have administrative privileges.
           </p>
           <div className="bg-[#FAF5F2] border border-[#E8DCD7] p-3 text-xs text-[#2C1E1B] mb-6 font-mono break-all">
             Logged in as: {session.user?.email} (Customer)
@@ -1053,7 +1311,7 @@ export default function AdminPortal({
             <div className="text-center mb-8">
               <span className="font-brand text-4xl text-[#2C1E1B] tracking-widest block mb-2">AURA</span>
               <span className="text-[10px] tracking-[0.2em] uppercase font-semibold text-[#B86B60]">Atelier Secure Login</span>
-              <p className="text-[10px] text-[#A38E88] mt-1">Authorized for @admin.com and @superadmin.com</p>
+              <p className="text-[10px] text-[#A38E88] mt-1">Authorized Personnel Only</p>
             </div>
 
             <form onSubmit={handleLogin} className="space-y-5">
@@ -1065,12 +1323,12 @@ export default function AdminPortal({
 
               <div>
                 <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold text-[#705B56] mb-2">
-                  Atelier Email (@admin.com / @superadmin.com)
+                  Administrator Email
                 </label>
                 <input
                   type="email"
                   required
-                  placeholder="admin@aura.com or name@admin.com"
+                  placeholder="admin@aura.com"
                   value={authEmail}
                   onChange={(e) => setAuthEmail(e.target.value)}
                   className="w-full px-4 py-3 rounded-none bg-white border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B] transition-colors placeholder-[#A8928B]/60"
@@ -1190,21 +1448,21 @@ export default function AdminPortal({
                 <nav className="flex flex-col gap-2">
                   <button
                     onClick={() => {
-                      setActiveTab('profile');
+                      handleTabChange('dashboard');
                       setIsMobileDrawerOpen(false);
                     }}
-                    className={`py-3 px-4 text-xs font-semibold uppercase tracking-wider text-left flex items-center gap-3 transition-all rounded-none ${activeTab === 'profile'
+                    className={`py-3 px-4 text-xs font-semibold uppercase tracking-wider text-left flex items-center gap-3 transition-all rounded-none ${activeTab === 'dashboard'
                       ? 'bg-white text-[#2C1E1B] font-bold'
                       : 'text-white/70 hover:bg-white/5 hover:text-white'
                       }`}
                   >
-                    <User className="w-4 h-4" />
-                    <span>Owner Profile</span>
+                    <LayoutDashboard className="w-4 h-4" />
+                    <span>Dashboard</span>
                   </button>
 
                   <button
                     onClick={() => {
-                      setActiveTab('products');
+                      handleTabChange('products');
                       setIsMobileDrawerOpen(false);
                     }}
                     className={`py-3 px-4 text-xs font-semibold uppercase tracking-wider text-left flex items-center gap-3 transition-all rounded-none ${activeTab === 'products'
@@ -1218,7 +1476,7 @@ export default function AdminPortal({
 
                   <button
                     onClick={() => {
-                      setActiveTab('customize');
+                      handleTabChange('customize');
                       setIsMobileDrawerOpen(false);
                     }}
                     className={`py-3 px-4 text-xs font-semibold uppercase tracking-wider text-left flex items-center gap-3 transition-all rounded-none ${activeTab === 'customize'
@@ -1228,6 +1486,20 @@ export default function AdminPortal({
                   >
                     <Sliders className="w-4 h-4" />
                     <span>Store Customizer</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      handleTabChange('profile');
+                      setIsMobileDrawerOpen(false);
+                    }}
+                    className={`py-3 px-4 text-xs font-semibold uppercase tracking-wider text-left flex items-center gap-3 transition-all rounded-none ${activeTab === 'profile'
+                      ? 'bg-white text-[#2C1E1B] font-bold'
+                      : 'text-white/70 hover:bg-white/5 hover:text-white'
+                      }`}
+                  >
+                    <User className="w-4 h-4" />
+                    <span>Owner Profile</span>
                   </button>
                 </nav>
               </div>
@@ -1288,19 +1560,19 @@ export default function AdminPortal({
           {/* Navigation Menu */}
           <nav className="flex flex-col gap-2">
             <button
-              onClick={() => setActiveTab('profile')}
-              className={`py-3.5 px-4 text-xs font-semibold uppercase tracking-wider text-left flex items-center gap-3 transition-all rounded-none ${activeTab === 'profile'
+              onClick={() => handleTabChange('dashboard')}
+              className={`py-3.5 px-4 text-xs font-semibold uppercase tracking-wider text-left flex items-center gap-3 transition-all rounded-none ${activeTab === 'dashboard'
                 ? 'bg-white text-[#2C1E1B] font-bold'
                 : 'text-white/70 hover:bg-white/5 hover:text-white'
                 }`}
-              title="Owner Profile"
+              title="Dashboard Overview"
             >
-              <User className="w-4 h-4" />
-              <span>Owner Profile</span>
+              <LayoutDashboard className="w-4 h-4" />
+              <span>Dashboard</span>
             </button>
 
             <button
-              onClick={() => setActiveTab('products')}
+              onClick={() => handleTabChange('products')}
               className={`py-3.5 px-4 text-xs font-semibold uppercase tracking-wider text-left flex items-center gap-3 transition-all rounded-none ${activeTab === 'products'
                 ? 'bg-white text-[#2C1E1B] font-bold'
                 : 'text-white/70 hover:bg-white/5 hover:text-white'
@@ -1312,7 +1584,7 @@ export default function AdminPortal({
             </button>
 
             <button
-              onClick={() => setActiveTab('customize')}
+              onClick={() => handleTabChange('customize')}
               className={`py-3.5 px-4 text-xs font-semibold uppercase tracking-wider text-left flex items-center gap-3 transition-all rounded-none ${activeTab === 'customize'
                 ? 'bg-white text-[#2C1E1B] font-bold'
                 : 'text-white/70 hover:bg-white/5 hover:text-white'
@@ -1321,6 +1593,18 @@ export default function AdminPortal({
             >
               <Sliders className="w-4 h-4" />
               <span>Store Customizer</span>
+            </button>
+
+            <button
+              onClick={() => handleTabChange('profile')}
+              className={`py-3.5 px-4 text-xs font-semibold uppercase tracking-wider text-left flex items-center gap-3 transition-all rounded-none ${activeTab === 'profile'
+                ? 'bg-white text-[#2C1E1B] font-bold'
+                : 'text-white/70 hover:bg-white/5 hover:text-white'
+                }`}
+              title="Owner Profile"
+            >
+              <User className="w-4 h-4" />
+              <span>Owner Profile</span>
             </button>
           </nav>
         </div>
@@ -1339,1110 +1623,103 @@ export default function AdminPortal({
       </aside>
 
       {/* Main Panel Content Area */}
-      <main className="flex-1 p-6 sm:p-12 overflow-y-auto max-h-screen">
+      <main className="flex-1 p-6 sm:p-12 overflow-y-auto max-h-screen overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
 
-        {/* VIEW 1: OWNER PROFILE */}
-        {activeTab === 'profile' && (
-          <motion.div
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="max-w-3xl space-y-8"
-          >
-            <div>
-              {/* <span className="font-script text-[5rem] leading-none text-[#2C1E1B] block -mb-2">Super Admin</span> */}
-              <h2 className="text-3xl sm:text-5xl font-editorial font-light text-[#2C1E1B] tracking-tight">Main Admin Profile</h2>
-            </div>
-
-            {isEditingProfile ? (
-              <form onSubmit={handleUpdateProfile} className="bg-white border border-[#E8DCD7] shadow-sm p-8 rounded-none space-y-6">
-                <h3 className="font-editorial text-2xl text-[#2C1E1B] pb-2 border-b border-[#E8DCD7]/60">Edit Profile Details</h3>
-
-                <div className="space-y-4">
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Display Name</label>
-                    <input
-                      type="text"
-                      required
-                      value={editProfileForm.name}
-                      onChange={(e) => setEditProfileForm({ ...editProfileForm, name: e.target.value })}
-                      className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B]"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Role / Title</label>
-                    <input
-                      type="text"
-                      required
-                      value={editProfileForm.role_title}
-                      onChange={(e) => setEditProfileForm({ ...editProfileForm, role_title: e.target.value })}
-                      className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B]"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56] block">
-                      Profile Avatar Photo (Manual Upload)
-                    </label>
-                    <div className="flex items-center gap-4 bg-[#FAF0EC]/30 p-2 border border-[#E8DCD7] rounded-none">
-                      {editProfileForm.avatar_url && (
-                        <img
-                          src={editProfileForm.avatar_url}
-                          alt="Avatar Preview"
-                          className="w-12 h-12 rounded-full object-cover border border-[#E8DCD7] bg-[#FAF0EC]"
-                        />
-                      )}
-                      <label className="cursor-pointer bg-[#FAF0EC] hover:bg-[#E8DCD7]/50 border border-[#E8DCD7] text-[#2C1E1B] text-xs font-semibold px-4 py-3 rounded-none flex items-center gap-2 transition-all">
-                        <Upload className="w-4 h-4 text-[#705B56]" />
-                        <span>{isUploadingAvatar ? 'Uploading...' : 'Choose Photo'}</span>
-                        <input
-                          type="file"
-                          accept=".png, .jpg, .jpeg"
-                          onChange={handleAvatarUpload}
-                          className="hidden"
-                          disabled={isUploadingAvatar}
-                        />
-                      </label>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Biography</label>
-                    <textarea
-                      rows={4}
-                      required
-                      value={editProfileForm.bio}
-                      onChange={(e) => setEditProfileForm({ ...editProfileForm, bio: e.target.value })}
-                      className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B] resize-none"
-                    />
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-[#E8DCD7] flex items-center justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditProfileForm({ ...profile });
-                      setIsEditingProfile(false);
-                    }}
-                    className="py-3 px-5 border border-[#E8DCD7] hover:bg-[#FAF0EC] text-[#705B56] text-xs font-semibold uppercase tracking-wider rounded-none"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="py-3 px-6 bg-[#2C1E1B] hover:bg-[#B86B60] text-white text-xs font-semibold uppercase tracking-wider rounded-none shadow-md"
-                  >
-                    Save Profile Changes
-                  </button>
-                </div>
-              </form>
-            ) : isLoadingProfile ? (
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-8 bg-white border border-[#E8DCD7] shadow-sm p-8 rounded-none animate-pulse">
-                <div className="md:col-span-4 aspect-square bg-[#2C1E1B]/5 skeleton-shimmer border border-[#E8DCD7] rounded-none" />
-                <div className="md:col-span-8 flex flex-col justify-between space-y-6">
-                  <div className="space-y-3">
-                    <div className="h-6 bg-[#2C1E1B]/5 skeleton-shimmer w-1/4" />
-                    <div className="h-10 bg-[#2C1E1B]/5 skeleton-shimmer w-3/4" />
-                    <div className="h-20 bg-[#2C1E1B]/5 skeleton-shimmer w-full" />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4 border-t border-[#E8DCD7] pt-6">
-                    <div className="space-y-2">
-                      <div className="h-3 bg-[#2C1E1B]/5 skeleton-shimmer w-1/2" />
-                      <div className="h-4 bg-[#2C1E1B]/5 skeleton-shimmer w-3/4" />
-                    </div>
-                    <div className="space-y-2">
-                      <div className="h-3 bg-[#2C1E1B]/5 skeleton-shimmer w-1/2" />
-                      <div className="h-4 bg-[#2C1E1B]/5 skeleton-shimmer w-3/4" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-8 bg-white border border-[#E8DCD7] shadow-sm p-8 rounded-none">
-                <div className="md:col-span-4 aspect-square bg-[#FAF0EC] border border-[#E8DCD7] overflow-hidden rounded-none flex items-center justify-center">
-                  {profile.avatar_url ? (
-                    <img
-                      src={profile.avatar_url}
-                      alt="Atelier Owner Portrait"
-                      className="w-full h-full object-cover rounded-none"
-                    />
-                  ) : (
-                    <User className="w-16 h-16 text-[#ccc2c3]" />
-                  )}
-                </div>
-                <div className="md:col-span-8 flex flex-col justify-between space-y-6">
-                  <div className="space-y-3">
-                    <span className="text-[10px] tracking-widest uppercase font-bold text-[#B86B60] bg-[#FAF0EC] px-3 py-1 rounded-none inline-block">FOUNDER</span>
-                    <h3 className="text-3xl font-editorial font-light text-[#2C1E1B]">{profile.name}</h3>
-                    <p className="text-xs text-[#705B56] leading-relaxed">
-                      {profile.bio}
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4 border-t border-[#E8DCD7] pt-6 text-xs font-semibold">
-                    <div>
-                      <span className="text-[10px] text-[#A38E88] uppercase block mb-0.5">Role Privileges</span>
-                      <span className="text-[#2C1E1B]">{profile.role_title}</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-[#A38E88] uppercase block mb-0.5">Assigned Email</span>
-                      <span className="text-[#2C1E1B]">{profile.email}</span>
-                    </div>
-                  </div>
-
-                  <div className="pt-4 border-t border-[#E8DCD7]">
-                    <button
-                      onClick={() => setIsEditingProfile(true)}
-                      className="py-3 px-6 bg-[#2C1E1B] hover:bg-[#B86B60] text-white text-xs font-semibold uppercase tracking-wider rounded-none transition-all shadow-md"
-                    >
-                      Edit Owner Profile
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </motion.div>
+        {/* TAB CONTENTS */}
+        {activeTab === 'dashboard' && (
+          <AdminDashboardTab
+            dashboardStats={dashboardStats}
+            isLoadingStats={isLoadingStats}
+            onRefresh={fetchDashboardStats}
+            onAddProduct={handleOpenAddProduct}
+            onNavigateTab={handleTabChange}
+            onEditProduct={handleEditProductClick}
+          />
         )}
 
-        {/* VIEW 2: PRODUCT TABLE */}
         {activeTab === 'products' && (
-          <motion.div
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="space-y-6"
-          >
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <span className="font-script text-[5rem] text-[#2C1E1B] block mb-1">Catalog Admin</span>
-                <h2 className="text-3xl sm:text-5xl font-editorial font-light text-[#2C1E1B] tracking-tight">Atelier Garment Inventory</h2>
-              </div>
-              <button
-                onClick={() => {
-                  setEditingProductId(null);
-                  setNewProduct({
-                    name: '',
-                    category: 'Suits & Coats',
-                    mainCategory: 'top',
-                    subType: '',
-                    price: '',
-                    qty: '',
-                    colorsRaw: '',
-                    sizes: 'XXS-XS, S-M, L, XL',
-                    image: '',
-                    sizeChart: '',
-                    description: '',
-                    shopeeLink: '',
-                    rating: '',
-                    solds: '',
-                    statusBadge: ''
-                  });
-                  setIsAddModalOpen(true);
-                }}
-                className="bg-[#ccc2c3] hover:bg-[#ccc2c5] text-[#2C1E1B] py-3.5 px-6 rounded-none text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-lg"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Add Product</span>
-              </button>
-            </div>
-
-            {/* Filter & Search Bar */}
-            <div className="p-4 bg-white border border-[#E8DCD7] shadow-sm flex flex-col md:flex-row items-center justify-between gap-4 rounded-none">
-              <div className="relative w-full md:w-80">
-                <Search className="w-4 h-4 text-[#705B56] absolute left-4 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Search code/name..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-11 pr-4 py-2.5 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] placeholder-[#A38E88] focus:outline-none focus:border-[#2C1E1B]"
-                />
-              </div>
-
-              <div className="flex flex-wrap items-center gap-4 w-full md:w-auto justify-between md:justify-end">
-                <span className="text-xs font-semibold text-[#705B56]">
-                  Featured in Collection: <strong className="text-[#B86B60]">{featuredCount}/6</strong>
-                </span>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs uppercase tracking-wider text-[#705B56] font-semibold">Filter:</span>
-                  <select
-                    value={categoryFilter}
-                    onChange={(e) => setCategoryFilter(e.target.value)}
-                    className="bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] font-semibold rounded-none px-4 py-2.5 focus:outline-none cursor-pointer"
-                  >
-                    <option value="all">All Categories</option>
-                    <option value="top">Tops</option>
-                    <option value="bottom">Bottoms</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {/* Table */}
-            <div id="admin-products-table-container" className="bg-white border border-[#E8DCD7] shadow-sm overflow-x-auto rounded-none relative">
-              {selectedProductIds.length > 0 && (
-                <div className="bg-[#FAF5F2] p-3 border-b border-[#E8DCD7] flex items-center justify-between px-6 sticky left-0 right-0 z-10 shadow-sm animate-fadeIn">
-                  <span className="text-xs font-semibold text-[#705B56]">
-                    Selected <strong className="text-[#B86B60]">{selectedProductIds.length}</strong> {selectedProductIds.length === 1 ? 'garment' : 'garments'}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => {
-                        setBulkSizeChart('');
-                        setIsBulkModalOpen(true);
-                      }}
-                      className="bg-[#2C1E1B] hover:bg-[#4A3E3B] text-white py-2 px-4 rounded-none text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 transition-all shadow-sm focus:outline-none cursor-pointer"
-                    >
-                      <Edit className="w-3.5 h-3.5" />
-                      <span>Bulk Update</span>
-                    </button>
-                    <button
-                      onClick={handleDeleteSelected}
-                      className="bg-red-700 hover:bg-red-800 text-white py-2 px-4 rounded-none text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 transition-all shadow-sm focus:outline-none cursor-pointer"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>Delete Selected</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-              <table className="w-full text-left border-collapse rounded-none">
-                <thead>
-                  <tr className="bg-[#F3EAE6] border-b border-[#E8DCD7] text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
-                    <th className="p-4 text-center w-12">
-                      <input
-                        type="checkbox"
-                        checked={productList.length > 0 && productList.every(p => selectedProductIds.includes(p.id))}
-                        onChange={() => handleSelectAllFiltered(productList)}
-                        className="w-4 h-4 rounded-none accent-[#2C1E1B] cursor-pointer"
-                        title="Select All on page"
-                      />
-                    </th>
-                    <th className="p-4 text-center">Featured</th>
-                    <th className="p-4">Thumbnail</th>
-                    <th className="p-4">Product Name</th>
-                    <th className="p-4">Category</th>
-                    <th className="p-4">Colors</th>
-                    <th className="p-4">Sizes</th>
-                    <th className="p-4">Price</th>
-                    <th className="p-4">Rating</th>
-                    <th className="p-4">Solds</th>
-                    <th className="p-4">Shopee Link</th>
-                    <th className="p-4">Status</th>
-                    <th className="p-4">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#E8DCD7]/60 text-xs font-semibold text-[#2C1E1B]">
-                  {productList.map((p) => (
-                    <tr key={p.id} className={`hover:bg-[#FAF5F2]/40 transition-colors ${selectedProductIds.includes(p.id) ? 'bg-[#FAF0EC]' : ''}`}>
-                      <td className="p-4 text-center">
-                        <input
-                          type="checkbox"
-                          checked={selectedProductIds.includes(p.id)}
-                          onChange={() => handleToggleSelectProduct(p.id)}
-                          className="w-4 h-4 rounded-none accent-[#2C1E1B] cursor-pointer"
-                        />
-                      </td>
-                      <td className="p-4 text-center">
-                        <button
-                          type="button"
-                          onClick={() => handleToggleFeatured(p.id, !p.isFeatured)}
-                          disabled={!p.isFeatured && featuredCount >= 6}
-                          className="focus:outline-none flex items-center justify-center mx-auto transition-transform active:scale-95 disabled:opacity-40"
-                          title={!p.isFeatured && featuredCount >= 6 ? "Maximum 6 featured items reached" : "Toggle featured status"}
-                        >
-                          {p.isFeatured ? (
-                            <Star className="w-5 h-5 text-amber-500 fill-amber-500 hover:scale-110 transition-transform" />
-                          ) : (
-                            <Star className={`w-5 h-5 transition-transform hover:scale-110 ${featuredCount >= 6
-                              ? 'text-[#ccc2c3]/30 cursor-not-allowed'
-                              : 'text-[#ccc2c3] hover:text-amber-400'
-                              }`} />
-                          )}
-                        </button>
-                      </td>
-                      <td className="p-4">
-                        <img
-                          src={p.image}
-                          alt={p.name}
-                          loading="lazy"
-                          decoding="async"
-                          className="w-10 h-12 object-cover border border-[#E8DCD7] rounded-none"
-                        />
-                      </td>
-                      <td className="p-4 font-normal text-sm text-[#2C1E1B]">{p.name}</td>
-                      <td className="p-4">
-                        <span className="text-[#705B56] uppercase tracking-wider text-[10px] block">{p.mainCategory === 'top' ? 'Top' : 'Bottom'}</span>
-                        <span className="text-[9px] text-[#A38E88] font-normal">{p.subType}</span>
-                      </td>
-                      <td className="p-4">
-                        <div className="flex items-center gap-1">
-                          {p.colors && p.colors.map((c, idx) => (
-                            <span
-                              key={idx}
-                              className="w-3.5 h-3.5 rounded-none border border-black/10 inline-block"
-                              style={{ backgroundColor: c.hex }}
-                              title={c.name}
-                            />
-                          ))}
-                        </div>
-                      </td>
-                      <td className="p-4 text-[#705B56] uppercase tracking-wider text-[10px]">
-                        {Array.isArray(p.sizes) ? p.sizes.join(', ') : (p.sizes || 'XXS-XS, S-M, L, XL')}
-                      </td>
-                      <td className="p-4 font-mono text-gray-800">₱{Number(p.price)?.toLocaleString()}</td>
-                      <td className="p-4 font-mono text-amber-600">{p.rating} ★</td>
-                      <td className="p-4 font-mono text-gray-600">{p.solds} sold</td>
-                      <td className="p-4">
-                        <a
-                          href={p.shopeeLink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[#B86B60] hover:text-[#2C1E1B] transition-colors flex items-center gap-1 text-[10px]"
-                        >
-                          <Globe className="w-3 h-3" />
-                          <span className="truncate max-w-[80px] block">Shopee</span>
-                        </a>
-                      </td>
-                      <td className="p-4">
-                        <span className={`text-[10px] tracking-wider uppercase font-bold px-2 py-0.5 rounded-none border ${p.statusBadge === 'ARCHIVE'
-                          ? 'bg-gray-100 text-gray-700 border-gray-300'
-                          : p.statusBadge === 'SOLD OUT'
-                            ? 'bg-red-50 text-red-700 border-red-200'
-                            : p.statusBadge === 'PRE-ORDER'
-                              ? 'bg-amber-50 text-amber-700 border-amber-200'
-                              : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                          }`}>
-                          {p.statusBadge || 'IN STOCK'}
-                        </span>
-                      </td>
-                      <td className="p-4">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleEditProductClick(p)}
-                            className="p-2 rounded-none text-[#705B56] hover:text-white hover:bg-[#705B56] border border-[#E8DCD7] transition-colors focus:outline-none flex items-center justify-center cursor-pointer"
-                            title="Edit Product"
-                          >
-                            <Edit className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteProduct(p.id)}
-                            className="p-2 rounded-none text-red-700 hover:text-white hover:bg-red-700 border border-red-200 transition-colors focus:outline-none flex items-center justify-center cursor-pointer"
-                            title="Delete Product"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-
-              {isLoadingProducts && (
-                <div className="py-16 flex flex-col items-center justify-center gap-3 text-xs text-[#705B56] bg-white">
-                  <Loader2 className="w-6 h-6 animate-spin text-[#B86B60]" />
-                  <span className="tracking-wider uppercase font-semibold text-[10px]">Loading garments...</span>
-                </div>
-              )}
-
-              {!isLoadingProducts && productList.length === 0 && (
-                <div className="text-center py-16 text-[#A38E88] text-xs bg-white">
-                  No garments found matching the selected query.
-                </div>
-              )}
-
-              {/* Luxury Pagination Controls (10 items per page) */}
-              <div className="bg-[#FAF5F2] border-t border-[#E8DCD7] px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="text-xs text-[#705B56] font-medium">
-                  Showing <span className="font-bold text-[#2C1E1B]">{totalProductsCount === 0 ? 0 : (currentPage - 1) * pageSize + 1}</span> to <span className="font-bold text-[#2C1E1B]">{Math.min(currentPage * pageSize, totalProductsCount)}</span> of <span className="font-bold text-[#2C1E1B]">{totalProductsCount}</span> garments (10 per page)
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handlePageChange(currentPage - 1)}
-                    disabled={currentPage <= 1 || isLoadingProducts}
-                    className="px-3 py-1.5 border border-[#E8DCD7] text-xs font-semibold text-[#2C1E1B] bg-white hover:bg-[#FAF0EC] disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer flex items-center gap-1"
-                  >
-                    <ChevronLeft className="w-3.5 h-3.5" />
-                    <span>Previous</span>
-                  </button>
-
-                  <div className="flex items-center gap-1">
-                    {Array.from({ length: totalPages }, (_, i) => i + 1)
-                      .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
-                      .map((p, idx, arr) => {
-                        const prev = arr[idx - 1];
-                        return (
-                          <React.Fragment key={p}>
-                            {prev && p - prev > 1 && (
-                              <span className="px-1 text-xs text-[#705B56]">...</span>
-                            )}
-                            <button
-                              onClick={() => handlePageChange(p)}
-                              disabled={isLoadingProducts}
-                              className={`w-7 h-7 text-xs font-bold transition-all cursor-pointer ${currentPage === p
-                                  ? 'bg-[#2C1E1B] text-white shadow-sm'
-                                  : 'bg-white border border-[#E8DCD7] text-[#705B56] hover:bg-[#FAF0EC]'
-                                }`}
-                            >
-                              {p}
-                            </button>
-                          </React.Fragment>
-                        );
-                      })}
-                  </div>
-
-                  <button
-                    onClick={() => handlePageChange(currentPage + 1)}
-                    disabled={currentPage >= totalPages || isLoadingProducts}
-                    className="px-3 py-1.5 border border-[#E8DCD7] text-xs font-semibold text-[#2C1E1B] bg-white hover:bg-[#FAF0EC] disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer flex items-center gap-1"
-                  >
-                    <span>Next</span>
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          </motion.div>
+          <AdminProductsTab
+            productList={productList}
+            totalProductsCount={totalProductsCount}
+            currentPage={currentPage}
+            pageSize={pageSize}
+            totalPages={totalPages}
+            searchQuery={searchQuery}
+            categoryFilter={categoryFilter}
+            featuredCount={featuredCount}
+            selectedProductIds={selectedProductIds}
+            isLoadingProducts={isLoadingProducts}
+            onSearchChange={handleSearchChange}
+            onCategoryChange={handleCategoryChange}
+            onAddProduct={handleOpenAddProduct}
+            onEditProduct={handleEditProductClick}
+            onDeleteProduct={handleDeleteProduct}
+            onToggleFeatured={handleToggleFeatured}
+            onSelectAllFiltered={handleSelectAllFiltered}
+            onToggleSelectProduct={handleToggleSelectProduct}
+            onOpenBulkModal={() => {
+              setBulkSizeChart('');
+              setIsBulkModalOpen(true);
+            }}
+            onDeleteSelected={handleDeleteSelected}
+            onPageChange={handlePageChange}
+          />
         )}
 
-        {/* VIEW 3: STOREFRONT CUSTOMIZER */}
         {activeTab === 'customize' && (
-          <motion.div
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="max-w-4xl space-y-8"
-          >
-            <div>
-              <span className="font-script text-[5rem] leading-none text-[#B86B60] block -mb-2">Visual Atelier</span>
-              <h2 className="text-3xl sm:text-5xl font-editorial font-light text-[#2C1E1B] tracking-tight">Frontpage Style Customizer</h2>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-
-              {/* Left Column: Form Fields */}
-              <div className="lg:col-span-7 bg-white border border-[#E8DCD7] shadow-sm p-8 rounded-none space-y-6">
-
-                <h3 className="font-editorial text-2xl text-[#2C1E1B] pb-2 border-b border-[#E8DCD7]/60">Customize Hero Banner</h3>
-
-                <div className="space-y-4">
-                  {/* Poster Image (Manual Upload Only) */}
-                  <div className="space-y-2">
-                    <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56] block">
-                      Main Poster
-                    </label>
-                    <div className="flex items-center gap-4">
-                      <label className="cursor-pointer bg-[#FAF0EC] hover:bg-[#E8DCD7]/50 border border-[#E8DCD7] text-[#2C1E1B] text-xs font-semibold px-4 py-3 rounded-none flex items-center gap-2 transition-all">
-                        <Upload className="w-4 h-4 text-[#705B56]" />
-                        <span>{isUploadingPoster ? 'Uploading...' : 'Choose File'}</span>
-                        <input
-                          type="file"
-                          accept=".png, .jpg, .jpeg, .mp4, .mov, .webm"
-                          onChange={(e) => handleMediaUpload(e, 'poster')}
-                          className="hidden"
-                          disabled={isUploadingPoster}
-                        />
-                      </label>
-                      <span className="text-[10px] text-[#705B56] truncate max-w-[200px]">
-                        {localHeroConfig.posterUrl ? 'File selected & active' : 'No file selected'}
-                      </span>
-                    </div>
-                    <p className="text-[9px] text-[#A38E88] leading-relaxed">
-                      Supports PNG, JPG, MP4, MOV, WEBM.<br />
-                      <strong className="text-[#B86B60]">Recommended: 1920 x 1080px (16:9) or 1600 x 1200px (4:3) with subject centered</strong> both horizontally and vertically (crop-safe for both desktop landscape and mobile portrait).
-                    </p>
-                  </div>
-
-                  {/* Display Title */}
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56] block">Display Branding Title</label>
-                    <input
-                      type="text"
-                      value={localHeroConfig.title}
-                      onChange={(e) => setLocalHeroConfig({ ...localHeroConfig, title: e.target.value })}
-                      className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B]"
-                    />
-                  </div>
-                </div>
-
-                <h3 className="font-editorial text-2xl text-[#2C1E1B] pb-2 border-b border-[#E8DCD7]/60 pt-4">Customize About Us</h3>
-
-                <div className="space-y-4">
-                  {/* About Media (Manual Upload Only) */}
-                  <div className="space-y-2">
-                    <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56] block">
-                      About Us Featured Media (Manual Upload)
-                    </label>
-                    <div className="flex items-center gap-4">
-                      <label className="cursor-pointer bg-[#FAF0EC] hover:bg-[#E8DCD7]/50 border border-[#E8DCD7] text-[#2C1E1B] text-xs font-semibold px-4 py-3 rounded-none flex items-center gap-2 transition-all">
-                        <Upload className="w-4 h-4 text-[#705B56]" />
-                        <span>{isUploadingAboutMedia ? 'Uploading...' : 'Choose File'}</span>
-                        <input
-                          type="file"
-                          accept=".png, .jpg, .jpeg, .mp4, .mov, .webm"
-                          onChange={(e) => handleMediaUpload(e, 'about')}
-                          className="hidden"
-                          disabled={isUploadingAboutMedia}
-                        />
-                      </label>
-                      <span className="text-[10px] text-[#705B56] truncate max-w-[200px]">
-                        {localHeroConfig.aboutMediaUrl ? 'File selected & active' : 'No file selected'}
-                      </span>
-                    </div>
-                    <p className="text-[9px] text-[#A38E88] leading-relaxed">
-                      Supports PNG, JPG, MP4, MOV, WEBM.<br />
-                      <strong className="text-[#B86B60]">Recommended: 1920 x 1080px (16:9) or 1600 x 1200px (4:3) with subject on the left</strong> (to keep the text readable on the right on desktop views).
-                    </p>
-                  </div>
-
-                  {/* About Title */}
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56] block">About Title</label>
-                    <input
-                      type="text"
-                      value={localHeroConfig.aboutTitle || ''}
-                      onChange={(e) => setLocalHeroConfig({ ...localHeroConfig, aboutTitle: e.target.value })}
-                      className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B]"
-                      placeholder="Oh What?"
-                    />
-                  </div>
-
-                  {/* About Subtitle */}
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56] block">About Subtitle</label>
-                    <input
-                      type="text"
-                      value={localHeroConfig.aboutSubtitle || ''}
-                      onChange={(e) => setLocalHeroConfig({ ...localHeroConfig, aboutSubtitle: e.target.value })}
-                      className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B]"
-                      placeholder="Sakura Blossom - Milky Lavender"
-                    />
-                  </div>
-
-                  {/* About Description */}
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56] block">About Description Narrative</label>
-                    <textarea
-                      rows={5}
-                      value={localHeroConfig.aboutDescription || ''}
-                      onChange={(e) => setLocalHeroConfig({ ...localHeroConfig, aboutDescription: e.target.value })}
-                      className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B] resize-y"
-                      placeholder="About Us description narrative..."
-                    />
-                  </div>
-                </div>
-
-                <button
-                  onClick={handleApplyCustomizations}
-                  className="w-full mt-6 py-4 bg-[#2C1E1B] hover:bg-[#B86B60] text-white rounded-none text-xs font-semibold uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg"
-                >
-                  <Save className="w-4 h-4" />
-                  <span>Apply Theme Settings</span>
-                </button>
-              </div>
-
-              {/* Right Column: Visual Mockup / Live Preview */}
-              <div className="lg:col-span-5 bg-white border border-[#E8DCD7] shadow-sm p-5 rounded-none space-y-6 lg:sticky lg:top-6">
-                <span className="text-[9px] uppercase tracking-[0.2em] font-bold text-[#B86B60] bg-[#FAF0EC] px-3 py-1 rounded-none inline-block">LIVE WORKSPACE PREVIEWS</span>
-
-                {/* Preview 1: Hero Banner */}
-                <div className="space-y-2">
-                  <span className="text-[10px] uppercase tracking-wider font-bold text-[#705B56] block">Hero Banner Preview</span>
-                  <div className="border border-[#E8DCD7] rounded-none overflow-hidden relative min-h-[220px] flex items-center justify-center bg-gray-100">
-                    {localHeroConfig.posterUrl?.startsWith('data:video/') || localHeroConfig.posterUrl?.match(/\.(mp4|webm|mov|ogg)($|\?)/i) ? (
-                      <video
-                        src={localHeroConfig.posterUrl}
-                        autoPlay
-                        loop
-                        muted
-                        playsInline
-                        className="absolute inset-0 w-full h-full object-cover"
-                      />
-                    ) : (
-                      <img
-                        src={localHeroConfig.posterUrl}
-                        alt="Banner Preview"
-                        className="absolute inset-0 w-full h-full object-cover"
-                      />
-                    )}
-
-                    <div className="relative z-10 text-center px-4">
-                      <h1
-                        className="text-4xl font-brand font-normal text-white lowercase first-letter:capitalize tracking-tight leading-none drop-shadow-lg"
-                        style={{ textShadow: '0 4px 24px rgba(44, 30, 27, 0.7), 0 2px 8px rgba(44, 30, 27, 0.5)' }}
-                      >
-                        {localHeroConfig.title}
-                      </h1>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Preview 2: About Us Section */}
-                <div className="space-y-2">
-                  <span className="text-[10px] uppercase tracking-wider font-bold text-[#705B56] block">About Us Section Preview</span>
-                  <div className="border border-[#E8DCD7] rounded-none overflow-hidden relative min-h-[240px] flex items-center justify-end bg-gray-100 p-4">
-                    {localHeroConfig.aboutMediaUrl ? (
-                      localHeroConfig.aboutMediaUrl.startsWith('data:video/') || localHeroConfig.aboutMediaUrl.match(/\.(mp4|webm|mov|ogg)($|\?)/i) ? (
-                        <video
-                          src={localHeroConfig.aboutMediaUrl}
-                          autoPlay
-                          loop
-                          muted
-                          playsInline
-                          className="absolute inset-0 w-full h-full object-cover object-left"
-                        />
-                      ) : (
-                        <img
-                          src={localHeroConfig.aboutMediaUrl}
-                          alt="About Us Preview"
-                          className="absolute inset-0 w-full h-full object-cover object-left"
-                        />
-                      )
-                    ) : null}
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#2C1E1B]/10 to-[#2C1E1B]/40" />
-
-                    <div
-                      className="relative z-10 w-[55%] flex flex-col justify-center text-left text-white"
-                      style={{ textShadow: '0 2px 8px rgba(44, 30, 27, 0.8), 0 1px 3px rgba(44, 30, 27, 0.6)' }}
-                    >
-                      <h4 className="font-editorial italic text-xl leading-none text-white block mb-1">
-                        {localHeroConfig.aboutTitle || 'Oh What?'}
-                      </h4>
-                      <span className="text-[7px] uppercase tracking-[0.2em] font-semibold text-[#D99B91] mb-2 block">
-                        {localHeroConfig.aboutSubtitle || 'Sakura Blossom'}
-                      </span>
-                      <p className="text-[7.5px] leading-relaxed font-sans text-white/95 line-clamp-4 whitespace-pre-line">
-                        {localHeroConfig.aboutDescription || 'The Brightening Secret...'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-            </div>
-          </motion.div>
+          <AdminCustomizerTab
+            localHeroConfig={localHeroConfig}
+            setLocalHeroConfig={setLocalHeroConfig}
+            isUploadingPoster={isUploadingPoster}
+            isUploadingAboutMedia={isUploadingAboutMedia}
+            isSavingTheme={isSavingTheme}
+            onMediaUpload={handleMediaUpload}
+            onApplyCustomizations={handleApplyCustomizations}
+          />
         )}
 
+        {activeTab === 'profile' && (
+          <AdminProfileTab
+            profile={profile}
+            editProfileForm={editProfileForm}
+            setEditProfileForm={setEditProfileForm}
+            isEditingProfile={isEditingProfile}
+            setIsEditingProfile={setIsEditingProfile}
+            isLoadingProfile={isLoadingProfile}
+            isUploadingAvatar={isUploadingAvatar}
+            adminRole={adminRole}
+            userEmail={session?.user?.email}
+            onAvatarUpload={handleAvatarUpload}
+            onUpdateProfile={handleUpdateProfile}
+          />
+        )}
       </main>
 
-      {/* VIEW MODAL: ADD PRODUCT FORM */}
-      <AnimatePresence>
-        {isAddModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsAddModalOpen(false)}
-              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            />
+      {/* MODALS */}
+      <AdminProductModal
+        isOpen={isAddModalOpen}
+        editingProductId={editingProductId}
+        newProduct={newProduct}
+        setNewProduct={setNewProduct}
+        isUploadingProductImage={isUploadingProductImage}
+        onProductImageUpload={handleProductImageUpload}
+        onSaveProduct={handleSaveProduct}
+        onClose={() => setIsAddModalOpen(false)}
+      />
 
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 15 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 15 }}
-              className="relative z-10 w-full max-w-lg bg-white rounded-none shadow-2xl border border-[#E8DCD7] p-6 sm:p-8 flex flex-col max-h-[90vh] md:max-h-[85vh]"
-            >
-              <button
-                onClick={() => setIsAddModalOpen(false)}
-                className="absolute top-4 right-4 text-[#705B56] hover:text-[#2C1E1B] transition-colors p-1 z-10"
-                aria-label="Close form modal"
-              >
-                <X className="w-5 h-5" />
-              </button>
-
-              <div className="mb-6 flex-shrink-0">
-                <span className="font-script text-[4.5rem] leading-none text-[#B86B60] block -mb-1">
-                  {editingProductId ? 'Garment Refinement' : 'Garment Creation'}
-                </span>
-                <h3 className="text-xl sm:text-2xl font-editorial text-[#2C1E1B]">
-                  {editingProductId ? 'Edit Product Details' : 'Upload New Product'}
-                </h3>
-              </div>
-
-              <form onSubmit={handleSaveProduct} className="space-y-4 overflow-y-auto pr-2 flex-grow">
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Name */}
-                  <div className="space-y-1 col-span-2">
-                    <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Product Name</label>
-                    <input
-                      type="text"
-                      required
-                      value={newProduct.name}
-                      onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
-                      className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B]"
-                      placeholder="e.g. The Monogram Silk Trench"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Category */}
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Category Group</label>
-                    <select
-                      value={newProduct.mainCategory}
-                      onChange={(e) => setNewProduct({ ...newProduct, mainCategory: e.target.value })}
-                      className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none cursor-pointer"
-                    >
-                      <option value="top">Tops</option>
-                      <option value="bottom">Bottoms</option>
-                    </select>
-                  </div>
-
-                  {/* Subtype */}
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Subtype / Section</label>
-                    <input
-                      type="text"
-                      required
-                      value={newProduct.subType}
-                      onChange={(e) => setNewProduct({ ...newProduct, subType: e.target.value })}
-                      className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B]"
-                      placeholder="e.g. Blazers & Jackets"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Status Dropdown */}
-                  <div className="space-y-1 col-span-2">
-                    <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Garment Status</label>
-                    <select
-                      value={newProduct.statusBadge}
-                      onChange={(e) => setNewProduct({ ...newProduct, statusBadge: e.target.value })}
-                      className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none cursor-pointer"
-                    >
-                      <option value="">IN STOCK (Normal)</option>
-                      <option value="SOLD OUT">SOLD OUT</option>
-                      <option value="PRE-ORDER">PRE-ORDER</option>
-                      <option value="NEW ARRIVAL">NEW ARRIVAL</option>
-                      <option value="BEST SELLER">BEST SELLER</option>
-                      <option value="ARCHIVE">ARCHIVE (Hidden from Storefront)</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-4">
-                  {/* Price */}
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Price (₱)</label>
-                    <input
-                      type="number"
-                      required
-                      value={newProduct.price}
-                      onChange={(e) => setNewProduct({ ...newProduct, price: e.target.value })}
-                      className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B]"
-                    />
-                  </div>
-
-                  {/* Quantity */}
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Quantity</label>
-                    <input
-                      type="number"
-                      required
-                      value={newProduct.qty}
-                      onChange={(e) => setNewProduct({ ...newProduct, qty: e.target.value })}
-                      className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B]"
-                    />
-                  </div>
-
-                  {/* Solds (Fake) */}
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Solds</label>
-                    <input
-                      type="number"
-                      required
-                      value={newProduct.solds}
-                      onChange={(e) => setNewProduct({ ...newProduct, solds: e.target.value })}
-                      className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B]"
-                    />
-                  </div>
-                </div>
-
-                {/* Ratings (Fake) */}
-                <div className="space-y-1">
-                  <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Rating (e.g. 4.9)</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="1"
-                    max="5"
-                    required
-                    value={newProduct.rating}
-                    onChange={(e) => setNewProduct({ ...newProduct, rating: e.target.value })}
-                    className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B]"
-                  />
-                </div>
-
-                {/* Sizes Range Input */}
-                <div className="space-y-1">
-                  <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Available Sizes (e.g. XXS-XS, S-M, L, XL)</label>
-                  <input
-                    type="text"
-                    required
-                    value={newProduct.sizes}
-                    onChange={(e) => setNewProduct({ ...newProduct, sizes: e.target.value })}
-                    className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B]"
-                    placeholder="e.g. XXS-XS, S-M, L, XL"
-                  />
-                </div>
-
-                {/* Product Media Upload */}
-                <div className="space-y-2">
-                  <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
-                    Product Media (Photo or Video - Portrait Orientation Only)
-                  </label>
-                  <input
-                    type="file"
-                    id="product-image-file"
-                    accept="image/*,video/*"
-                    onChange={handleProductImageUpload}
-                    className="hidden"
-                    disabled={isUploadingProductImage}
-                  />
-
-                  {isUploadingProductImage ? (
-                    <div className="h-28 border border-dashed border-[#E8DCD7] bg-[#FAF0EC] flex flex-col items-center justify-center gap-2">
-                      <div className="w-5 h-5 border-2 border-t-transparent border-[#B86B60] rounded-full animate-spin" />
-                      <span className="text-[9px] uppercase tracking-wider font-bold text-[#B86B60]">Uploading to Server...</span>
-                    </div>
-                  ) : newProduct.image ? (
-                    <div className="flex items-center gap-4 p-3 bg-[#FAF0EC] border border-[#E8DCD7] rounded-none">
-                      {isVideoUrl(newProduct.image) ? (
-                        <video
-                          src={newProduct.image}
-                          muted
-                          playsInline
-                          className="w-16 h-20 object-cover border border-[#E8DCD7] bg-white flex-shrink-0"
-                        />
-                      ) : (
-                        <img
-                          src={newProduct.image}
-                          alt="Product Preview"
-                          className="w-16 h-20 object-cover border border-[#E8DCD7] bg-white flex-shrink-0"
-                        />
-                      )}
-                      <div className="space-y-1.5">
-                        <span className="text-[9px] uppercase tracking-widest font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-none block w-max">
-                          Media Loaded
-                        </span>
-                        <label
-                          htmlFor="product-image-file"
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-gray-50 border border-[#E8DCD7] text-[10px] font-bold uppercase tracking-wider text-[#2C1E1B] cursor-pointer transition-colors"
-                        >
-                          <Upload className="w-3 h-3 text-[#B86B60]" />
-                          Replace Media
-                        </label>
-                      </div>
-                    </div>
-                  ) : (
-                    <label
-                      htmlFor="product-image-file"
-                      className="flex flex-col items-center justify-center h-28 border border-dashed border-[#E8DCD7] bg-[#FAF0EC] hover:bg-[#FAF0EC]/60 transition-colors cursor-pointer text-center p-4 gap-1.5 rounded-none"
-                    >
-                      <Upload className="w-5 h-5 text-[#B86B60]" />
-                      <span className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Upload Product Media</span>
-                      <span className="text-[9px] text-[#A38E88] font-medium leading-normal">
-                        Supports images (PNG, JPG, WEBP) & videos (MP4, MOV, WEBM).<br />
-                        <strong className="text-[#B86B60]">Must be portrait</strong> if uploading an image.
-                      </span>
-                    </label>
-                  )}
-
-                  {/* Hidden input to store image URL for required form validation */}
-                  <input
-                    type="hidden"
-                    name="image"
-                    value={newProduct.image}
-                    required
-                  />
-                </div>
-
-                {/* Shopee Link */}
-                <div className="space-y-1">
-                  <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Shopee Link</label>
-                  <input
-                    type="url"
-                    required
-                    value={newProduct.shopeeLink}
-                    onChange={(e) => setNewProduct({ ...newProduct, shopeeLink: e.target.value })}
-                    className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B]"
-                    placeholder="e.g. https://shopee.ph/..."
-                  />
-                </div>
-
-                {/* Description Label */}
-                <div className="space-y-1">
-                  <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Description Label / Heading</label>
-                  <input
-                    type="text"
-                    required
-                    value={newProduct.descriptionLabel}
-                    onChange={(e) => setNewProduct({ ...newProduct, descriptionLabel: e.target.value })}
-                    className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B]"
-                    placeholder="e.g. Description, Craftsmanship, Garment Story"
-                  />
-                </div>
-
-                {/* Description */}
-                <div className="space-y-1">
-                  <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Product Description</label>
-                  <RichTextEditor
-                    value={newProduct.description}
-                    onChange={(html) => setNewProduct({ ...newProduct, description: html })}
-                    placeholder="Describe material tailoring details..."
-                  />
-                </div>
-
-                {/* Action Buttons */}
-                <div className="pt-4 flex items-center justify-end gap-3 border-t border-[#E8DCD7] mt-6">
-                  <button
-                    type="button"
-                    onClick={() => setIsAddModalOpen(false)}
-                    className="py-3 px-5 border border-[#E8DCD7] hover:bg-[#FAF0EC] text-[#705B56] text-xs font-semibold uppercase tracking-wider rounded-none transition-all"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="py-3 px-6 bg-[#2C1E1B] hover:bg-[#B86B60] text-white text-xs font-semibold uppercase tracking-wider rounded-none shadow-md transition-all"
-                  >
-                    Save Garment
-                  </button>
-                </div>
-              </form>
-
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* VIEW MODAL: BULK UPDATE */}
-      <AnimatePresence>
-        {isBulkModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsBulkModalOpen(false)}
-              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            />
-
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 15 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 15 }}
-              className="relative z-10 w-full max-w-md bg-white rounded-none shadow-2xl border border-[#E8DCD7] p-6 sm:p-8 flex flex-col max-h-[90vh] md:max-h-[85vh] select-none"
-            >
-              <button
-                onClick={() => setIsBulkModalOpen(false)}
-                className="absolute top-4 right-4 text-[#705B56] hover:text-[#2C1E1B] transition-colors p-1 z-10 cursor-pointer"
-                aria-label="Close bulk modal"
-              >
-                <X className="w-5 h-5" />
-              </button>
-
-              <div className="mb-6 flex-shrink-0">
-                <h3 className="font-editorial text-2xl sm:text-3xl text-[#2C1E1B] font-normal leading-tight">
-                  Bulk Update Size Chart
-                </h3>
-                <p className="text-[10px] text-[#705B56] mt-1.5 leading-relaxed font-semibold">
-                  Upload a size chart image below. It will be applied to the {selectedProductIds.length} selected garments.
-                </p>
-              </div>
-
-              <form onSubmit={handleBulkUpdate} className="flex-1 overflow-y-auto pr-1 space-y-5 scrollbar-thin">
-                {/* Size Chart Image Uploader */}
-                <div className="space-y-2">
-                  <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
-                    Select Size Chart Image
-                  </label>
-                  <input
-                    type="file"
-                    id="bulk-sizechart-file"
-                    accept="image/*"
-                    onChange={handleBulkSizeChartUpload}
-                    className="hidden"
-                    disabled={isUploadingSizeChart}
-                  />
-
-                  {isUploadingSizeChart ? (
-                    <div className="h-28 border border-dashed border-[#E8DCD7] bg-[#FAF0EC] flex flex-col items-center justify-center gap-2">
-                      <div className="w-5 h-5 border-2 border-t-transparent border-[#B86B60] rounded-full animate-spin" />
-                      <span className="text-[9px] uppercase tracking-wider font-bold text-[#B86B60]">Uploading Size Chart...</span>
-                    </div>
-                  ) : bulkSizeChart ? (
-                    <div className="flex items-center gap-4 p-3 bg-[#FAF0EC] border border-[#E8DCD7] rounded-none">
-                      <img
-                        src={bulkSizeChart}
-                        alt="Bulk Size Chart Preview"
-                        className="w-20 h-16 object-contain border border-[#E8DCD7] bg-white flex-shrink-0"
-                      />
-                      <div className="space-y-1.5">
-                        <span className="text-[9px] uppercase tracking-widest font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-none block w-max">
-                          Image Loaded
-                        </span>
-                        <div className="flex items-center gap-2">
-                          <label
-                            htmlFor="bulk-sizechart-file"
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-gray-50 border border-[#E8DCD7] text-[10px] font-bold uppercase tracking-wider text-[#2C1E1B] cursor-pointer transition-colors"
-                          >
-                            <Upload className="w-3 h-3 text-[#B86B60]" />
-                            Replace Image
-                          </label>
-                          <button
-                            type="button"
-                            onClick={() => setBulkSizeChart('')}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-red-50 border border-red-200 text-[10px] font-bold uppercase tracking-wider text-red-600 transition-colors"
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <label
-                      htmlFor="bulk-sizechart-file"
-                      className="flex flex-col items-center justify-center h-28 border border-dashed border-[#E8DCD7] bg-[#FAF0EC] hover:bg-[#FAF0EC]/60 transition-colors cursor-pointer text-center p-4 gap-1.5 rounded-none"
-                    >
-                      <Upload className="w-5 h-5 text-[#B86B60]" />
-                      <span className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Upload Size Chart Image</span>
-                      <span className="text-[9px] text-[#A38E88] font-medium leading-normal">
-                        Supports PNG, JPG, WEBP.
-                      </span>
-                    </label>
-                  )}
-                </div>
-
-                {/* Action Buttons */}
-                <div className="pt-4 flex items-center justify-end gap-3 border-t border-[#E8DCD7] mt-6 flex-shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setBulkSizeChart('');
-                      setIsBulkModalOpen(false);
-                    }}
-                    className="py-2.5 px-5 border border-[#E8DCD7] hover:bg-[#FAF0EC] text-[#705B56] text-xs font-semibold uppercase tracking-wider rounded-none transition-all cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={!bulkSizeChart || isUploadingSizeChart}
-                    className="py-2.5 px-6 bg-[#2C1E1B] hover:bg-[#B86B60] text-white text-xs font-semibold uppercase tracking-wider rounded-none shadow-md transition-all cursor-pointer disabled:opacity-40"
-                  >
-                    Apply Bulk Size Chart
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      <AdminBulkModal
+        isOpen={isBulkModalOpen}
+        selectedCount={selectedProductIds.length}
+        bulkSizeChart={bulkSizeChart}
+        setBulkSizeChart={setBulkSizeChart}
+        isUploadingSizeChart={isUploadingSizeChart}
+        onBulkSizeChartUpload={handleBulkSizeChartUpload}
+        onBulkUpdate={handleBulkUpdate}
+        onClose={() => {
+          setBulkSizeChart('');
+          setIsBulkModalOpen(false);
+        }}
+      />
 
       {/* Custom Confirmation Dialog */}
       <AnimatePresence>

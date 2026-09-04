@@ -23,7 +23,7 @@ export default function Hero({ config }) {
   }, [activeConfig.posterUrl]);
 
   const isVideo = activeConfig.posterUrl?.startsWith('data:video/') ||
-    activeConfig.posterUrl?.match(/\.(mp4|webm|mov|ogg)($|\?)/i);
+    activeConfig.posterUrl?.match(/\.(mp4|webm|mov|ogg|qt|m4v|avi|mkv)($|\?)/i);
 
   // Check if resource is cached and already loaded
   useEffect(() => {
@@ -40,17 +40,52 @@ export default function Hero({ config }) {
     }
   }, [activeConfig.posterUrl, isVideo]);
 
+  // Viewport & Tab visibility observer: pause video when scrolled out of view, unmounted, or tab minimized
+  useEffect(() => {
+    const videoEl = mediaRef.current;
+    if (!isVideo || !videoEl) return;
+
+    let isVisibleInViewport = false;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          isVisibleInViewport = entry.isIntersecting;
+          if (entry.isIntersecting && document.visibilityState === 'visible') {
+            videoEl.play().catch(() => {});
+          } else {
+            videoEl.pause();
+          }
+        });
+      },
+      { threshold: 0.1 }
+    );
+
+    observer.observe(videoEl);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        videoEl.pause();
+      } else if (isVisibleInViewport) {
+        videoEl.play().catch(() => {});
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      observer.disconnect();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (videoEl) {
+        videoEl.pause();
+      }
+    };
+  }, [isVideo, activeConfig.posterUrl]);
+
   return (
     <section className="relative pt-[68px] sm:pt-[72px] overflow-hidden bg-[#FAF0EC]">
-      {/* Subtle Ambient Radial Glows */}
-      <motion.div
-        animate={{
-          scale: [1, 1.1, 1],
-          opacity: [0.3, 0.5, 0.3],
-        }}
-        transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
-        className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] bg-[#F0D4CD]/50 rounded-full blur-[120px] pointer-events-none"
-      />
+      {/* Subtle Ambient Radial Glow */}
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-[#F0D4CD]/30 rounded-full blur-[90px] pointer-events-none transform-gpu" />
 
       {/* Top Giant Fashion Display Serif Typography - Full Width & Flush with Nav Bar */}
       <motion.div

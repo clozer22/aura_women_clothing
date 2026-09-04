@@ -73,7 +73,7 @@
   }
 
   html {
-    scroll-behavior: smooth;
+    scroll-behavior: auto;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -100,8 +100,8 @@
   letter-spacing: -0.02em;
 }
 
-/* Custom Scrollbar (Square shapes, rounded-none) */
-* {
+/* Custom Scrollbar (Square shapes, rounded-none) scoped to avoid universal DOM styling */
+html, body {
   scrollbar-width: thin;
   scrollbar-color: #ccc2c3 #fff3f7;
 }

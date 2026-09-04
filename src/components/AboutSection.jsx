@@ -54,6 +54,48 @@ export default function AboutSection({ config }) {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Viewport & Tab visibility observer: pause video when scrolled out of view, unmounted, or tab minimized
+  useEffect(() => {
+    const videoEl = mediaRef.current;
+    if (!isVideoUrl || !videoEl) return;
+
+    let isVisibleInViewport = false;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          isVisibleInViewport = entry.isIntersecting;
+          if (entry.isIntersecting && document.visibilityState === 'visible') {
+            videoEl.play().catch(() => {});
+          } else {
+            videoEl.pause();
+          }
+        });
+      },
+      { threshold: 0.1 }
+    );
+
+    observer.observe(videoEl);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        videoEl.pause();
+      } else if (isVisibleInViewport) {
+        videoEl.play().catch(() => {});
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      observer.disconnect();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (videoEl) {
+        videoEl.pause();
+      }
+    };
+  }, [isVideoUrl, mediaUrl]);
+
   return (
     <section id="about" className="relative min-h-[600px] sm:min-h-[850px] w-full overflow-hidden select-none bg-white">
       {/* Shimmer Placeholder while fetching or loading */}

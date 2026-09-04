@@ -8,20 +8,32 @@ import ProductCatalog from './components/ProductCatalog';
 import QuickViewModal from './components/QuickViewModal';
 import ContactSection from './components/ContactSection';
 import Footer from './components/Footer';
-import FullCatalogView from './components/FullCatalogView';
-import AdminPortal from './components/AdminPortal';
 import SplashScreen from './components/SplashScreen';
 import WishlistDrawer from './components/WishlistDrawer';
-import CheckoutPage from './components/CheckoutPage';
-import OrderConfirmed from './components/OrderConfirmed';
-import OrderHistory from './components/OrderHistory';
 import { PRODUCTS } from './data/products';
 import { supabase } from './lib/supabaseClient';
 import { getWishlist } from './lib/wishlistManager';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import CustomerAuthModal from './components/CustomerAuthModal';
-import CustomerProfilePage from './components/CustomerProfilePage';
 import PasswordPromptBanner from './components/PasswordPromptBanner';
+import PageSkeleton from './components/common/PageSkeleton';
+
+// Code-split route-level components for optimized INP and instant initial paint
+const AdminPortal = React.lazy(() => import('./components/AdminPortal'));
+const FullCatalogView = React.lazy(() => import('./components/FullCatalogView'));
+const CheckoutPage = React.lazy(() => import('./components/CheckoutPage'));
+const OrderConfirmed = React.lazy(() => import('./components/OrderConfirmed'));
+const OrderHistory = React.lazy(() => import('./components/OrderHistory'));
+const CustomerProfilePage = React.lazy(() => import('./components/CustomerProfilePage'));
+import {
+  getCachedProducts,
+  isProductsCacheFresh,
+  saveCachedProducts,
+  getCachedConfig,
+  isConfigCacheFresh,
+  saveCachedConfig,
+  invalidateProductsCache
+} from './lib/productCache';
 
 function MainApp() {
   const { user } = useAuth();
@@ -68,31 +80,20 @@ function MainApp() {
   const [completedOrder, setCompletedOrder] = useState(getInitialOrder());
   const [authModalOpen, setAuthModalOpen] = useState(false);
 
-  const [showSplash, setShowSplash] = useState(true);
-
-  // Read initial cache from sessionStorage to allow instantaneous loads with 0ms delay
-  const getCachedProducts = () => {
+  // Only show splash screen on very first visit in this session
+  const [showSplash, setShowSplash] = useState(() => {
     try {
-      const cached = sessionStorage.getItem('aura_products_cache');
-      return cached ? JSON.parse(cached) : [];
+      return !sessionStorage.getItem('aura_splash_seen');
     } catch {
-      return [];
+      return false;
     }
-  };
+  });
 
-  const getCachedConfig = () => {
-    try {
-      const cached = sessionStorage.getItem('aura_storefront_config_cache');
-      return cached ? JSON.parse(cached) : null;
-    } catch {
-      return null;
-    }
-  };
-
+  // Read initial cache from persistent localStorage to allow instantaneous loads with 0ms delay
   const initialProducts = getCachedProducts();
   const initialConfig = getCachedConfig();
 
-  // Real-time products state loaded from database (initialized from cache if available)
+  // Real-time products state loaded from database (initialized from persistent cache)
   const [dbProducts, setDbProducts] = useState(initialProducts);
   const [isLoading, setIsLoading] = useState(initialProducts.length === 0);
 
@@ -115,11 +116,19 @@ function MainApp() {
     }, 3000);
   };
 
-  // Fetch products from database (stale-while-revalidate in background)
-  const fetchProducts = async () => {
+  // Fetch products from database using Stale-While-Revalidate with persistent client-side cache
+  const fetchProducts = async (forceRefresh = false) => {
+    // 1. If cache is fresh and we already have products loaded, skip network entirely!
+    if (!forceRefresh && isProductsCacheFresh() && dbProducts.length > 0) {
+      setIsLoading(false);
+      return;
+    }
+
+    // 2. Only show loading if we have zero products in cache
     if (dbProducts.length === 0) {
       setIsLoading(true);
     }
+
     try {
       const { data, error } = await supabase
         .from('products')
@@ -127,11 +136,16 @@ function MainApp() {
         .order('createdAt', { ascending: false });
 
       if (error) throw error;
-      if (data) {
-        setDbProducts(data);
-        try {
-          sessionStorage.setItem('aura_products_cache', JSON.stringify(data));
-        } catch {}
+      if (data && Array.isArray(data)) {
+        // Compare with current products state to prevent wasteful DOM re-renders
+        const hasChanged = data.length !== dbProducts.length ||
+          JSON.stringify(data.map(p => `${p.id}-${p.qty}-${p.price}-${p.isFeatured}-${p.statusBadge}`)) !==
+          JSON.stringify(dbProducts.map(p => `${p.id}-${p.qty}-${p.price}-${p.isFeatured}-${p.statusBadge}`));
+
+        if (hasChanged || dbProducts.length === 0) {
+          setDbProducts(data);
+        }
+        saveCachedProducts(data);
       }
     } catch (err) {
       console.warn('Fallback to local mock data. Supabase products fetch error:', err.message);
@@ -140,8 +154,12 @@ function MainApp() {
     }
   };
 
-  // Fetch storefront configuration
-  const fetchStorefrontConfig = async () => {
+  // Fetch storefront configuration (cache-first)
+  const fetchStorefrontConfig = async (forceRefresh = false) => {
+    if (!forceRefresh && isConfigCacheFresh() && heroConfig?.posterUrl) {
+      return;
+    }
+
     try {
       const { data, error } = await supabase
         .from('storefront_config')
@@ -162,9 +180,7 @@ function MainApp() {
           aboutDescription: data.about_description || 'The Brightening Secret. Lavender blushes are a viral beauty secret for a reason! This milky purple is a dream for fair skin and Asian skin tones, as the purple pigment acts as a color corrector to neutralize sallow or yellow tones, leaving a bright, "ethereal" glow.\n\nOn white skin with cool undertones, it creates a unique, high-fashion pastel flush. For darker skin, it can be used as a targeted brightening topper over a deeper blush to add a modern, multidimensional finish.',
         };
         setHeroConfig(configData);
-        try {
-          sessionStorage.setItem('aura_storefront_config_cache', JSON.stringify(configData));
-        } catch {}
+        saveCachedConfig(configData);
       }
     } catch (err) {
       console.warn('Fallback to default hero. Supabase config fetch error:', err.message);
@@ -182,11 +198,21 @@ function MainApp() {
     }
   };
 
-  // Trigger loads on mount & popstate history listener
+  // Page-specific on-demand data fetching: only load data needed for the current active page!
   useEffect(() => {
-    fetchProducts();
-    fetchStorefrontConfig();
+    if (currentView === 'home') {
+      fetchProducts();
+      fetchStorefrontConfig();
+    } else if (currentView === 'full-catalog') {
+      fetchProducts(); // Full catalog needs garment products only; skip hero/storefront config
+    } else if (currentView === 'checkout') {
+      fetchProducts(); // Checkout needs garment products for item totals
+    }
+    // If currentView is 'admin', 'orders', or 'order-confirmed', skip storefront fetching entirely!
+  }, [currentView]);
 
+  // Route URL listener on mount & popstate history listener
+  useEffect(() => {
     const checkCurrentPath = () => {
       const path = window.location.pathname;
       if (path === '/admin-dashboard') {
@@ -221,8 +247,17 @@ function MainApp() {
     // Run path check on initial mount
     checkCurrentPath();
 
+    const onProductsInvalidated = () => {
+      fetchProducts(true);
+      fetchStorefrontConfig(true);
+    };
+
+    window.addEventListener('aura:products-invalidated', onProductsInvalidated);
     window.addEventListener('popstate', checkCurrentPath);
-    return () => window.removeEventListener('popstate', checkCurrentPath);
+    return () => {
+      window.removeEventListener('aura:products-invalidated', onProductsInvalidated);
+      window.removeEventListener('popstate', checkCurrentPath);
+    };
   }, []);
 
   const navigateToFullCatalog = () => {
@@ -318,19 +353,21 @@ function MainApp() {
   // Render full-screen Admin View if selected
   if (currentView === 'admin') {
     return (
-      <AdminPortal
-        onClosePortal={() => {
-          fetchProducts();
-          fetchStorefrontConfig();
-          navigateToHome();
-        }}
-        heroConfig={heroConfig}
-        onUpdateHeroConfig={setHeroConfig}
-        onRefreshData={() => {
-          fetchProducts();
-          fetchStorefrontConfig();
-        }}
-      />
+      <React.Suspense fallback={<PageSkeleton label="Loading Administration Hub..." />}>
+        <AdminPortal
+          onClosePortal={() => {
+            fetchProducts();
+            fetchStorefrontConfig();
+            navigateToHome();
+          }}
+          heroConfig={heroConfig}
+          onUpdateHeroConfig={setHeroConfig}
+          onRefreshData={() => {
+            fetchProducts();
+            fetchStorefrontConfig();
+          }}
+        />
+      </React.Suspense>
     );
   }
 
@@ -367,41 +404,49 @@ function MainApp() {
     }
 
     return (
-      <CheckoutPage
-        checkoutItems={checkoutItems.length > 0 ? checkoutItems : getWishlist()}
-        onBackToShop={navigateToHome}
-        onOrderCompleted={handleOrderCompleted}
-      />
+      <React.Suspense fallback={<PageSkeleton label="Preparing Checkout..." />}>
+        <CheckoutPage
+          checkoutItems={checkoutItems.length > 0 ? checkoutItems : getWishlist()}
+          onBackToShop={navigateToHome}
+          onOrderCompleted={handleOrderCompleted}
+        />
+      </React.Suspense>
     );
   }
 
   // Render full-screen Order Confirmation View
   if (currentView === 'order-confirmed') {
     return (
-      <OrderConfirmed
-        order={completedOrder}
-        onContinueShopping={navigateToHome}
-        onViewOrders={navigateToOrders}
-      />
+      <React.Suspense fallback={<PageSkeleton label="Retrieving Order Confirmation..." />}>
+        <OrderConfirmed
+          order={completedOrder}
+          onContinueShopping={navigateToHome}
+          onViewOrders={navigateToOrders}
+        />
+      </React.Suspense>
     );
   }
 
   // Render full-screen Order History View
   if (currentView === 'orders') {
     return (
-      <OrderHistory
-        onBackToShop={navigateToHome}
-      />
+      <React.Suspense fallback={<PageSkeleton label="Loading Order History..." />}>
+        <OrderHistory
+          onBackToShop={navigateToHome}
+        />
+      </React.Suspense>
     );
   }
 
   // Render full-screen Customer Profile & Settings View
   if (currentView === 'profile') {
     return (
-      <CustomerProfilePage
-        onBackToShop={navigateToHome}
-        onNavigateOrders={navigateToOrders}
-      />
+      <React.Suspense fallback={<PageSkeleton label="Loading Profile & Atelier Settings..." />}>
+        <CustomerProfilePage
+          onBackToShop={navigateToHome}
+          onNavigateOrders={navigateToOrders}
+        />
+      </React.Suspense>
     );
   }
 
@@ -455,51 +500,55 @@ function MainApp() {
       />
 
       <main>
-        {/* Home View - kept in DOM to preserve rendered images and scroll state */}
-        <div className={currentView === 'home' ? 'block' : 'hidden'} aria-hidden={currentView !== 'home'}>
-          {/* Hero Banner with Custom Config */}
-          <Hero config={heroConfig} />
+        {/* Home View - Only rendered when user is on the Home page */}
+        {currentView === 'home' && (
+          <div>
+            {/* Hero Banner with Custom Config */}
+            <Hero config={heroConfig} />
 
-          {/* Continuous Scrolling Marquee Ticker */}
-          <MarqueeTicker />
+            {/* Continuous Scrolling Marquee Ticker */}
+            <MarqueeTicker />
 
-          <div className="w-full flex items-center justify-center pt-[4rem] pb-7 bg-white">
-            <h2
-              className="font-brand font-light text-[2.2rem] sm:text-[5rem] tracking-[0.25em] leading-none text-[#705B56] block uppercase text-center select-none"
-            >
-              {heroConfig.aboutTitle || 'About Aura'}
-            </h2>
-          </div>
-          <AboutSection config={heroConfig} />
-          <div className="w-full flex flex-col items-center justify-center py-5 px-3 bg-white pb-16">
-            <div className='max-w-2xl'>
-              <p className="text-xs sm:text-sm text-[#705B56] font-sans text-center leading-relaxed">
-                {heroConfig.aboutDescription || ''}
-              </p>
+            <div className="w-full flex items-center justify-center pt-[4rem] pb-7 bg-white">
+              <h2
+                className="font-brand font-light text-[2.2rem] sm:text-[5rem] tracking-[0.25em] leading-none text-[#705B56] block uppercase text-center select-none"
+              >
+                {heroConfig.aboutTitle || 'About Aura'}
+              </h2>
             </div>
+            <AboutSection config={heroConfig} />
+            <div className="w-full flex flex-col items-center justify-center py-5 px-3 bg-white pb-16">
+              <div className='max-w-2xl'>
+                <p className="text-xs sm:text-sm text-[#705B56] font-sans text-center leading-relaxed">
+                  {heroConfig.aboutDescription || ''}
+                </p>
+              </div>
+            </div>
+            {/* Product Catalog Grid */}
+            <ProductCatalog
+              products={activeProducts}
+              isLoading={isLoading}
+              onSelectProduct={(product) => setSelectedProduct(product)}
+              onViewFullCatalog={navigateToFullCatalog}
+            />
+
+            {/* Atelier Contact Us Section */}
+            <ContactSection />
           </div>
-          {/* Product Catalog Grid */}
-          <ProductCatalog
-            products={activeProducts}
-            isLoading={isLoading}
-            onSelectProduct={(product) => setSelectedProduct(product)}
-            onViewFullCatalog={navigateToFullCatalog}
-          />
+        )}
 
-          {/* Atelier Contact Us Section */}
-          <ContactSection />
-        </div>
-
-        {/* Full Catalog View - kept in DOM so navigating back and forth has 0ms delay and zero re-fetching */}
-        <div className={currentView === 'full-catalog' ? 'block' : 'hidden'} aria-hidden={currentView !== 'full-catalog'}>
-          <FullCatalogView
-            products={activeProducts}
-            isLoading={isLoading}
-            onBackToHome={navigateToHome}
-            onSelectProduct={(product) => setSelectedProduct(product)}
-            initialSearchQuery={catalogSearchQuery}
-          />
-        </div>
+        {/* Full Catalog View - Only rendered when user is on the Full Catalog page */}
+        {currentView === 'full-catalog' && (
+          <React.Suspense fallback={<PageSkeleton label="Browsing Full Collection..." />}>
+            <FullCatalogView
+              products={activeProducts}
+              isLoading={isLoading}
+              onBackToHome={navigateToHome}
+              onSelectProduct={(product) => setSelectedProduct(product)}
+              initialSearchQuery={catalogSearchQuery}
+            />
+          </React.Suspense>
+        )}
       </main>
 
       {/* Footer */}

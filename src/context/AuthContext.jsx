@@ -149,7 +149,7 @@ export function AuthProvider({ children }) {
   // Sign Up with Email and Password (triggers OTP email from Supabase)
   const signUpWithEmail = async ({ email, password, fullName }) => {
     if (isAdminEmail(email)) {
-      throw new Error('Admin domain accounts (@admin.com, @superadmin.com) cannot be registered as customers.');
+      throw new Error('This email address cannot be registered as a customer account.');
     }
     const { data, error } = await supabase.auth.signUp({
       email,
