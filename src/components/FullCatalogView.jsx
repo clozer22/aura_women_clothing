@@ -1,6 +1,6 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useTransition } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, ChevronsUpDown, ArrowLeft, Eye, RotateCcw, Filter, Search, X, ShoppingBag, Sparkles } from 'lucide-react';
+import { ChevronDown, ChevronsUpDown, ArrowLeft, Eye, RotateCcw, Filter, Search, X, ShoppingBag, Sparkles, ChevronLeft, ChevronRight } from 'lucide-react';
 import ShimmerImage from './ShimmerImage';
 
 const isVideoUrl = (url) => url && (url.startsWith('data:video/') || url.match(/\.(mp4|mov|webm)($|\?)/i));
@@ -35,6 +35,16 @@ export default function FullCatalogView({ products, isLoading, onBackToHome, onS
   const [mainCategoryFilter, setMainCategoryFilter] = useState('all'); // 'all' | 'top' | 'bottom'
   const [sortBy, setSortBy] = useState('featured');
   const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
+
+  // Pagination state (15 items per page)
+  const [currentPage, setCurrentPage] = useState(1);
+  const [isPendingPage, startPageTransition] = useTransition();
+  const pageSize = 15;
+
+  // Reset to page 1 whenever any filter or search query changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [mainCategoryFilter, selectedTops, selectedBottoms, sortBy, searchQuery]);
 
   // Sync with prop changes (e.g. searching from navbar)
   useEffect(() => {
@@ -159,6 +169,29 @@ export default function FullCatalogView({ products, isLoading, onBackToHome, onS
 
     return list;
   }, [mainCategoryFilter, selectedTops, selectedBottoms, sortBy, searchQuery, activeList]);
+
+  // Derived Pagination Values
+  const totalProductsCount = filteredProducts.length;
+  const totalPages = Math.max(1, Math.ceil(totalProductsCount / pageSize));
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+
+  const paginatedProducts = useMemo(() => {
+    const startIndex = (safeCurrentPage - 1) * pageSize;
+    return filteredProducts.slice(startIndex, startIndex + pageSize);
+  }, [filteredProducts, safeCurrentPage, pageSize]);
+
+  const handlePageChange = (newPage) => {
+    if (newPage < 1 || newPage > totalPages) return;
+    startPageTransition(() => {
+      setCurrentPage(newPage);
+    });
+    const gridTop = document.getElementById('catalog-grid-top');
+    if (gridTop) {
+      gridTop.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
   const totalActiveFilters = selectedTops.length + selectedBottoms.length + (mainCategoryFilter !== 'all' ? 1 : 0) + (searchQuery !== '' ? 1 : 0);
 
@@ -407,13 +440,20 @@ export default function FullCatalogView({ products, isLoading, onBackToHome, onS
       </div>
 
       {/* Grid Display (Exact layout from attached reference screenshot) */}
-      <div className="max-w-[1440px] mx-auto px-4 sm:px-8 rounded-none">
+      <div id="catalog-grid-top" className="max-w-[1440px] mx-auto px-4 sm:px-8 rounded-none">
+
+        {/* Transition Loading Indicator */}
+        {isPendingPage && (
+          <div className="h-0.5 w-full bg-[#E8DCD7] overflow-hidden mb-2">
+            <div className="h-full bg-[#B86B60] animate-pulse w-full" />
+          </div>
+        )}
 
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 bg-white border-l border-t border-[#E8DCD7] rounded-none overflow-hidden shadow-sm">
           {isLoading ? (
-            Array(10).fill(0).map((_, idx) => <SkeletonCard key={idx} />)
+            Array(15).fill(0).map((_, idx) => <SkeletonCard key={idx} />)
           ) : (
-            filteredProducts.map((product) => {
+            paginatedProducts.map((product) => {
               const isSoldOut = product.statusBadge === 'SOLD OUT';
 
               return (
@@ -508,6 +548,60 @@ export default function FullCatalogView({ products, isLoading, onBackToHome, onS
             })
           )}
         </div>
+
+        {/* Luxury Pagination Controls (15 items per page) */}
+        {!isLoading && totalProductsCount > 0 && (
+          <div className="bg-[#FAF5F2] border border-[#E8DCD7] border-t-0 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4 select-none">
+            <div className="text-xs text-[#705B56] font-medium">
+              Showing <span className="font-bold text-[#2C1E1B]">{(safeCurrentPage - 1) * pageSize + 1}</span> to <span className="font-bold text-[#2C1E1B]">{Math.min(safeCurrentPage * pageSize, totalProductsCount)}</span> of <span className="font-bold text-[#2C1E1B]">{totalProductsCount}</span> garments (15 per page)
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handlePageChange(safeCurrentPage - 1)}
+                disabled={safeCurrentPage <= 1 || isPendingPage}
+                className="px-3 py-1.5 border border-[#E8DCD7] text-xs font-semibold text-[#2C1E1B] bg-white hover:bg-[#FAF0EC] disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer flex items-center gap-1"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+                <span>Previous</span>
+              </button>
+
+              <div className="flex items-center gap-1">
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter(p => p === 1 || p === totalPages || Math.abs(p - safeCurrentPage) <= 1)
+                  .map((p, idx, arr) => {
+                    const prev = arr[idx - 1];
+                    return (
+                      <React.Fragment key={p}>
+                        {prev && p - prev > 1 && (
+                          <span className="px-1 text-xs text-[#705B56]">...</span>
+                        )}
+                        <button
+                          onClick={() => handlePageChange(p)}
+                          disabled={isPendingPage}
+                          className={`w-7 h-7 text-xs font-bold transition-all cursor-pointer ${safeCurrentPage === p
+                            ? 'bg-[#2C1E1B] text-white shadow-sm'
+                            : 'bg-white border border-[#E8DCD7] text-[#705B56] hover:bg-[#FAF0EC]'
+                            }`}
+                        >
+                          {p}
+                        </button>
+                      </React.Fragment>
+                    );
+                  })}
+              </div>
+
+              <button
+                onClick={() => handlePageChange(safeCurrentPage + 1)}
+                disabled={safeCurrentPage >= totalPages || isPendingPage}
+                className="px-3 py-1.5 border border-[#E8DCD7] text-xs font-semibold text-[#2C1E1B] bg-white hover:bg-[#FAF0EC] disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer flex items-center gap-1"
+              >
+                <span>Next</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
 
         {activeList.length === 0 && !isLoading ? (
           <div className="py-24 text-center bg-white rounded-none border border-[#E8DCD7] max-w-2xl mx-auto shadow-sm p-8 flex flex-col items-center justify-center mt-6">
