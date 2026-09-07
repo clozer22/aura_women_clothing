@@ -41,6 +41,26 @@ export default function OrderConfirmed({ order, onContinueShopping, onViewOrders
         return;
       }
       try {
+        // Direct server-side reconciliation with Xendit
+        try {
+          const verifyRes = await fetch(
+            `/api/verify-payment?ref=${encodeURIComponent(activeOrder.order_reference)}`
+          );
+          if (verifyRes.ok) {
+            const check = await verifyRes.json();
+            if (check.paymentStatus === 'PAID') {
+              setLiveOrder((prev) => ({
+                ...prev,
+                payment_status: 'PAID',
+                status: check.fulfillmentStatus || 'PROCESSING',
+              }));
+              setIsVerifying(false);
+              if (intervalId) clearInterval(intervalId);
+              return;
+            }
+          }
+        } catch (vErr) {}
+
         const { data, error } = await supabase
           .from('orders')
           .select('*')

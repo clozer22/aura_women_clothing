@@ -7,7 +7,11 @@ function localApiPlugin() {
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         const url = req.url ? req.url.split('?')[0] : '';
-        if (url === '/api/create-order-invoice' || url === '/api/xendit-webhook') {
+        if (
+          url === '/api/create-order-invoice' ||
+          url === '/api/xendit-webhook' ||
+          url === '/api/verify-payment'
+        ) {
           if (!res.status) {
             res.status = function (code) {
               this.statusCode = code;
@@ -39,6 +43,9 @@ function localApiPlugin() {
                 await mod.default(req, res);
               } else if (url === '/api/xendit-webhook') {
                 const mod = await server.ssrLoadModule('./api/xendit-webhook.js');
+                await mod.default(req, res);
+              } else if (url === '/api/verify-payment') {
+                const mod = await server.ssrLoadModule('./api/verify-payment.js');
                 await mod.default(req, res);
               }
             } catch (err) {

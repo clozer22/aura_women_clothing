@@ -46,6 +46,31 @@ export default function OrderHistory({ onBackToShop }) {
 
         if (!error && data) {
           setOrders(data);
+
+          // Auto-reconcile any pending orders directly with Xendit
+          data.forEach(async (ord) => {
+            if (ord.order_reference && ord.payment_status !== 'PAID') {
+              try {
+                const res = await fetch(`/api/verify-payment?ref=${encodeURIComponent(ord.order_reference)}`);
+                if (res.ok) {
+                  const check = await res.json();
+                  if (check.paymentStatus === 'PAID') {
+                    setOrders((prev) =>
+                      prev.map((item) =>
+                        item.order_reference === ord.order_reference
+                          ? {
+                              ...item,
+                              payment_status: 'PAID',
+                              status: check.fulfillmentStatus || item.status || 'PROCESSING',
+                            }
+                          : item
+                      )
+                    );
+                  }
+                }
+              } catch (e) {}
+            }
+          });
         } else {
           setOrders([]);
         }
@@ -177,16 +202,26 @@ export default function OrderHistory({ onBackToShop }) {
                 {/* Top Row: Reference, Badge, Date/Payment, Amount, View Details */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-[#E8DCD7]">
                   <div className="space-y-1.5">
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                       <span className="font-brand text-base sm:text-lg font-bold tracking-wider text-[#2C1E1B]">
                         {order.order_reference}
                       </span>
+                      {order.payment_status === 'PAID' ? (
+                        <span className="text-[10px] font-brand uppercase tracking-wider font-bold px-2.5 py-0.5 border bg-emerald-50 text-emerald-800 border-emerald-200">
+                          PAID
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-brand uppercase tracking-wider font-bold px-2.5 py-0.5 border bg-amber-50 text-amber-800 border-amber-200">
+                          PAYMENT PENDING
+                        </span>
+                      )}
                       <span
                         className={`text-[10px] font-brand uppercase tracking-wider font-bold px-2.5 py-0.5 border ${getStatusBadge(
                           order.status
                         )}`}
+                        title="Delivery & Fulfillment Status"
                       >
-                        {order.status || 'PENDING'}
+                        {order.status === 'PENDING' ? 'COURIER: PENDING' : order.status || 'PENDING'}
                       </span>
                     </div>
 
@@ -195,6 +230,9 @@ export default function OrderHistory({ onBackToShop }) {
                       <span className="font-semibold text-[#2C1E1B]">
                         {order.payment_method || 'GCASH'}
                       </span>
+                      {order.payment_status === 'PAID' && (
+                        <span className="text-emerald-700 font-semibold ml-1.5">• Confirmed</span>
+                      )}
                     </p>
                   </div>
 
@@ -281,22 +319,39 @@ export default function OrderHistory({ onBackToShop }) {
               </div>
 
               {/* Status Banner */}
-              <div className="p-4 bg-[#FAF5F2] border border-[#E8DCD7] flex items-center justify-between text-xs">
-                <div>
-                  <p className="font-bold text-[#2C1E1B] uppercase tracking-wider text-[11px]">
-                    Status: {selectedOrder.status || 'PENDING'}
-                  </p>
-                  <p className="text-[11px] text-[#705B56]">
-                    Ordered on {formatDate(selectedOrder.created_at)}
-                  </p>
+              <div className="p-4 bg-[#FAF5F2] border border-[#E8DCD7] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-[#2C1E1B] uppercase tracking-wider text-[11px]">
+                      Courier Delivery:
+                    </span>
+                    <span
+                      className={`text-[10px] font-brand uppercase tracking-wider font-bold px-2 py-0.5 border ${getStatusBadge(
+                        selectedOrder.status
+                      )}`}
+                    >
+                      {selectedOrder.status === 'PENDING' ? 'PENDING DISPATCH' : selectedOrder.status || 'PENDING'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-[#2C1E1B] uppercase tracking-wider text-[11px]">
+                      Payment:
+                    </span>
+                    <span
+                      className={`text-[10px] font-brand uppercase tracking-wider font-bold px-2 py-0.5 border ${
+                        selectedOrder.payment_status === 'PAID'
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                          : 'bg-amber-50 text-amber-800 border-amber-200'
+                      }`}
+                    >
+                      {selectedOrder.payment_status === 'PAID' ? 'PAID (VERIFIED)' : 'PENDING'}
+                    </span>
+                  </div>
                 </div>
-                <span
-                  className={`text-[10px] font-brand uppercase tracking-wider font-bold px-3 py-1 border ${getStatusBadge(
-                    selectedOrder.status
-                  )}`}
-                >
-                  {selectedOrder.status || 'PENDING'}
-                </span>
+                <div className="sm:text-right text-[11px] text-[#705B56]">
+                  <p>Ordered on {formatDate(selectedOrder.created_at)}</p>
+                  <p className="font-medium text-[#2C1E1B]">Method: {selectedOrder.payment_method || 'GCASH'}</p>
+                </div>
               </div>
 
               {/* Shipping Address */}
