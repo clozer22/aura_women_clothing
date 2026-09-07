@@ -25,11 +25,15 @@ export default async function handler(req, res) {
     }
 
     // 2. Initialize Supabase Server-Side Client
-    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+    const supabaseUrl =
+      process.env.VITE_SUPABASE_URL ||
+      process.env.SUPABASE_URL ||
+      'https://pcmlleeuxbymomjxhwlv.supabase.co';
     const supabaseKey =
       process.env.SUPABASE_SERVICE_ROLE_KEY ||
       process.env.VITE_SUPABASE_ANON_KEY ||
-      process.env.SUPABASE_ANON_KEY;
+      process.env.SUPABASE_ANON_KEY ||
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBjbWxsZWV1eGJ5bW9tanhod2x2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgzNzA2NzgsImV4cCI6MjEwMzk0NjY3OH0.WZCqgnt_7l88U-Yl_rAvhmXQLSKy70hT1Wjq8rf_qC0';
 
     if (!supabaseUrl || !supabaseKey) {
       console.error('Supabase credentials missing on serverless webhook handler');

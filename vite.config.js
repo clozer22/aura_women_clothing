@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 
 function localApiPlugin() {
@@ -57,23 +57,28 @@ function localApiPlugin() {
 }
 
 // https://vitejs.dev/config/
-export default defineConfig({
-  plugins: [react(), localApiPlugin()],
-  server: {
-    port: 3000,
-    open: true,
-  },
-  build: {
-    chunkSizeWarningLimit: 600,
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom'],
-          'vendor-motion': ['framer-motion'],
-          'vendor-icons': ['lucide-react'],
-          'vendor-supabase': ['@supabase/supabase-js'],
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+  Object.assign(process.env, env);
+
+  return {
+    plugins: [react(), localApiPlugin()],
+    server: {
+      port: 3000,
+      open: true,
+    },
+    build: {
+      chunkSizeWarningLimit: 600,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'vendor-react': ['react', 'react-dom'],
+            'vendor-motion': ['framer-motion'],
+            'vendor-icons': ['lucide-react'],
+            'vendor-supabase': ['@supabase/supabase-js'],
+          },
         },
       },
     },
-  },
-})
+  };
+});
