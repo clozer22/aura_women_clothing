@@ -1,10 +1,6 @@
 {
   "rewrites": [
     {
-      "source": "/api/xendit/:match*",
-      "destination": "https://api.xendit.co/:match*"
-    },
-    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }

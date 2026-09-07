@@ -1,116 +1,84 @@
 /**
- * Xendit Payment Gateway Integration Service
+ * Secure Payment Gateway Client Service
+ * Initiates order checkout via server-side Serverless Function.
+ * Eliminates client-side secret API keys and prevents price tampering.
  */
-
-const XENDIT_API_KEY =
-  import.meta.env.VITE_XENDIT_API_KEY ||
-  'xnd_development_G4K4iGkpjDrzT6EQIDzZShzp7oK77GiaEhAYWPCIC4e0ROvsmVSSi2tZZKScBK';
 
 /**
- * Creates a Xendit Invoice for checkout
+ * Creates a verified Xendit Invoice through the secure serverless API
  * @param {Object} params
- * @param {string} params.orderNumber
- * @param {number} params.amount
- * @param {string} params.customerEmail
- * @param {string} params.customerName
- * @param {string} params.customerPhone
- * @param {Array} params.items
+ * @param {Object} params.customer - { fullName, email, phone }
+ * @param {Object} params.shippingAddress - { street, region, province, city, barangay, zipCode, country }
+ * @param {Array} params.items - Array of { id, quantity, size, color }
  * @param {string} params.paymentMethod - 'GCASH' | 'MAYA' | 'CARD'
+ * @param {string} [params.userId] - Optional authenticated user ID
  */
-export async function createXenditInvoice({
-  orderNumber,
-  amount,
-  customerEmail,
-  customerName,
-  customerPhone,
+export async function createSecureOrderInvoice({
+  customer,
+  shippingAddress,
   items = [],
   paymentMethod = 'GCASH',
+  userId = null,
 }) {
-  // Determine allowed payment methods based on customer's choice
-  let paymentMethods = ['GCASH', 'PAYMAYA', 'CREDIT_CARD', 'SHOPEEPAY', 'GRABPAY'];
-  if (paymentMethod === 'GCASH') {
-    paymentMethods = ['GCASH'];
-  } else if (paymentMethod === 'MAYA') {
-    paymentMethods = ['PAYMAYA'];
-  } else if (paymentMethod === 'CARD') {
-    paymentMethods = ['CREDIT_CARD'];
-  }
-
-  const stagingUrl = 'https://aura-women-clothing-mzaa2w9w2-clozer22s-projects.vercel.app';
-  const currentOrigin =
-    typeof window !== 'undefined' && window.location.origin && window.location.origin !== 'null'
-      ? window.location.origin
-      : stagingUrl;
-
   const payload = {
-    external_id: orderNumber || `AC-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
-    amount: Math.round(amount),
-    payer_email: customerEmail || 'guest@aurawomen.com',
-    description: `Aura Women's Clothing - Order ${orderNumber}`,
-    customer: {
-      given_names: customerName || 'Valued Client',
-      mobile_number: customerPhone || '+639170000000',
-      email: customerEmail || 'guest@aurawomen.com',
-    },
-    customer_notification_preference: {
-      invoice_created: ['email'],
-      invoice_reminder: ['email'],
-      invoice_paid: ['email'],
-    },
-    items: items.map((item) => ({
-      name: item.name || item.productName || 'Aura Clothing Item',
-      quantity: item.quantity || 1,
-      price: Math.round(item.price || 0),
-      category: 'Apparel',
-    })),
-    payment_methods: paymentMethods,
-    currency: 'PHP',
-    success_redirect_url: `${currentOrigin}/order-confirmed?ref=${orderNumber}`,
-    failure_redirect_url: `${currentOrigin}/checkout`,
+    customer,
+    shippingAddress,
+    items,
+    paymentMethod,
+    userId,
   };
 
-  const basicAuth = btoa(`${XENDIT_API_KEY}:`);
+  const response = await fetch('/api/create-order-invoice', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
 
-  // Direct Xendit API call (supports CORS natively with Access-Control-Allow-Origin: *)
-  let response;
-  try {
-    response = await fetch('https://api.xendit.co/v2/invoices', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Basic ${basicAuth}`,
-      },
-      body: JSON.stringify(payload),
-    });
-  } catch (directErr) {
-    console.warn('Direct Xendit API call failed, attempting relative proxy:', directErr);
-    response = await fetch('/api/xendit/v2/invoices', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Basic ${basicAuth}`,
-      },
-      body: JSON.stringify(payload),
-    });
-  }
+  const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    const errBody = await response.json().catch(() => ({}));
-    console.error('Xendit Invoice Creation Failed:', errBody);
-    throw new Error(errBody.message || `Xendit Error (${response.status})`);
+    console.error('Secure invoice creation error:', data);
+    throw new Error(data.error || `Payment gateway error (${response.status})`);
   }
 
-  const data = await response.json();
-  if (!data.invoice_url) {
-    throw new Error('Xendit did not return a valid payment invoice URL');
+  if (!data.invoiceUrl) {
+    throw new Error('Payment gateway did not return a valid checkout URL.');
   }
 
   return {
     success: true,
-    invoiceId: data.id,
-    invoiceUrl: data.invoice_url,
-    status: data.status,
-    externalId: data.external_id,
-    data,
+    invoiceId: data.invoiceId,
+    invoiceUrl: data.invoiceUrl,
+    orderReference: data.orderReference,
+    totalAmount: data.totalAmount,
+    order: data.order,
   };
+}
+
+/**
+ * Backward compatibility wrapper
+ */
+export async function createXenditInvoice(params) {
+  // If called with old parameter structure, adapt to secure signature
+  const customer = params.customer || {
+    fullName: params.customerName || 'Valued Client',
+    email: params.customerEmail || '',
+    phone: params.customerPhone || '',
+  };
+
+  const shippingAddress = params.shippingAddress || {
+    street: params.street || 'Address on file',
+    city: params.city || 'Metro Manila',
+    country: 'Philippines',
+  };
+
+  return createSecureOrderInvoice({
+    customer,
+    shippingAddress,
+    items: params.items || [],
+    paymentMethod: params.paymentMethod || 'GCASH',
+    userId: params.userId || null,
+  });
 }

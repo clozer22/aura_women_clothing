@@ -8,8 +8,11 @@ import {
   HelpCircle,
   ArrowRight,
   ShoppingBag,
+  Loader2,
+  Clock,
 } from 'lucide-react';
 import { removeItemsFromWishlist, clearWishlist } from '../lib/wishlistManager';
+import { supabase } from '../lib/supabaseClient';
 
 export default function OrderConfirmed({ order, onContinueShopping, onViewOrders }) {
   const [copied, setCopied] = useState(false);
@@ -23,6 +26,52 @@ export default function OrderConfirmed({ order, onContinueShopping, onViewOrders
       return null;
     }
   })();
+
+  const [liveOrder, setLiveOrder] = useState(activeOrder);
+  const [isVerifying, setIsVerifying] = useState(true);
+
+  // Verify real-time order status from Supabase database
+  useEffect(() => {
+    let intervalId;
+    let pollCount = 0;
+
+    const fetchStatus = async () => {
+      if (!activeOrder?.order_reference) {
+        setIsVerifying(false);
+        return;
+      }
+      try {
+        const { data, error } = await supabase
+          .from('orders')
+          .select('*')
+          .eq('order_reference', activeOrder.order_reference)
+          .single();
+
+        if (data && !error) {
+          setLiveOrder(data);
+          if (data.payment_status === 'PAID') {
+            setIsVerifying(false);
+            if (intervalId) clearInterval(intervalId);
+          }
+        }
+      } catch (err) {
+        console.warn('Could not verify order status from database:', err);
+      } finally {
+        pollCount += 1;
+        if (pollCount >= 10) {
+          setIsVerifying(false);
+          if (intervalId) clearInterval(intervalId);
+        }
+      }
+    };
+
+    fetchStatus();
+    intervalId = setInterval(fetchStatus, 3000);
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [activeOrder?.order_reference]);
 
   // Clear purchased items from active cart and database on confirmation
   useEffect(() => {
@@ -66,21 +115,50 @@ export default function OrderConfirmed({ order, onContinueShopping, onViewOrders
         transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
         className="max-w-xl w-full bg-white border border-[#E8DCD7] p-8 sm:p-10 shadow-lg text-center rounded-none space-y-6"
       >
-        {/* Verified Circular Icon */}
-        <div className="w-16 h-16 bg-emerald-50 border-2 border-emerald-500/30 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-sm">
-          <Check className="w-8 h-8 stroke-[2.5]" />
-        </div>
+        {/* Status Circular Icon */}
+        {liveOrder?.payment_status === 'PAID' ? (
+          <div className="w-16 h-16 bg-emerald-50 border-2 border-emerald-500/30 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-sm">
+            <Check className="w-8 h-8 stroke-[2.5]" />
+          </div>
+        ) : (
+          <div className="w-16 h-16 bg-amber-50 border-2 border-amber-500/30 text-amber-600 rounded-full flex items-center justify-center mx-auto shadow-sm">
+            {isVerifying ? (
+              <Loader2 className="w-8 h-8 animate-spin stroke-[2.2]" />
+            ) : (
+              <Clock className="w-8 h-8 stroke-[2.2]" />
+            )}
+          </div>
+        )}
 
         {/* Header Text */}
         <div>
-          <span className="text-[11px] font-brand uppercase tracking-[0.25em] font-bold text-emerald-800 bg-emerald-50 px-3 py-1 border border-emerald-200">
-            Payment & Order Verified
-          </span>
+          {liveOrder?.payment_status === 'PAID' ? (
+            <span className="text-[11px] font-brand uppercase tracking-[0.25em] font-bold text-emerald-800 bg-emerald-50 px-3 py-1 border border-emerald-200">
+              Payment Verified & Confirmed
+            </span>
+          ) : (
+            <span className="text-[11px] font-brand uppercase tracking-[0.25em] font-bold text-amber-800 bg-amber-50 px-3 py-1 border border-amber-200">
+              {isVerifying ? 'Awaiting Payment Confirmation…' : 'Order Placed (Payment Pending)'}
+            </span>
+          )}
+
           <h1 className="font-brand text-3xl sm:text-4xl text-[#2C1E1B] font-bold tracking-wide mt-3 mb-2">
-            ORDER CONFIRMED!
+            {liveOrder?.payment_status === 'PAID' ? 'ORDER CONFIRMED!' : 'ORDER RECEIVED'}
           </h1>
           <p className="text-xs sm:text-sm text-[#705B56] leading-relaxed max-w-md mx-auto">
-            Thank you for choosing <span className="font-bold text-[#2C1E1B]">Aura Studio</span>. Your order has been placed and is currently being prepared at our Manila Studio.
+            {liveOrder?.payment_status === 'PAID' ? (
+              <>
+                Thank you for choosing <span className="font-bold text-[#2C1E1B]">Aura Studio</span>. Your payment has been securely verified and your order is being prepared at our Manila Studio.
+              </>
+            ) : isVerifying ? (
+              <>
+                We are communicating with your payment provider (GCash / Maya / Card) to verify completion. This page updates automatically.
+              </>
+            ) : (
+              <>
+                Thank you for choosing <span className="font-bold text-[#2C1E1B]">Aura Studio</span>. Your order has been placed. If you have already completed payment, our system will finalize confirmation shortly.
+              </>
+            )}
           </p>
         </div>
 

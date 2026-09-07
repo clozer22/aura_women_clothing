@@ -57,11 +57,6 @@ function MainApp() {
       const last = localStorage.getItem('aura_last_order');
       const lastOrder = last ? JSON.parse(last) : null;
       if (lastOrder && (!ref || lastOrder.order_reference === ref)) {
-        if (ref) {
-          lastOrder.payment_status = 'PAID';
-          lastOrder.status = 'PROCESSING';
-          localStorage.setItem('aura_last_order', JSON.stringify(lastOrder));
-        }
         return lastOrder;
       }
       return lastOrder || null;

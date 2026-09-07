@@ -17,7 +17,7 @@ import {
   getCities,
   getBarangays,
 } from '../lib/phAddressApi';
-import { createXenditInvoice } from '../lib/xendit';
+import { createSecureOrderInvoice } from '../lib/xendit';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import { removeItemsFromWishlist } from '../lib/wishlistManager';
@@ -258,32 +258,20 @@ export default function CheckoutPage({
     }
   };
 
-  // Complete Order via Xendit
+  // Complete Order via Secure Serverless Payment API
   const handleCompleteOrder = async () => {
     setIsProcessingOrder(true);
     setPaymentError(null);
 
-    const orderReference = `AC-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-
     try {
-      // 1. Create Invoice via Xendit
-      const invoiceResult = await createXenditInvoice({
-        orderNumber: orderReference,
-        amount: totalAmount,
-        customerEmail: formData.email || 'guest@aurawomen.com',
-        customerName: formData.fullName,
-        customerPhone: formData.phone,
-        items: checkoutItems,
-        paymentMethod,
-      });
-
-      // 2. Prepare Order Record
-      const newOrder = {
-        order_reference: orderReference,
-        customer_name: formData.fullName,
-        customer_phone: formData.phone,
-        customer_email: formData.email || '',
-        shipping_address: {
+      // 1. Call Secure Serverless Invoice & Order Endpoint
+      const result = await createSecureOrderInvoice({
+        customer: {
+          fullName: formData.fullName,
+          email: formData.email || user?.email || '',
+          phone: formData.phone,
+        },
+        shippingAddress: {
           street: formData.street,
           region: formData.regionName,
           province: formData.provinceName || 'Metro Manila',
@@ -294,36 +282,20 @@ export default function CheckoutPage({
         },
         items: checkoutItems.map((item) => ({
           id: item.id,
-          name: item.name,
-          image: item.image,
           size: item.size || 'Standard',
           color: item.color || 'Standard',
-          price: item.price,
           quantity: item.quantity || 1,
         })),
-        subtotal,
-        shipping_fee: shippingFee,
-        total_amount: totalAmount,
-        payment_method: paymentMethod,
-        payment_status: 'PENDING',
-        status: 'PENDING',
-        user_id: user?.id || null,
-        xendit_invoice_id: invoiceResult.invoiceId || null,
-        xendit_invoice_url: invoiceResult.invoiceUrl || null,
-        created_at: new Date().toISOString(),
-      };
+        paymentMethod,
+        userId: user?.id || null,
+      });
 
-      // 3. Save single active order for confirmation redirect
-      try {
-        localStorage.removeItem('aura_guest_orders');
-        localStorage.setItem('aura_last_order', JSON.stringify(newOrder));
-      } catch (err) {}
-
-      // 4. Try saving to Supabase orders table
-      try {
-        await supabase.from('orders').insert([newOrder]);
-      } catch (dbErr) {
-        console.warn('Notice: Could not insert to Supabase orders table:', dbErr.message);
+      // 2. Save active order for immediate state
+      if (result.order) {
+        try {
+          localStorage.removeItem('aura_guest_orders');
+          localStorage.setItem('aura_last_order', JSON.stringify(result.order));
+        } catch (err) {}
       }
 
       // Clear checked-out items from active cart and Supabase database
@@ -331,18 +303,17 @@ export default function CheckoutPage({
         await removeItemsFromWishlist(checkoutItems);
       } catch (e) {}
 
-      // 5. REDIRECT TO XENDIT PAYMENT GATEWAY FOR ACTUAL PAYMENT
-      if (invoiceResult && invoiceResult.invoiceUrl) {
-        // Directly navigate to Xendit's secure payment interface (GCash / Maya / Card)
-        window.location.href = invoiceResult.invoiceUrl;
+      // 3. Redirect to verified Xendit payment interface (GCash / Maya / Card)
+      if (result.invoiceUrl) {
+        window.location.href = result.invoiceUrl;
         return;
       }
 
       setIsProcessingOrder(false);
 
       // Fallback notification
-      if (onOrderCompleted) {
-        onOrderCompleted(newOrder);
+      if (onOrderCompleted && result.order) {
+        onOrderCompleted(result.order);
       }
     } catch (err) {
       console.error('Order submission error:', err);
