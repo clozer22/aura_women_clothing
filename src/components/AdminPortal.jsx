@@ -1355,7 +1355,7 @@ export default function AdminPortal({
               title="Store Customizer"
             >
               <Sliders className="w-4 h-4" />
-              <span>Store Customizer</span>
+              <span>Home Page Customizer</span>
             </button>
           </nav>
         </div>
@@ -1802,8 +1802,7 @@ export default function AdminPortal({
             className="max-w-4xl space-y-8"
           >
             <div>
-              <span className="font-script text-[5rem] leading-none text-[#B86B60] block -mb-2">Visual Atelier</span>
-              <h2 className="text-3xl sm:text-5xl font-editorial font-light text-[#2C1E1B] tracking-tight">Frontpage Style Customizer</h2>
+              <h2 className="text-3xl sm:text-5xl font-editorial font-light text-[#2C1E1B] tracking-tight">Home Page Customizer</h2>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
@@ -1811,13 +1810,13 @@ export default function AdminPortal({
               {/* Left Column: Form Fields */}
               <div className="lg:col-span-7 bg-white border border-[#E8DCD7] shadow-sm p-8 rounded-none space-y-6">
 
-                <h3 className="font-editorial text-2xl text-[#2C1E1B] pb-2 border-b border-[#E8DCD7]/60">Customize Hero Banner</h3>
+                <h3 className="font-editorial text-2xl text-[#2C1E1B] pb-2 border-b border-[#E8DCD7]/60">Customize Home Page Banner</h3>
 
                 <div className="space-y-4">
                   {/* Poster Image (Manual Upload Only) */}
                   <div className="space-y-2">
                     <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56] block">
-                      Main Poster
+                      Home Page Banner
                     </label>
                     <div className="flex items-center gap-4">
                       <label className="cursor-pointer bg-[#FAF0EC] hover:bg-[#E8DCD7]/50 border border-[#E8DCD7] text-[#2C1E1B] text-xs font-semibold px-4 py-3 rounded-none flex items-center gap-2 transition-all">
@@ -1989,20 +1988,6 @@ export default function AdminPortal({
                     ) : null}
                     <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#2C1E1B]/10 to-[#2C1E1B]/40" />
 
-                    <div
-                      className="relative z-10 w-[55%] flex flex-col justify-center text-left text-white"
-                      style={{ textShadow: '0 2px 8px rgba(44, 30, 27, 0.8), 0 1px 3px rgba(44, 30, 27, 0.6)' }}
-                    >
-                      <h4 className="font-editorial italic text-xl leading-none text-white block mb-1">
-                        {localHeroConfig.aboutTitle || 'Oh What?'}
-                      </h4>
-                      <span className="text-[7px] uppercase tracking-[0.2em] font-semibold text-[#D99B91] mb-2 block">
-                        {localHeroConfig.aboutSubtitle || 'Sakura Blossom'}
-                      </span>
-                      <p className="text-[7.5px] leading-relaxed font-sans text-white/95 line-clamp-4 whitespace-pre-line">
-                        {localHeroConfig.aboutDescription || 'The Brightening Secret...'}
-                      </p>
-                    </div>
                   </div>
                 </div>
               </div>
