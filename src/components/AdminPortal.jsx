@@ -82,7 +82,65 @@ export default function AdminPortal({
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
   const [selectedProductIds, setSelectedProductIds] = useState([]);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
-  const [bulkSizeChart, setBulkSizeChart] = useState('');
+  const [isUploadingBulkImage, setIsUploadingBulkImage] = useState(false);
+  const [isUploadingBulkSizeChart, setIsUploadingBulkSizeChart] = useState(false);
+
+  const initialBulkProduct = {
+    name: '',
+    category: 'Suits & Coats',
+    mainCategory: 'top',
+    subType: '',
+    statusBadge: '',
+    price: '',
+    qty: '',
+    solds: '',
+    rating: '',
+    sizes: '',
+    colorsRaw: '',
+    image: '',
+    sizeChart: '',
+    shopeeLink: '',
+    descriptionLabel: '',
+    description: '',
+  };
+
+  const initialEnabledBulkFields = {
+    name: false,
+    mainCategory: false,
+    subType: false,
+    statusBadge: false,
+    price: false,
+    qty: false,
+    solds: false,
+    rating: false,
+    sizes: false,
+    colorsRaw: false,
+    image: false,
+    sizeChart: false,
+    shopeeLink: false,
+    descriptionLabel: false,
+    description: false,
+  };
+
+  const [bulkProduct, setBulkProduct] = useState(initialBulkProduct);
+  const [enabledBulkFields, setEnabledBulkFields] = useState(initialEnabledBulkFields);
+
+  const updateBulkField = (fieldKey, value) => {
+    setBulkProduct(prev => ({ ...prev, [fieldKey]: value }));
+    setEnabledBulkFields(prev => ({ ...prev, [fieldKey]: true }));
+  };
+
+  const toggleBulkField = (fieldKey) => {
+    setEnabledBulkFields(prev => ({ ...prev, [fieldKey]: !prev[fieldKey] }));
+  };
+
+  const setAllBulkFieldsToggle = (enable) => {
+    const updated = {};
+    Object.keys(enabledBulkFields).forEach(k => {
+      updated[k] = enable;
+    });
+    setEnabledBulkFields(updated);
+  };
 
   const triggerNotification = (type, title, message) => {
     setNotification({ type, title, message });
@@ -671,20 +729,35 @@ export default function AdminPortal({
     });
   };
 
-  const handleBulkSizeChartUpload = async (e) => {
+  const handleBulkProductImageUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const isVideo = file.type.startsWith('video/') || !!file.name.toLowerCase().match(/\.(mp4|mov|webm)$/i);
     const isImage = file.type.startsWith('image/') || !!file.name.toLowerCase().match(/\.(png|jpg|jpeg|gif|webp)$/i);
-    if (!isImage) {
-      triggerNotification('warning', 'Invalid File Format', 'Only image files (PNG, JPG, JPEG, WEBP) are allowed for size charts.');
+
+    if (!isImage && !isVideo) {
+      triggerNotification('warning', 'Invalid File Format', 'Only image and video files (PNG, JPG, JPEG, WEBP, MP4, MOV, WEBM) are allowed.');
       return;
     }
 
-    setIsUploadingSizeChart(true);
+    setIsUploadingBulkImage(true);
     try {
+      if (isImage) {
+        const dimensions = await validateImageDimensions(file);
+        if (dimensions && !dimensions.isPortrait) {
+          triggerNotification(
+            'error',
+            'Invalid Image Orientation',
+            `Aura collection layouts require portrait photos. Uploaded size: ${dimensions.width}x${dimensions.height}px.`
+          );
+          setIsUploadingBulkImage(false);
+          return;
+        }
+      }
+
       const fileExt = file.name.split('.').pop();
-      const fileName = `sizechart_${Date.now()}.${fileExt}`;
+      const fileName = `product_bulk_${Date.now()}.${fileExt}`;
       const filePath = `products/${fileName}`;
 
       const { data, error: uploadError } = await supabase.storage
@@ -696,19 +769,62 @@ export default function AdminPortal({
           .from('storefront')
           .getPublicUrl(filePath);
 
-        setBulkSizeChart(publicUrl);
+        updateBulkField('image', publicUrl);
+        triggerNotification('success', 'Media Loaded', 'Garment media uploaded for bulk update.');
       } else {
-        console.warn('Storage upload failed, utilizing Base64 fallback:', uploadError?.message);
         const reader = new FileReader();
         reader.onload = (event) => {
-          setBulkSizeChart(event.target.result);
+          updateBulkField('image', event.target.result);
+          triggerNotification('success', 'Media Loaded', 'Garment media loaded as Base64.');
         };
         reader.readAsDataURL(file);
       }
     } catch (err) {
       triggerNotification('error', 'Upload Failed', err.message);
     } finally {
-      setIsUploadingSizeChart(false);
+      setIsUploadingBulkImage(false);
+    }
+  };
+
+  const handleBulkSizeChartUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const isImage = file.type.startsWith('image/') || !!file.name.toLowerCase().match(/\.(png|jpg|jpeg|gif|webp)$/i);
+    if (!isImage) {
+      triggerNotification('warning', 'Invalid File Format', 'Only image files (PNG, JPG, JPEG, WEBP) are allowed for size charts.');
+      return;
+    }
+
+    setIsUploadingBulkSizeChart(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `sizechart_bulk_${Date.now()}.${fileExt}`;
+      const filePath = `products/${fileName}`;
+
+      const { data, error: uploadError } = await supabase.storage
+        .from('storefront')
+        .upload(filePath, file, { cacheControl: '31536000', upsert: false });
+
+      if (!uploadError && data) {
+        const { data: { publicUrl } } = supabase.storage
+          .from('storefront')
+          .getPublicUrl(filePath);
+
+        updateBulkField('sizeChart', publicUrl);
+        triggerNotification('success', 'Size Chart Uploaded', 'Size chart uploaded for bulk update.');
+      } else {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          updateBulkField('sizeChart', event.target.result);
+          triggerNotification('success', 'Size Chart Loaded', 'Size chart loaded as Base64.');
+        };
+        reader.readAsDataURL(file);
+      }
+    } catch (err) {
+      triggerNotification('error', 'Upload Failed', err.message);
+    } finally {
+      setIsUploadingBulkSizeChart(false);
     }
   };
 
@@ -716,30 +832,103 @@ export default function AdminPortal({
     e.preventDefault();
     if (selectedProductIds.length === 0) return;
 
-    if (!bulkSizeChart) {
-      triggerNotification('warning', 'No Image Selected', 'Please upload a size chart image to bulk update.');
+    const enabledKeys = Object.keys(enabledBulkFields).filter(k => enabledBulkFields[k]);
+    if (enabledKeys.length === 0) {
+      triggerNotification('warning', 'No Fields Selected', 'Please check and provide at least one field to update.');
+      return;
+    }
+
+    // Build the dynamic update payload with ONLY the checked fields
+    const updatePayload = {};
+
+    if (enabledBulkFields.name && bulkProduct.name.trim()) {
+      updatePayload.name = bulkProduct.name.trim();
+    }
+    if (enabledBulkFields.mainCategory) {
+      updatePayload.mainCategory = bulkProduct.mainCategory;
+      updatePayload.category = bulkProduct.mainCategory === 'top' ? 'Suits & Coats' : 'Tailored Pants';
+    }
+    if (enabledBulkFields.subType && bulkProduct.subType.trim()) {
+      updatePayload.subType = bulkProduct.subType.trim();
+    }
+    if (enabledBulkFields.statusBadge) {
+      updatePayload.statusBadge = bulkProduct.statusBadge || null;
+    }
+    if (enabledBulkFields.price && bulkProduct.price !== '') {
+      updatePayload.price = Number(bulkProduct.price) || 0;
+    }
+    if (enabledBulkFields.qty && bulkProduct.qty !== '') {
+      updatePayload.qty = Number(bulkProduct.qty) || 0;
+    }
+    if (enabledBulkFields.solds && bulkProduct.solds !== '') {
+      updatePayload.solds = Number(bulkProduct.solds) || 0;
+    }
+    if (enabledBulkFields.rating && bulkProduct.rating !== '') {
+      updatePayload.rating = Number(bulkProduct.rating) || 5.0;
+    }
+    if (enabledBulkFields.sizes && bulkProduct.sizes.trim()) {
+      updatePayload.sizes = bulkProduct.sizes.trim();
+    }
+    if (enabledBulkFields.colorsRaw && bulkProduct.colorsRaw.trim()) {
+      const colorsList = bulkProduct.colorsRaw.split(',')
+        .map(c => c.trim())
+        .filter(Boolean)
+        .map(c => ({
+          name: c,
+          hex: getHexForColorName(c)
+        }));
+      updatePayload.colors = colorsList;
+    }
+    if (enabledBulkFields.image && bulkProduct.image) {
+      updatePayload.image = bulkProduct.image;
+      updatePayload.hoverImage = bulkProduct.image;
+    }
+    if (enabledBulkFields.sizeChart) {
+      updatePayload.sizeChart = bulkProduct.sizeChart || null;
+    }
+    if (enabledBulkFields.shopeeLink && bulkProduct.shopeeLink.trim()) {
+      updatePayload.shopeeLink = bulkProduct.shopeeLink.trim();
+    }
+    if (enabledBulkFields.descriptionLabel && bulkProduct.descriptionLabel.trim()) {
+      updatePayload.descriptionLabel = bulkProduct.descriptionLabel.trim();
+    }
+    if (enabledBulkFields.description && bulkProduct.description.trim()) {
+      updatePayload.description = bulkProduct.description;
+    }
+
+    if (Object.keys(updatePayload).length === 0) {
+      triggerNotification('warning', 'No Changes Specified', 'None of the selected fields contain valid values to apply.');
       return;
     }
 
     try {
       const { error } = await supabase
         .from('products')
-        .update({ sizeChart: bulkSizeChart })
+        .update(updatePayload)
         .in('id', selectedProductIds);
 
       if (error) throw error;
 
-      // Update local state
+      // Update local state for all selected products
       setProductList(prevList =>
         prevList.map(p =>
-          selectedProductIds.includes(p.id) ? { ...p, sizeChart: bulkSizeChart } : p
+          selectedProductIds.includes(p.id) ? { ...p, ...updatePayload } : p
         )
       );
+
+      const count = selectedProductIds.length;
+      const updatedFieldCount = Object.keys(updatePayload).length;
       setSelectedProductIds([]);
-      setBulkSizeChart('');
+      setBulkProduct(initialBulkProduct);
+      setEnabledBulkFields(initialEnabledBulkFields);
       setIsBulkModalOpen(false);
+
       if (onRefreshData) onRefreshData();
-      triggerNotification('success', 'Bulk Update Success', `Successfully updated the size chart for ${selectedProductIds.length} selected garments.`);
+      triggerNotification(
+        'success',
+        'Bulk Update Success',
+        `Successfully updated ${updatedFieldCount} field(s) across ${count} selected garments.`
+      );
     } catch (err) {
       triggerNotification('error', 'Bulk Update Failed', err.message);
     }
@@ -1447,13 +1636,14 @@ export default function AdminPortal({
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => {
-                        setBulkSizeChart('');
+                        setBulkProduct(initialBulkProduct);
+                        setEnabledBulkFields(initialEnabledBulkFields);
                         setIsBulkModalOpen(true);
                       }}
                       className="bg-[#2C1E1B] hover:bg-[#4A3E3B] text-white py-2 px-4 rounded-none text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 transition-all shadow-sm focus:outline-none cursor-pointer"
                     >
                       <Edit className="w-3.5 h-3.5" />
-                      <span>Bulk Update</span>
+                      <span>Bulk Update ({selectedProductIds.length})</span>
                     </button>
                     <button
                       onClick={handleDeleteSelected}
@@ -2117,10 +2307,10 @@ export default function AdminPortal({
         )}
       </AnimatePresence>
 
-      {/* VIEW MODAL: BULK UPDATE */}
+      {/* VIEW MODAL: COMPREHENSIVE BULK PRODUCT UPDATE */}
       <AnimatePresence>
         {isBulkModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -2133,7 +2323,7 @@ export default function AdminPortal({
               initial={{ opacity: 0, scale: 0.95, y: 15 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 15 }}
-              className="relative z-10 w-full max-w-md bg-white rounded-none shadow-2xl border border-[#E8DCD7] p-6 sm:p-8 flex flex-col max-h-[90vh] md:max-h-[85vh] select-none"
+              className="relative z-10 w-full max-w-3xl bg-white rounded-none shadow-2xl border border-[#E8DCD7] p-6 sm:p-8 flex flex-col max-h-[92vh] select-none"
             >
               <button
                 onClick={() => setIsBulkModalOpen(false)}
@@ -2143,97 +2333,640 @@ export default function AdminPortal({
                 <X className="w-5 h-5" />
               </button>
 
-              <div className="mb-6 flex-shrink-0">
-                <h3 className="font-editorial text-2xl sm:text-3xl text-[#2C1E1B] font-normal leading-tight">
-                  Bulk Update Size Chart
-                </h3>
-                <p className="text-[10px] text-[#705B56] mt-1.5 leading-relaxed font-semibold">
-                  Upload a size chart image below. It will be applied to the {selectedProductIds.length} selected garments.
-                </p>
+              {/* Header */}
+              <div className="mb-4 flex-shrink-0">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="font-editorial text-2xl sm:text-3xl text-[#2C1E1B] font-normal leading-tight">
+                    Bulk Update
+                  </h3>
+                  <span className="text-xs font-semibold px-2.5 py-1 bg-[#2C1E1B] text-white">
+                    {selectedProductIds.length} {selectedProductIds.length === 1 ? 'Item' : 'Items'} Selected
+                  </span>
+                </div>
+                <div className="bg-[#FAF5F2] border border-[#E8DCD7] p-3 mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px] text-[#705B56]">
+                  <span>
+                    Check the box for each field you wish to overwrite. <strong className="text-[#2C1E1B]">Unchecked fields remain completely untouched</strong> for each garment.
+                  </span>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setAllBulkFieldsToggle(true)}
+                      className="text-[10px] uppercase font-bold tracking-wider text-[#B86B60] hover:underline cursor-pointer"
+                    >
+                      Select All
+                    </button>
+                    <span className="text-[#E8DCD7]">|</span>
+                    <button
+                      type="button"
+                      onClick={() => setAllBulkFieldsToggle(false)}
+                      className="text-[10px] uppercase font-bold tracking-wider text-[#705B56] hover:underline cursor-pointer"
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                </div>
               </div>
 
-              <form onSubmit={handleBulkUpdate} className="flex-1 overflow-y-auto pr-1 space-y-5 scrollbar-thin">
-                {/* Size Chart Image Uploader */}
-                <div className="space-y-2">
-                  <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
-                    Select Size Chart Image
-                  </label>
-                  <input
-                    type="file"
-                    id="bulk-sizechart-file"
-                    accept="image/*"
-                    onChange={handleBulkSizeChartUpload}
-                    className="hidden"
-                    disabled={isUploadingSizeChart}
-                  />
+              {/* Form Body */}
+              <form onSubmit={handleBulkUpdate} className="flex-1 overflow-y-auto pr-2 space-y-6 scrollbar-thin">
 
-                  {isUploadingSizeChart ? (
-                    <div className="h-28 border border-dashed border-[#E8DCD7] bg-[#FAF0EC] flex flex-col items-center justify-center gap-2">
-                      <div className="w-5 h-5 border-2 border-t-transparent border-[#B86B60] rounded-full animate-spin" />
-                      <span className="text-[9px] uppercase tracking-wider font-bold text-[#B86B60]">Uploading Size Chart...</span>
-                    </div>
-                  ) : bulkSizeChart ? (
-                    <div className="flex items-center gap-4 p-3 bg-[#FAF0EC] border border-[#E8DCD7] rounded-none">
-                      <img
-                        src={bulkSizeChart}
-                        alt="Bulk Size Chart Preview"
-                        className="w-20 h-16 object-contain border border-[#E8DCD7] bg-white flex-shrink-0"
-                      />
-                      <div className="space-y-1.5">
-                        <span className="text-[9px] uppercase tracking-widest font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-none block w-max">
-                          Image Loaded
+                {/* 1. Status & Classification */}
+                <div className="border border-[#E8DCD7] p-4 bg-[#FAF5F2]/40 space-y-4">
+                  <span className="text-[10px] uppercase tracking-wider font-bold text-[#2C1E1B] block border-b border-[#E8DCD7] pb-1">
+                    1. Status & Classification
+                  </span>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Status Badge */}
+                    <div className="space-y-1.5">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={enabledBulkFields.statusBadge}
+                          onChange={() => toggleBulkField('statusBadge')}
+                          className="w-4 h-4 rounded-none accent-[#2C1E1B] cursor-pointer"
+                        />
+                        <span className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
+                          Garment Status
                         </span>
-                        <div className="flex items-center gap-2">
-                          <label
-                            htmlFor="bulk-sizechart-file"
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-gray-50 border border-[#E8DCD7] text-[10px] font-bold uppercase tracking-wider text-[#2C1E1B] cursor-pointer transition-colors"
-                          >
-                            <Upload className="w-3 h-3 text-[#B86B60]" />
-                            Replace Image
-                          </label>
-                          <button
-                            type="button"
-                            onClick={() => setBulkSizeChart('')}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-red-50 border border-red-200 text-[10px] font-bold uppercase tracking-wider text-red-600 transition-colors"
-                          >
-                            Remove
-                          </button>
+                      </label>
+                      <select
+                        disabled={!enabledBulkFields.statusBadge}
+                        value={bulkProduct.statusBadge}
+                        onChange={(e) => updateBulkField('statusBadge', e.target.value)}
+                        className={`w-full px-3 py-2.5 text-xs border rounded-none focus:outline-none ${enabledBulkFields.statusBadge
+                          ? 'bg-white border-[#2C1E1B] text-[#2C1E1B]'
+                          : 'bg-gray-100 border-[#E8DCD7] text-gray-400 opacity-60'
+                          }`}
+                      >
+                        <option value="">IN STOCK (Normal)</option>
+                        <option value="SOLD OUT">SOLD OUT</option>
+                        <option value="PRE-ORDER">PRE-ORDER</option>
+                        <option value="NEW ARRIVAL">NEW ARRIVAL</option>
+                        <option value="BEST SELLER">BEST SELLER</option>
+                        <option value="ARCHIVE">ARCHIVE (Hidden from Storefront)</option>
+                      </select>
+                    </div>
+
+                    {/* Category Group */}
+                    <div className="space-y-1.5">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={enabledBulkFields.mainCategory}
+                          onChange={() => toggleBulkField('mainCategory')}
+                          className="w-4 h-4 rounded-none accent-[#2C1E1B] cursor-pointer"
+                        />
+                        <span className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
+                          Category Group
+                        </span>
+                      </label>
+                      <select
+                        disabled={!enabledBulkFields.mainCategory}
+                        value={bulkProduct.mainCategory}
+                        onChange={(e) => updateBulkField('mainCategory', e.target.value)}
+                        className={`w-full px-3 py-2.5 text-xs border rounded-none focus:outline-none ${enabledBulkFields.mainCategory
+                          ? 'bg-white border-[#2C1E1B] text-[#2C1E1B]'
+                          : 'bg-gray-100 border-[#E8DCD7] text-gray-400 opacity-60'
+                          }`}
+                      >
+                        <option value="top">Tops (Suits & Coats)</option>
+                        <option value="bottom">Bottoms (Tailored Pants)</option>
+                      </select>
+                    </div>
+
+                    {/* Subtype / Section */}
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={enabledBulkFields.subType}
+                          onChange={() => toggleBulkField('subType')}
+                          className="w-4 h-4 rounded-none accent-[#2C1E1B] cursor-pointer"
+                        />
+                        <span className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
+                          Subtype / Section Name
+                        </span>
+                      </label>
+                      <input
+                        type="text"
+                        disabled={!enabledBulkFields.subType}
+                        value={bulkProduct.subType}
+                        onChange={(e) => updateBulkField('subType', e.target.value)}
+                        placeholder="e.g. Blazers & Jackets, Silk Tops"
+                        className={`w-full px-3 py-2.5 text-xs border rounded-none focus:outline-none ${enabledBulkFields.subType
+                          ? 'bg-white border-[#2C1E1B] text-[#2C1E1B]'
+                          : 'bg-gray-100 border-[#E8DCD7] text-gray-400 opacity-60'
+                          }`}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Pricing & Stock Inventory */}
+                <div className="border border-[#E8DCD7] p-4 bg-[#FAF5F2]/40 space-y-4">
+                  <span className="text-[10px] uppercase tracking-wider font-bold text-[#2C1E1B] block border-b border-[#E8DCD7] pb-1">
+                    2. Pricing & Stock Inventory
+                  </span>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    {/* Price */}
+                    <div className="space-y-1.5">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={enabledBulkFields.price}
+                          onChange={() => toggleBulkField('price')}
+                          className="w-4 h-4 rounded-none accent-[#2C1E1B] cursor-pointer"
+                        />
+                        <span className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
+                          Price (₱)
+                        </span>
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        disabled={!enabledBulkFields.price}
+                        value={bulkProduct.price}
+                        onChange={(e) => updateBulkField('price', e.target.value)}
+                        placeholder="e.g. 599"
+                        className={`w-full px-3 py-2.5 text-xs border rounded-none focus:outline-none ${enabledBulkFields.price
+                          ? 'bg-white border-[#2C1E1B] text-[#2C1E1B]'
+                          : 'bg-gray-100 border-[#E8DCD7] text-gray-400 opacity-60'
+                          }`}
+                      />
+                    </div>
+
+                    {/* Quantity */}
+                    <div className="space-y-1.5">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={enabledBulkFields.qty}
+                          onChange={() => toggleBulkField('qty')}
+                          className="w-4 h-4 rounded-none accent-[#2C1E1B] cursor-pointer"
+                        />
+                        <span className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
+                          Stock Qty
+                        </span>
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        disabled={!enabledBulkFields.qty}
+                        value={bulkProduct.qty}
+                        onChange={(e) => updateBulkField('qty', e.target.value)}
+                        placeholder="e.g. 25"
+                        className={`w-full px-3 py-2.5 text-xs border rounded-none focus:outline-none ${enabledBulkFields.qty
+                          ? 'bg-white border-[#2C1E1B] text-[#2C1E1B]'
+                          : 'bg-gray-100 border-[#E8DCD7] text-gray-400 opacity-60'
+                          }`}
+                      />
+                    </div>
+
+                    {/* Solds */}
+                    <div className="space-y-1.5">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={enabledBulkFields.solds}
+                          onChange={() => toggleBulkField('solds')}
+                          className="w-4 h-4 rounded-none accent-[#2C1E1B] cursor-pointer"
+                        />
+                        <span className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
+                          Solds Count
+                        </span>
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        disabled={!enabledBulkFields.solds}
+                        value={bulkProduct.solds}
+                        onChange={(e) => updateBulkField('solds', e.target.value)}
+                        placeholder="e.g. 50"
+                        className={`w-full px-3 py-2.5 text-xs border rounded-none focus:outline-none ${enabledBulkFields.solds
+                          ? 'bg-white border-[#2C1E1B] text-[#2C1E1B]'
+                          : 'bg-gray-100 border-[#E8DCD7] text-gray-400 opacity-60'
+                          }`}
+                      />
+                    </div>
+
+                    {/* Rating */}
+                    <div className="space-y-1.5">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={enabledBulkFields.rating}
+                          onChange={() => toggleBulkField('rating')}
+                          className="w-4 h-4 rounded-none accent-[#2C1E1B] cursor-pointer"
+                        />
+                        <span className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
+                          Rating
+                        </span>
+                      </label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="1"
+                        max="5"
+                        disabled={!enabledBulkFields.rating}
+                        value={bulkProduct.rating}
+                        onChange={(e) => updateBulkField('rating', e.target.value)}
+                        placeholder="e.g. 4.9"
+                        className={`w-full px-3 py-2.5 text-xs border rounded-none focus:outline-none ${enabledBulkFields.rating
+                          ? 'bg-white border-[#2C1E1B] text-[#2C1E1B]'
+                          : 'bg-gray-100 border-[#E8DCD7] text-gray-400 opacity-60'
+                          }`}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Sizes & Color Palette */}
+                <div className="border border-[#E8DCD7] p-4 bg-[#FAF5F2]/40 space-y-4">
+                  <span className="text-[10px] uppercase tracking-wider font-bold text-[#2C1E1B] block border-b border-[#E8DCD7] pb-1">
+                    3. Sizes & Color Palette
+                  </span>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Available Sizes */}
+                    <div className="space-y-1.5">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={enabledBulkFields.sizes}
+                          onChange={() => toggleBulkField('sizes')}
+                          className="w-4 h-4 rounded-none accent-[#2C1E1B] cursor-pointer"
+                        />
+                        <span className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
+                          Available Sizes (Comma Separated)
+                        </span>
+                      </label>
+                      <input
+                        type="text"
+                        disabled={!enabledBulkFields.sizes}
+                        value={bulkProduct.sizes}
+                        onChange={(e) => updateBulkField('sizes', e.target.value)}
+                        placeholder="e.g. XXS-XS, S-M, L, XL"
+                        className={`w-full px-3 py-2.5 text-xs border rounded-none focus:outline-none ${enabledBulkFields.sizes
+                          ? 'bg-white border-[#2C1E1B] text-[#2C1E1B]'
+                          : 'bg-gray-100 border-[#E8DCD7] text-gray-400 opacity-60'
+                          }`}
+                      />
+                    </div>
+
+                    {/* Color Palette */}
+                    <div className="space-y-1.5">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={enabledBulkFields.colorsRaw}
+                          onChange={() => toggleBulkField('colorsRaw')}
+                          className="w-4 h-4 rounded-none accent-[#2C1E1B] cursor-pointer"
+                        />
+                        <span className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
+                          Colors (e.g. Rose, Beige, Espresso)
+                        </span>
+                      </label>
+                      <input
+                        type="text"
+                        disabled={!enabledBulkFields.colorsRaw}
+                        value={bulkProduct.colorsRaw}
+                        onChange={(e) => updateBulkField('colorsRaw', e.target.value)}
+                        placeholder="e.g. Rose, Beige, Espresso, Black"
+                        className={`w-full px-3 py-2.5 text-xs border rounded-none focus:outline-none ${enabledBulkFields.colorsRaw
+                          ? 'bg-white border-[#2C1E1B] text-[#2C1E1B]'
+                          : 'bg-gray-100 border-[#E8DCD7] text-gray-400 opacity-60'
+                          }`}
+                      />
+                      {/* Live Color Swatches */}
+                      {enabledBulkFields.colorsRaw && bulkProduct.colorsRaw && (
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {bulkProduct.colorsRaw.split(',').map(c => c.trim()).filter(Boolean).map((c, i) => (
+                            <span
+                              key={i}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-[#E8DCD7] text-[9px] text-[#2C1E1B]"
+                            >
+                              <span
+                                className="w-2.5 h-2.5 rounded-full border border-black/10 flex-shrink-0"
+                                style={{ backgroundColor: getHexForColorName(c) }}
+                              />
+                              {c}
+                            </span>
+                          ))}
                         </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. Media & Size Chart Imagery */}
+                <div className="border border-[#E8DCD7] p-4 bg-[#FAF5F2]/40 space-y-4">
+                  <span className="text-[10px] uppercase tracking-wider font-bold text-[#2C1E1B] block border-b border-[#E8DCD7] pb-1">
+                    4. Garment Imagery & Sizing Chart
+                  </span>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Bulk Product Media */}
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={enabledBulkFields.image}
+                          onChange={() => toggleBulkField('image')}
+                          className="w-4 h-4 rounded-none accent-[#2C1E1B] cursor-pointer"
+                        />
+                        <span className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
+                          Garment Photo / Video
+                        </span>
+                      </label>
+                      <input
+                        type="file"
+                        id="bulk-product-media-file"
+                        accept="image/*,video/*"
+                        onChange={handleBulkProductImageUpload}
+                        className="hidden"
+                        disabled={!enabledBulkFields.image || isUploadingBulkImage}
+                      />
+
+                      {isUploadingBulkImage ? (
+                        <div className="h-24 border border-dashed border-[#E8DCD7] bg-[#FAF0EC] flex flex-col items-center justify-center gap-1.5">
+                          <div className="w-4 h-4 border-2 border-t-transparent border-[#B86B60] rounded-full animate-spin" />
+                          <span className="text-[9px] uppercase tracking-wider font-bold text-[#B86B60]">Uploading Media...</span>
+                        </div>
+                      ) : bulkProduct.image ? (
+                        <div className="flex items-center gap-3 p-2.5 bg-white border border-[#E8DCD7]">
+                          {isVideoUrl(bulkProduct.image) ? (
+                            <video
+                              src={bulkProduct.image}
+                              muted
+                              playsInline
+                              className="w-14 h-16 object-cover bg-gray-100 flex-shrink-0"
+                            />
+                          ) : (
+                            <img
+                              src={bulkProduct.image}
+                              alt="Bulk Preview"
+                              className="w-14 h-16 object-cover bg-gray-100 flex-shrink-0"
+                            />
+                          )}
+                          <div className="space-y-1">
+                            <span className="text-[8px] uppercase tracking-widest font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 block w-max">
+                              Loaded
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <label
+                                htmlFor="bulk-product-media-file"
+                                className="px-2 py-1 bg-white hover:bg-gray-50 border border-[#E8DCD7] text-[9px] font-bold uppercase tracking-wider text-[#2C1E1B] cursor-pointer"
+                              >
+                                Replace
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => updateBulkField('image', '')}
+                                className="px-2 py-1 bg-white hover:bg-red-50 border border-red-200 text-[9px] font-bold uppercase tracking-wider text-red-600"
+                              >
+                                Clear
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <label
+                          htmlFor="bulk-product-media-file"
+                          className={`flex flex-col items-center justify-center h-24 border border-dashed border-[#E8DCD7] text-center p-3 gap-1 cursor-pointer transition-colors ${enabledBulkFields.image
+                            ? 'bg-white hover:bg-[#FAF0EC]/60 cursor-pointer'
+                            : 'bg-gray-100 opacity-50 cursor-not-allowed'
+                            }`}
+                        >
+                          <Upload className="w-4 h-4 text-[#B86B60]" />
+                          <span className="text-[9px] uppercase tracking-wider font-bold text-[#705B56]">Upload Garment Media</span>
+                          <span className="text-[8px] text-[#A38E88]">Portrait photo or MP4</span>
+                        </label>
+                      )}
+                    </div>
+
+                    {/* Bulk Size Chart Image */}
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={enabledBulkFields.sizeChart}
+                          onChange={() => toggleBulkField('sizeChart')}
+                          className="w-4 h-4 rounded-none accent-[#2C1E1B] cursor-pointer"
+                        />
+                        <span className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
+                          Size Chart Image
+                        </span>
+                      </label>
+                      <input
+                        type="file"
+                        id="bulk-sizechart-file"
+                        accept="image/*"
+                        onChange={handleBulkSizeChartUpload}
+                        className="hidden"
+                        disabled={!enabledBulkFields.sizeChart || isUploadingBulkSizeChart}
+                      />
+
+                      {isUploadingBulkSizeChart ? (
+                        <div className="h-24 border border-dashed border-[#E8DCD7] bg-[#FAF0EC] flex flex-col items-center justify-center gap-1.5">
+                          <div className="w-4 h-4 border-2 border-t-transparent border-[#B86B60] rounded-full animate-spin" />
+                          <span className="text-[9px] uppercase tracking-wider font-bold text-[#B86B60]">Uploading Size Chart...</span>
+                        </div>
+                      ) : bulkProduct.sizeChart ? (
+                        <div className="flex items-center gap-3 p-2.5 bg-white border border-[#E8DCD7]">
+                          <img
+                            src={bulkProduct.sizeChart}
+                            alt="Bulk Size Chart"
+                            className="w-14 h-16 object-contain bg-white border border-[#E8DCD7] flex-shrink-0"
+                          />
+                          <div className="space-y-1">
+                            <span className="text-[8px] uppercase tracking-widest font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 block w-max">
+                              Loaded
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <label
+                                htmlFor="bulk-sizechart-file"
+                                className="px-2 py-1 bg-white hover:bg-gray-50 border border-[#E8DCD7] text-[9px] font-bold uppercase tracking-wider text-[#2C1E1B] cursor-pointer"
+                              >
+                                Replace
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => updateBulkField('sizeChart', '')}
+                                className="px-2 py-1 bg-white hover:bg-red-50 border border-red-200 text-[9px] font-bold uppercase tracking-wider text-red-600"
+                              >
+                                Clear
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <label
+                          htmlFor="bulk-sizechart-file"
+                          className={`flex flex-col items-center justify-center h-24 border border-dashed border-[#E8DCD7] text-center p-3 gap-1 cursor-pointer transition-colors ${enabledBulkFields.sizeChart
+                            ? 'bg-white hover:bg-[#FAF0EC]/60 cursor-pointer'
+                            : 'bg-gray-100 opacity-50 cursor-not-allowed'
+                            }`}
+                        >
+                          <Upload className="w-4 h-4 text-[#B86B60]" />
+                          <span className="text-[9px] uppercase tracking-wider font-bold text-[#705B56]">Upload Size Chart</span>
+                          <span className="text-[8px] text-[#A38E88]">PNG, JPG, WEBP</span>
+                        </label>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 5. External Links & Story Descriptions */}
+                <div className="border border-[#E8DCD7] p-4 bg-[#FAF5F2]/40 space-y-4">
+                  <span className="text-[10px] uppercase tracking-wider font-bold text-[#2C1E1B] block border-b border-[#E8DCD7] pb-1">
+                    5. External Links & Descriptions
+                  </span>
+
+                  <div className="space-y-4">
+                    {/* Shopee Link */}
+                    <div className="space-y-1.5">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={enabledBulkFields.shopeeLink}
+                          onChange={() => toggleBulkField('shopeeLink')}
+                          className="w-4 h-4 rounded-none accent-[#2C1E1B] cursor-pointer"
+                        />
+                        <span className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
+                          Shopee Product Link
+                        </span>
+                      </label>
+                      <input
+                        type="url"
+                        disabled={!enabledBulkFields.shopeeLink}
+                        value={bulkProduct.shopeeLink}
+                        onChange={(e) => updateBulkField('shopeeLink', e.target.value)}
+                        placeholder="https://shopee.ph/..."
+                        className={`w-full px-3 py-2.5 text-xs border rounded-none focus:outline-none ${enabledBulkFields.shopeeLink
+                          ? 'bg-white border-[#2C1E1B] text-[#2C1E1B]'
+                          : 'bg-gray-100 border-[#E8DCD7] text-gray-400 opacity-60'
+                          }`}
+                      />
+                    </div>
+
+                    {/* Description Heading */}
+                    <div className="space-y-1.5">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={enabledBulkFields.descriptionLabel}
+                          onChange={() => toggleBulkField('descriptionLabel')}
+                          className="w-4 h-4 rounded-none accent-[#2C1E1B] cursor-pointer"
+                        />
+                        <span className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
+                          Description Section Heading
+                        </span>
+                      </label>
+                      <input
+                        type="text"
+                        disabled={!enabledBulkFields.descriptionLabel}
+                        value={bulkProduct.descriptionLabel}
+                        onChange={(e) => updateBulkField('descriptionLabel', e.target.value)}
+                        placeholder="e.g. Craftsmanship, Garment Story"
+                        className={`w-full px-3 py-2.5 text-xs border rounded-none focus:outline-none ${enabledBulkFields.descriptionLabel
+                          ? 'bg-white border-[#2C1E1B] text-[#2C1E1B]'
+                          : 'bg-gray-100 border-[#E8DCD7] text-gray-400 opacity-60'
+                          }`}
+                      />
+                    </div>
+
+                    {/* Product Description */}
+                    <div className="space-y-1.5">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={enabledBulkFields.description}
+                          onChange={() => toggleBulkField('description')}
+                          className="w-4 h-4 rounded-none accent-[#2C1E1B] cursor-pointer"
+                        />
+                        <span className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
+                          Garment Story / Tailoring Details
+                        </span>
+                      </label>
+                      <div className={enabledBulkFields.description ? '' : 'opacity-50 pointer-events-none'}>
+                        <RichTextEditor
+                          value={bulkProduct.description}
+                          onChange={(html) => updateBulkField('description', html)}
+                          placeholder="Batch description to apply across selected garments..."
+                        />
                       </div>
                     </div>
-                  ) : (
-                    <label
-                      htmlFor="bulk-sizechart-file"
-                      className="flex flex-col items-center justify-center h-28 border border-dashed border-[#E8DCD7] bg-[#FAF0EC] hover:bg-[#FAF0EC]/60 transition-colors cursor-pointer text-center p-4 gap-1.5 rounded-none"
-                    >
-                      <Upload className="w-5 h-5 text-[#B86B60]" />
-                      <span className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Upload Size Chart Image</span>
-                      <span className="text-[9px] text-[#A38E88] font-medium leading-normal">
-                        Supports PNG, JPG, WEBP.
-                      </span>
-                    </label>
-                  )}
+
+                    {/* Optional Name (with caution note) */}
+                    <div className="space-y-1.5 pt-2 border-t border-[#E8DCD7]">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={enabledBulkFields.name}
+                          onChange={() => toggleBulkField('name')}
+                          className="w-4 h-4 rounded-none accent-[#2C1E1B] cursor-pointer"
+                        />
+                        <span className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
+                          Product Name <span className="text-amber-700 font-normal lowercase">(renames all selected items)</span>
+                        </span>
+                      </label>
+                      <input
+                        type="text"
+                        disabled={!enabledBulkFields.name}
+                        value={bulkProduct.name}
+                        onChange={(e) => updateBulkField('name', e.target.value)}
+                        placeholder="Only enter if all selected garments should share the same title"
+                        className={`w-full px-3 py-2.5 text-xs border rounded-none focus:outline-none ${enabledBulkFields.name
+                          ? 'bg-white border-[#2C1E1B] text-[#2C1E1B]'
+                          : 'bg-gray-100 border-[#E8DCD7] text-gray-400 opacity-60'
+                          }`}
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 {/* Action Buttons */}
-                <div className="pt-4 flex items-center justify-end gap-3 border-t border-[#E8DCD7] mt-6 flex-shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setBulkSizeChart('');
-                      setIsBulkModalOpen(false);
-                    }}
-                    className="py-2.5 px-5 border border-[#E8DCD7] hover:bg-[#FAF0EC] text-[#705B56] text-xs font-semibold uppercase tracking-wider rounded-none transition-all cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={!bulkSizeChart || isUploadingSizeChart}
-                    className="py-2.5 px-6 bg-[#2C1E1B] hover:bg-[#B86B60] text-white text-xs font-semibold uppercase tracking-wider rounded-none shadow-md transition-all cursor-pointer disabled:opacity-40"
-                  >
-                    Apply Bulk Size Chart
-                  </button>
+                <div className="pt-4 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-[#E8DCD7] mt-6 flex-shrink-0 bg-white sticky bottom-0">
+                  <span className="text-xs text-[#705B56] font-medium">
+                    {Object.values(enabledBulkFields).filter(Boolean).length === 0 ? (
+                      <span className="text-amber-800">No fields selected yet.</span>
+                    ) : (
+                      <span>
+                        <strong className="text-[#2C1E1B]">
+                          {Object.values(enabledBulkFields).filter(Boolean).length}
+                        </strong>{' '}
+                        field(s) queued to update across{' '}
+                        <strong className="text-[#B86B60]">{selectedProductIds.length}</strong> garments
+                      </span>
+                    )}
+                  </span>
+
+                  <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBulkProduct(initialBulkProduct);
+                        setEnabledBulkFields(initialEnabledBulkFields);
+                        setIsBulkModalOpen(false);
+                      }}
+                      className="py-2.5 px-5 border border-[#E8DCD7] hover:bg-[#FAF0EC] text-[#705B56] text-xs font-semibold uppercase tracking-wider rounded-none transition-all cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={
+                        Object.values(enabledBulkFields).filter(Boolean).length === 0 ||
+                        isUploadingBulkImage ||
+                        isUploadingBulkSizeChart
+                      }
+                      className="py-2.5 px-6 bg-[#2C1E1B] hover:bg-[#B86B60] text-white text-xs font-semibold uppercase tracking-wider rounded-none shadow-md transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Apply Bulk Changes
+                    </button>
+                  </div>
                 </div>
               </form>
             </motion.div>
