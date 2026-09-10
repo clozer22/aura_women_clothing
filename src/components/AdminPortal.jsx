@@ -519,8 +519,8 @@ export default function AdminPortal({
 
   // Filter products based on search & category
   const filteredProducts = productList.filter((p) => {
-    const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.subType.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = (p.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (p.subType || '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = categoryFilter === 'all' || p.mainCategory === categoryFilter;
     return matchesSearch && matchesCategory;
   });
@@ -545,7 +545,18 @@ export default function AdminPortal({
 
   const handleSaveProduct = async (e) => {
     e.preventDefault();
-    const colorsList = newProduct.colorsRaw.split(',')
+
+    if (!newProduct.name?.trim()) {
+      triggerNotification('warning', 'Missing Product Name', 'Please enter a name for the product.');
+      return;
+    }
+
+    if (!newProduct.image) {
+      triggerNotification('warning', 'Missing Product Media', 'Please upload a photo or video for the product.');
+      return;
+    }
+
+    const colorsList = (newProduct.colorsRaw || '').split(',')
       .map(c => c.trim())
       .filter(Boolean)
       .map(c => ({
@@ -553,24 +564,34 @@ export default function AdminPortal({
         hex: getHexForColorName(c)
       }));
 
+    const finalMainCategory = newProduct.mainCategory || 'top';
+    const finalSubType = newProduct.subType?.trim() || (finalMainCategory === 'top' ? 'Tops' : 'Bottoms');
+    const finalPrice = newProduct.price !== '' && !isNaN(Number(newProduct.price)) ? Number(newProduct.price) : 0;
+    const finalQty = newProduct.qty !== '' && !isNaN(Number(newProduct.qty)) ? Number(newProduct.qty) : 0;
+    const finalSolds = newProduct.solds !== '' && !isNaN(Number(newProduct.solds)) ? Number(newProduct.solds) : 0;
+    const finalRating = newProduct.rating !== '' && !isNaN(Number(newProduct.rating)) ? Number(newProduct.rating) : 5.0;
+    const finalSizes = newProduct.sizes?.trim() || 'Free Size';
+    const finalShopeeLink = newProduct.shopeeLink?.trim() || 'https://shopee.ph';
+    const finalDescriptionLabel = newProduct.descriptionLabel?.trim() || 'Description';
+
     const productObj = {
-      name: newProduct.name,
+      name: newProduct.name.trim(),
       subtitle: 'Atelier Runway Collection',
-      category: newProduct.mainCategory === 'top' ? 'Suits & Coats' : 'Tailored Pants',
-      mainCategory: newProduct.mainCategory,
-      subType: newProduct.subType,
-      price: Number(newProduct.price) || 0,
-      qty: Number(newProduct.qty) || 0,
-      colors: colorsList,
-      sizes: newProduct.sizes,
+      category: finalMainCategory === 'top' ? 'Suits & Coats' : 'Tailored Pants',
+      mainCategory: finalMainCategory,
+      subType: finalSubType,
+      price: finalPrice,
+      qty: finalQty,
+      colors: colorsList.length > 0 ? colorsList : [{ name: 'Default', hex: '#E6D7CD' }],
+      sizes: finalSizes,
       image: newProduct.image,
       hoverImage: newProduct.hoverImage || newProduct.image, // fall back to light-mode if empty
       sizeChart: newProduct.sizeChart || null,
-      descriptionLabel: newProduct.descriptionLabel || 'Description',
-      description: newProduct.description,
-      shopeeLink: newProduct.shopeeLink || 'https://shopee.ph',
-      rating: Number(newProduct.rating) || 5.0,
-      solds: Number(newProduct.solds) || 0,
+      descriptionLabel: finalDescriptionLabel,
+      description: newProduct.description || '',
+      shopeeLink: finalShopeeLink,
+      rating: finalRating,
+      solds: finalSolds,
       statusBadge: newProduct.statusBadge || null
     };
 
@@ -2037,7 +2058,9 @@ export default function AdminPortal({
                 <div className="grid grid-cols-2 gap-4">
                   {/* Name */}
                   <div className="space-y-1 col-span-2">
-                    <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Product Name</label>
+                    <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
+                      Product Name <span className="text-[#B86B60]">*</span>
+                    </label>
                     <input
                       type="text"
                       required
@@ -2052,7 +2075,9 @@ export default function AdminPortal({
                 <div className="grid grid-cols-2 gap-4">
                   {/* Category */}
                   <div className="space-y-1">
-                    <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Category Group</label>
+                    <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
+                      Category Group <span className="text-[#A38E88] font-normal lowercase">(optional)</span>
+                    </label>
                     <select
                       value={newProduct.mainCategory}
                       onChange={(e) => setNewProduct({ ...newProduct, mainCategory: e.target.value })}
@@ -2065,10 +2090,11 @@ export default function AdminPortal({
 
                   {/* Subtype */}
                   <div className="space-y-1">
-                    <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Subtype / Section</label>
+                    <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
+                      Subtype / Section <span className="text-[#A38E88] font-normal lowercase">(optional)</span>
+                    </label>
                     <input
                       type="text"
-                      required
                       value={newProduct.subType}
                       onChange={(e) => setNewProduct({ ...newProduct, subType: e.target.value })}
                       className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B]"
@@ -2080,7 +2106,9 @@ export default function AdminPortal({
                 <div className="grid grid-cols-2 gap-4">
                   {/* Status Dropdown */}
                   <div className="space-y-1 col-span-2">
-                    <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Garment Status</label>
+                    <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
+                      Garment Status <span className="text-[#A38E88] font-normal lowercase">(optional)</span>
+                    </label>
                     <select
                       value={newProduct.statusBadge}
                       onChange={(e) => setNewProduct({ ...newProduct, statusBadge: e.target.value })}
@@ -2099,73 +2127,96 @@ export default function AdminPortal({
                 <div className="grid grid-cols-3 gap-4">
                   {/* Price */}
                   <div className="space-y-1">
-                    <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Price (₱)</label>
+                    <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
+                      Price (₱) <span className="text-[#A38E88] font-normal lowercase">(optional)</span>
+                    </label>
                     <input
                       type="number"
-                      required
                       value={newProduct.price}
                       onChange={(e) => setNewProduct({ ...newProduct, price: e.target.value })}
                       className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B]"
+                      placeholder="0"
                     />
                   </div>
 
                   {/* Quantity */}
                   <div className="space-y-1">
-                    <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Quantity</label>
+                    <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
+                      Quantity <span className="text-[#A38E88] font-normal lowercase">(optional)</span>
+                    </label>
                     <input
                       type="number"
-                      required
                       value={newProduct.qty}
                       onChange={(e) => setNewProduct({ ...newProduct, qty: e.target.value })}
                       className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B]"
+                      placeholder="0"
                     />
                   </div>
 
                   {/* Solds (Fake) */}
                   <div className="space-y-1">
-                    <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Solds</label>
+                    <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
+                      Solds <span className="text-[#A38E88] font-normal lowercase">(optional)</span>
+                    </label>
                     <input
                       type="number"
-                      required
                       value={newProduct.solds}
                       onChange={(e) => setNewProduct({ ...newProduct, solds: e.target.value })}
                       className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B]"
+                      placeholder="0"
                     />
                   </div>
                 </div>
 
                 {/* Ratings (Fake) */}
                 <div className="space-y-1">
-                  <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Rating (e.g. 4.9)</label>
+                  <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
+                    Rating (e.g. 4.9) <span className="text-[#A38E88] font-normal lowercase">(optional)</span>
+                  </label>
                   <input
                     type="number"
                     step="0.1"
                     min="1"
                     max="5"
-                    required
                     value={newProduct.rating}
                     onChange={(e) => setNewProduct({ ...newProduct, rating: e.target.value })}
                     className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B]"
+                    placeholder="5.0"
                   />
                 </div>
 
-                {/* Sizes Range Input */}
-                <div className="space-y-1">
-                  <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Available Sizes (e.g. XXS-XS, S-M, L, XL)</label>
-                  <input
-                    type="text"
-                    required
-                    value={newProduct.sizes}
-                    onChange={(e) => setNewProduct({ ...newProduct, sizes: e.target.value })}
-                    className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B]"
-                    placeholder="e.g. XXS-XS, S-M, L, XL"
-                  />
+                {/* Sizes Range Input & Colors */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
+                      Available Sizes <span className="text-[#A38E88] font-normal lowercase">(optional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={newProduct.sizes}
+                      onChange={(e) => setNewProduct({ ...newProduct, sizes: e.target.value })}
+                      className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B]"
+                      placeholder="e.g. XXS-XS, S-M, L, XL"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
+                      Available Colors <span className="text-[#A38E88] font-normal lowercase">(optional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={newProduct.colorsRaw}
+                      onChange={(e) => setNewProduct({ ...newProduct, colorsRaw: e.target.value })}
+                      className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B]"
+                      placeholder="e.g. Cream, Rose, Mocha"
+                    />
+                  </div>
                 </div>
 
                 {/* Product Media Upload */}
                 <div className="space-y-2">
                   <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
-                    Product Media (Photo or Video - Portrait Orientation Only)
+                    Product Media (Photo or Video - Portrait Orientation Only) <span className="text-[#B86B60]">*</span>
                   </label>
                   <input
                     type="file"
@@ -2233,12 +2284,72 @@ export default function AdminPortal({
                   />
                 </div>
 
+                {/* Size Chart Upload (Optional) */}
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
+                    Size Chart Image <span className="text-[#A38E88] font-normal lowercase">(optional)</span>
+                  </label>
+                  <input
+                    type="file"
+                    id="product-sizechart-file"
+                    accept="image/*"
+                    onChange={handleSizeChartUpload}
+                    className="hidden"
+                    disabled={isUploadingSizeChart}
+                  />
+
+                  {isUploadingSizeChart ? (
+                    <div className="h-20 border border-dashed border-[#E8DCD7] bg-[#FAF0EC] flex flex-col items-center justify-center gap-1">
+                      <div className="w-4 h-4 border-2 border-t-transparent border-[#B86B60] rounded-full animate-spin" />
+                      <span className="text-[9px] uppercase tracking-wider font-bold text-[#B86B60]">Uploading Size Chart...</span>
+                    </div>
+                  ) : newProduct.sizeChart ? (
+                    <div className="flex items-center gap-4 p-2.5 bg-[#FAF0EC] border border-[#E8DCD7] rounded-none">
+                      <img
+                        src={newProduct.sizeChart}
+                        alt="Size Chart Preview"
+                        className="w-14 h-14 object-contain border border-[#E8DCD7] bg-white flex-shrink-0 p-1"
+                      />
+                      <div className="space-y-1">
+                        <span className="text-[9px] uppercase tracking-widest font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-none block w-max">
+                          Size Chart Attached
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <label
+                            htmlFor="product-sizechart-file"
+                            className="text-[10px] font-bold uppercase tracking-wider text-[#2C1E1B] hover:text-[#B86B60] cursor-pointer transition-colors"
+                          >
+                            Replace
+                          </label>
+                          <span className="text-gray-300">|</span>
+                          <button
+                            type="button"
+                            onClick={() => setNewProduct(prev => ({ ...prev, sizeChart: '' }))}
+                            className="text-[10px] font-bold uppercase tracking-wider text-rose-600 hover:text-rose-800 transition-colors"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <label
+                      htmlFor="product-sizechart-file"
+                      className="flex items-center justify-center h-16 border border-dashed border-[#E8DCD7] bg-[#FAF0EC] hover:bg-[#FAF0EC]/60 transition-colors cursor-pointer text-center p-3 gap-2 rounded-none"
+                    >
+                      <Upload className="w-4 h-4 text-[#B86B60]" />
+                      <span className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Upload Size Chart (Optional)</span>
+                    </label>
+                  )}
+                </div>
+
                 {/* Shopee Link */}
                 <div className="space-y-1">
-                  <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Shopee Link</label>
+                  <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
+                    Shopee Link <span className="text-[#A38E88] font-normal lowercase">(optional)</span>
+                  </label>
                   <input
                     type="url"
-                    required
                     value={newProduct.shopeeLink}
                     onChange={(e) => setNewProduct({ ...newProduct, shopeeLink: e.target.value })}
                     className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B]"
@@ -2248,10 +2359,11 @@ export default function AdminPortal({
 
                 {/* Description Label */}
                 <div className="space-y-1">
-                  <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Description Label / Heading</label>
+                  <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
+                    Description Label / Heading <span className="text-[#A38E88] font-normal lowercase">(optional)</span>
+                  </label>
                   <input
                     type="text"
-                    required
                     value={newProduct.descriptionLabel}
                     onChange={(e) => setNewProduct({ ...newProduct, descriptionLabel: e.target.value })}
                     className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B]"
@@ -2261,7 +2373,9 @@ export default function AdminPortal({
 
                 {/* Description */}
                 <div className="space-y-1">
-                  <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Product Description</label>
+                  <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
+                    Product Description <span className="text-[#A38E88] font-normal lowercase">(optional)</span>
+                  </label>
                   <RichTextEditor
                     value={newProduct.description}
                     onChange={(html) => setNewProduct({ ...newProduct, description: html })}
