@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { bookShipmentWithShipmates } from './lib/shipmates.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -48,14 +49,8 @@ export default async function handler(req, res) {
         .from('orders')
         .update({
           payment_status: 'PAID',
-          status: 'PROCESSING',
-          paid_at: new Date().toISOString(),
-          payment_details: {
-            xendit_id: id,
-            payment_method: payment_method || 'ONLINE',
-            payment_channel: payment_channel || '',
-            paid_amount: paid_amount || 0,
-          },
+          status: 'TO_SHIP',
+          updated_at: new Date().toISOString(),
         })
         .eq('order_reference', external_id);
 
@@ -65,6 +60,23 @@ export default async function handler(req, res) {
       }
 
       console.log(`Order ${external_id} successfully verified and updated to PAID.`);
+
+      // 4. Automatically Dispatch Shipment to Shipmates (Test Mode / Sandbox / Live)
+      try {
+        const { data: paidOrder } = await supabase
+          .from('orders')
+          .select('*')
+          .eq('order_reference', external_id)
+          .maybeSingle();
+
+        if (paidOrder) {
+          console.log(`[Xendit Webhook] Auto-dispatching Order ${external_id} to Shipmates...`);
+          const shipResult = await bookShipmentWithShipmates(paidOrder);
+          console.log(`[Xendit Webhook] Shipmates booking complete for ${external_id}. Tracking: ${shipResult.trackingNumber}`);
+        }
+      } catch (shipErr) {
+        console.error(`[Xendit Webhook] Shipmates booking error for ${external_id}:`, shipErr.message);
+      }
     } else if (status === 'EXPIRED') {
       await supabase
         .from('orders')

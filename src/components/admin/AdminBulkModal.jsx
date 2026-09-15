@@ -30,22 +30,25 @@ const AdminBulkModal = memo(({
           initial={{ opacity: 0, scale: 0.95, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 15 }}
-          className="relative z-10 w-full max-w-md bg-white rounded-none shadow-2xl border border-[#E8DCD7] p-6 sm:p-8 flex flex-col max-h-[90vh] md:max-h-[85vh] select-none"
+          className="relative z-10 w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 p-6 sm:p-8 flex flex-col max-h-[90vh] md:max-h-[85vh] select-none"
         >
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 text-[#705B56] hover:text-[#2C1E1B] transition-colors p-1 z-10 cursor-pointer"
+            className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors p-1 z-10 cursor-pointer"
             aria-label="Close bulk modal"
           >
             <X className="w-5 h-5" />
           </button>
 
-          <div className="mb-6 flex-shrink-0">
-            <h3 className="font-editorial text-2xl sm:text-3xl text-[#2C1E1B] font-normal leading-tight">
+          <div className="mb-5 flex-shrink-0 pb-3 border-b border-slate-100">
+            <span className="text-[10px] uppercase font-bold tracking-wider text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200/60 inline-block mb-1">
+              Bulk Editor
+            </span>
+            <h3 className="font-sans text-xl font-bold text-slate-900 leading-tight">
               Bulk Update Size Chart
             </h3>
-            <p className="text-[10px] text-[#705B56] mt-1.5 leading-relaxed font-semibold">
-              Upload a size chart image below. It will be applied to the {selectedCount} selected garments.
+            <p className="text-xs text-slate-500 mt-1">
+              Upload a size chart image to apply across the {selectedCount} selected garments.
             </p>
           </div>
 

@@ -8,6 +8,7 @@ import {
   Smartphone,
   CreditCard,
   Truck,
+  Banknote,
   Loader2,
   CheckCircle2,
 } from 'lucide-react';
@@ -216,6 +217,14 @@ export default function CheckoutPage({
   );
   const shippingFee = checkoutItems.length > 0 ? 150 : 0;
   const totalAmount = subtotal + shippingFee;
+  const isCodEligible = totalAmount <= 1000;
+
+  // Auto-switch away from COD if cart total exceeds 1,000 PHP limit
+  useEffect(() => {
+    if (!isCodEligible && paymentMethod === 'COD') {
+      setPaymentMethod('GCASH');
+    }
+  }, [isCodEligible, paymentMethod]);
 
   // Validation
   const validateShippingForm = () => {
@@ -263,6 +272,13 @@ export default function CheckoutPage({
     setIsProcessingOrder(true);
     setPaymentError(null);
 
+    // Enforce 1,000 PHP limit for COD
+    if (paymentMethod === 'COD' && totalAmount > 1000) {
+      setPaymentError('Cash on Delivery (COD) is strictly available for orders with a total of ₱1,000 or below.');
+      setIsProcessingOrder(false);
+      return;
+    }
+
     try {
       // 1. Call Secure Serverless Invoice & Order Endpoint
       const result = await createSecureOrderInvoice({
@@ -303,7 +319,7 @@ export default function CheckoutPage({
         await removeItemsFromWishlist(checkoutItems);
       } catch (e) {}
 
-      // 3. Redirect to verified Xendit payment interface (GCash / Maya / Card)
+      // 3. Redirect to verified Xendit payment interface if online invoice provided
       if (result.invoiceUrl) {
         window.location.href = result.invoiceUrl;
         return;
@@ -311,9 +327,15 @@ export default function CheckoutPage({
 
       setIsProcessingOrder(false);
 
-      // Fallback notification
+      // 4. For COD or direct instant orders, route directly to Order Confirmed
       if (onOrderCompleted && result.order) {
         onOrderCompleted(result.order);
+        return;
+      }
+
+      if (result.redirectUrl) {
+        window.location.href = result.redirectUrl;
+        return;
       }
     } catch (err) {
       console.error('Order submission error:', err);
@@ -885,6 +907,65 @@ export default function CheckoutPage({
                       </div>
                     </div>
                     <CreditCard className="w-5 h-5 text-[#2C1E1B]" />
+                  </label>
+
+                  {/* Option 4: Cash on Delivery (COD) */}
+                  <label
+                    onClick={() => {
+                      if (isCodEligible) {
+                        setPaymentMethod('COD');
+                        setPaymentError(null);
+                      }
+                    }}
+                    className={`flex items-center justify-between p-4 border transition-all ${
+                      !isCodEligible
+                        ? 'border-[#E8DCD7] bg-[#FBF9F8] opacity-60 cursor-not-allowed'
+                        : paymentMethod === 'COD'
+                        ? 'border-[#2C1E1B] bg-[#FAF5F2] cursor-pointer'
+                        : 'border-[#E8DCD7] hover:border-[#B86B60] bg-white cursor-pointer'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                          !isCodEligible
+                            ? 'border-slate-300 bg-slate-100'
+                            : paymentMethod === 'COD'
+                            ? 'border-[#2C1E1B]'
+                            : 'border-[#A38E88]'
+                        }`}
+                      >
+                        {paymentMethod === 'COD' && isCodEligible && (
+                          <div className="w-2 h-2 rounded-full bg-[#2C1E1B]" />
+                        )}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-bold uppercase tracking-wider text-[#2C1E1B]">
+                            Cash on Delivery (COD)
+                          </span>
+                          {isCodEligible ? (
+                            <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 uppercase tracking-wider border border-emerald-200">
+                              Eligible (≤ ₱1,000)
+                            </span>
+                          ) : (
+                            <span className="text-[9px] bg-rose-50 text-rose-700 font-bold px-1.5 py-0.5 uppercase tracking-wider border border-rose-200">
+                              Exceeds ₱1,000 Limit
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-[#705B56] mt-0.5">
+                          {isCodEligible
+                            ? 'Pay with cash upon parcel delivery by courier rider.'
+                            : `COD is only available for orders ₱1,000 and below (Current: ₱${totalAmount.toLocaleString()}). Please choose an online payment.`}
+                        </div>
+                      </div>
+                    </div>
+                    <Banknote
+                      className={`w-5 h-5 flex-shrink-0 ${
+                        !isCodEligible ? 'text-slate-400' : 'text-amber-800'
+                      }`}
+                    />
                   </label>
                 </div>
 

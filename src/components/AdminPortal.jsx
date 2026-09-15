@@ -1,15 +1,18 @@
 import React, { useState, useEffect, useRef, useTransition, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, ShoppingBag, Sliders, ArrowLeft, Search, Plus, X, Globe, Save, Trash2, LogOut, Upload, AlertTriangle, XCircle, Check, Edit, Star, Menu, ChevronLeft, ChevronRight, Loader2, LayoutDashboard, TrendingUp, Package, ShieldCheck, Users, CheckCircle2, DollarSign, Boxes, ArrowUpRight, Sparkles, RefreshCw } from 'lucide-react';
+import { User, ShoppingBag, Sliders, ArrowLeft, Search, Plus, X, Globe, Save, Trash2, LogOut, Upload, AlertTriangle, XCircle, Check, Edit, Star, Menu, ChevronLeft, ChevronRight, Loader2, LayoutDashboard, TrendingUp, Package, ShieldCheck, Users, CheckCircle2, DollarSign, Boxes, ArrowUpRight, Sparkles, RefreshCw, Bell, ExternalLink } from 'lucide-react';
 import { PRODUCTS } from '../data/products';
 import { supabase } from '../lib/supabaseClient';
 import { invalidateProductsCache, saveCachedProducts, getCachedProducts } from '../lib/productCache';
 import AdminDashboardTab from './admin/AdminDashboardTab';
 import AdminProductsTab from './admin/AdminProductsTab';
+import AdminOrdersTab from './admin/AdminOrdersTab';
+import AdminReviewsTab from './admin/AdminReviewsTab';
 import AdminCustomizerTab from './admin/AdminCustomizerTab';
 import AdminProfileTab from './admin/AdminProfileTab';
 import AdminProductModal from './admin/AdminProductModal';
 import AdminBulkModal from './admin/AdminBulkModal';
+import { fetchSiteVisitorStats } from '../lib/visitorTracking';
 
 const isVideoUrl = (url) => url && (url.startsWith('data:video/') || url.match(/\.(mp4|mov|webm)($|\?)/i));
 
@@ -102,14 +105,46 @@ export default function AdminPortal({
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   // Dashboard states
-  const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard' | 'products' | 'customize' | 'profile'
+  const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard' | 'products' | 'orders' | 'reviews' | 'customize' | 'profile'
   const [isPendingTab, startTabTransition] = useTransition();
+
+  // Orders Management & TikTok Shop Fulfillment Pipeline states
+  const [ordersList, setOrdersList] = useState([]);
+  const [isLoadingOrders, setIsLoadingOrders] = useState(false);
+  const [orderFilterTab, setOrderFilterTab] = useState('ALL');
+  const [orderCounts, setOrderCounts] = useState({
+    total: 0,
+    toShip: 0,
+    shipped: 0,
+    toDeliver: 0,
+    delivered: 0,
+    cancelled: 0,
+    returned: 0,
+    failedToDeliver: 0
+  });
+
+  // Customer Reviews & Ratings states
+  const [customerReviews, setCustomerReviews] = useState([]);
+  const [isLoadingReviews, setIsLoadingReviews] = useState(false);
+
+  // Website Visitors Traffic states
+  const [visitorStats, setVisitorStats] = useState({ totalVisits: 0, todayVisits: 0 });
 
   const handleTabChange = useCallback((tab) => {
     startTabTransition(() => {
       setActiveTab(tab);
     });
   }, []);
+
+  const handleNavigateTab = useCallback((tab, subfilter = null) => {
+    if (subfilter) {
+      setOrderFilterTab(subfilter);
+    }
+    startTabTransition(() => {
+      setActiveTab(tab);
+    });
+  }, []);
+
   const [dashboardStats, setDashboardStats] = useState({
     totalSales: 0,
     paidOrdersCount: 0,
@@ -578,18 +613,38 @@ export default function AdminPortal({
         }
       }
 
-      // 2. Fetch orders for total sales revenue & recent activity
+      // 2. Fetch orders for total sales revenue, order fulfillment pipeline, & recent activity
+      setIsLoadingOrders(true);
       let totalSales = 0;
       let paidOrdersCount = 0;
       let recentOrders = [];
+      const counts = {
+        total: 0,
+        toShip: 0,
+        shipped: 0,
+        toDeliver: 0,
+        delivered: 0,
+        cancelled: 0,
+        returned: 0,
+        failedToDeliver: 0
+      };
+
       try {
         const { data: ordersData, error: ordersErr } = await supabase
           .from('orders')
-          .select('id, order_reference, customer_name, customer_email, total_amount, payment_status, status, created_at, items')
+          .select('*')
           .order('created_at', { ascending: false });
 
+        if (ordersErr) {
+          console.error('[AdminPortal] Error loading orders from Supabase:', ordersErr.message || ordersErr);
+        }
+
         if (!ordersErr && ordersData) {
+          console.log(`[AdminPortal] Successfully loaded ${ordersData.length} orders.`);
+          setOrdersList(ordersData);
+          counts.total = ordersData.length;
           recentOrders = ordersData.slice(0, 6);
+
           ordersData.forEach(o => {
             const isPaid = (o.payment_status || '').toUpperCase() === 'PAID' ||
               (o.status || '').toUpperCase() === 'COMPLETED' ||
@@ -598,13 +653,57 @@ export default function AdminPortal({
               totalSales += Number(o.total_amount) || 0;
               paidOrdersCount += 1;
             }
+
+            const s = (o.status || 'PENDING').toUpperCase();
+            if (s === 'PENDING' || s === 'PROCESSING' || s === 'TO_SHIP') {
+              counts.toShip += 1;
+            } else if (s === 'SHIPPED') {
+              counts.shipped += 1;
+            } else if (s === 'TO_DELIVER' || s === 'OUT_FOR_DELIVERY') {
+              counts.toDeliver += 1;
+            } else if (s === 'DELIVERED' || s === 'COMPLETED') {
+              counts.delivered += 1;
+            } else if (s === 'CANCELLED') {
+              counts.cancelled += 1;
+            } else if (s === 'RETURNED' || s === 'REFUNDED') {
+              counts.returned += 1;
+            } else if (s === 'FAILED_TO_DELIVER' || s === 'DELIVERY_FAILED') {
+              counts.failedToDeliver += 1;
+            }
           });
+          setOrderCounts(counts);
         }
       } catch (ordErr) {
         console.warn('Orders fetch note:', ordErr.message);
+      } finally {
+        setIsLoadingOrders(false);
       }
 
-      // 3. Count active administrators
+      // 3. Fetch Customer Reviews & Ratings
+      setIsLoadingReviews(true);
+      try {
+        const { data: revsData } = await supabase
+          .from('product_reviews')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (revsData) {
+          setCustomerReviews(revsData);
+        }
+      } catch (rErr) {
+        console.debug('Customer reviews fetch note:', rErr?.message);
+      } finally {
+        setIsLoadingReviews(false);
+      }
+
+      // 4. Fetch Website Visitor Traffic Analytics
+      try {
+        const vStats = await fetchSiteVisitorStats();
+        setVisitorStats(vStats);
+      } catch (vErr) {
+        console.debug('Visitor tracking note:', vErr?.message);
+      }
+
+      // 5. Count active administrators
       let adminCount = 1;
       try {
         const { data: adminData } = await supabase
@@ -619,7 +718,7 @@ export default function AdminPortal({
         console.warn('Admin count note:', admErr.message);
       }
 
-      // 4. Count verified customer users (excluding admin accounts)
+      // 6. Count verified customer users (excluding admin accounts)
       let verifiedUserCount = 0;
       try {
         const { data: userData, error: userErr } = await supabase
@@ -653,6 +752,98 @@ export default function AdminPortal({
       console.warn('Dashboard stats fetch failed:', err.message);
     } finally {
       setIsLoadingStats(false);
+    }
+  };
+
+  const averageReviewRating = customerReviews.length > 0
+    ? (customerReviews.reduce((sum, r) => sum + (Number(r.rating) || 5), 0) / customerReviews.length).toFixed(1)
+    : '5.0';
+
+  const recalculateOrderCounts = (updatedOrders) => {
+    const counts = {
+      total: updatedOrders.length,
+      toShip: 0,
+      shipped: 0,
+      toDeliver: 0,
+      delivered: 0,
+      cancelled: 0,
+      returned: 0,
+      failedToDeliver: 0
+    };
+    updatedOrders.forEach(o => {
+      const s = (o.status || 'PENDING').toUpperCase();
+      if (s === 'PENDING' || s === 'PROCESSING' || s === 'TO_SHIP') {
+        counts.toShip += 1;
+      } else if (s === 'SHIPPED') {
+        counts.shipped += 1;
+      } else if (s === 'TO_DELIVER' || s === 'OUT_FOR_DELIVERY') {
+        counts.toDeliver += 1;
+      } else if (s === 'DELIVERED' || s === 'COMPLETED') {
+        counts.delivered += 1;
+      } else if (s === 'CANCELLED') {
+        counts.cancelled += 1;
+      } else if (s === 'RETURNED' || s === 'REFUNDED') {
+        counts.returned += 1;
+      } else if (s === 'FAILED_TO_DELIVER' || s === 'DELIVERY_FAILED') {
+        counts.failedToDeliver += 1;
+      }
+    });
+    setOrderCounts(counts);
+  };
+
+  const handleUpdateOrderStatus = async (orderId, newStatus) => {
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .eq('id', orderId);
+
+      if (error) throw error;
+
+      setOrdersList(prev => {
+        const next = prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o);
+        recalculateOrderCounts(next);
+        return next;
+      });
+      triggerNotification('success', 'Status Updated', `Order fulfillment set to ${newStatus}.`);
+    } catch (err) {
+      triggerNotification('error', 'Update Failed', err.message);
+    }
+  };
+
+  const handleUpdateOrderTracking = async (orderId, trackingNumber, courierName) => {
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .update({
+          tracking_number: trackingNumber,
+          courier_name: courierName,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', orderId);
+
+      if (error) throw error;
+
+      setOrdersList(prev => prev.map(o => o.id === orderId ? { ...o, tracking_number: trackingNumber, courier_name: courierName } : o));
+      triggerNotification('success', 'Tracking Saved', `Parcel tracking #${trackingNumber} recorded.`);
+    } catch (err) {
+      triggerNotification('error', 'Tracking Update Failed', err.message);
+    }
+  };
+
+  const handleDeleteReview = async (reviewId) => {
+    try {
+      const { error } = await supabase
+        .from('product_reviews')
+        .delete()
+        .eq('id', reviewId);
+
+      if (error) throw error;
+
+      setCustomerReviews(prev => prev.filter(r => r.id !== reviewId));
+      triggerNotification('success', 'Review Removed', 'Customer feedback was deleted.');
+    } catch (err) {
+      triggerNotification('error', 'Deletion Failed', err.message);
     }
   };
 
@@ -777,6 +968,13 @@ export default function AdminPortal({
       adminInitializedForUser.current = null;
     }
   }, [session?.user?.id, isAdmin]);
+
+  // Re-fetch orders whenever admin switches to orders or dashboard tab
+  useEffect(() => {
+    if (session && isAdmin && (activeTab === 'orders' || activeTab === 'dashboard')) {
+      fetchDashboardStats();
+    }
+  }, [activeTab]);
 
   // Handle Search and Filter changes with debouncing (resets to page 1, skips first mount)
   useEffect(() => {
@@ -1276,24 +1474,23 @@ export default function AdminPortal({
   // 1. RENDER ACCESS DENIED IF LOGGED IN WITH NON-ADMIN / CUSTOMER ACCOUNT
   if (session && !isAdmin) {
     return (
-      <div className="min-h-screen bg-[#FAF0EC] flex items-center justify-center p-6 select-none font-sans">
-        <div className="w-full max-w-md bg-white border border-rose-200 shadow-xl p-8 rounded-none text-center">
-          <div className="w-12 h-12 bg-rose-50 text-rose-600 mx-auto mb-4 flex items-center justify-center border border-rose-200">
+      <div className="min-h-screen bg-[#F4F6F9] flex items-center justify-center p-6 select-none font-sans">
+        <div className="w-full max-w-md bg-white border border-slate-200 shadow-xl p-8 rounded-2xl text-center">
+          <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto mb-4 border border-amber-200">
             <AlertTriangle className="w-6 h-6" />
           </div>
-          <span className="text-[10px] tracking-[0.2em] uppercase font-bold text-rose-700 block mb-1">
-            ACCESS RESTRICTED
-          </span>
-          <h2 className="font-brand text-2xl text-[#2C1E1B] mb-2">Administrator Access Only</h2>
-          <p className="text-xs text-[#705B56] mb-4 leading-relaxed">
-            This dashboard is strictly reserved for authorized Atelier administrators. Your current account does not have administrative privileges.
+          <h2 className="text-xl font-bold font-sans text-slate-900 mb-2">
+            Administrator Access Required
+          </h2>
+          <p className="text-xs text-slate-500 leading-relaxed mb-6 font-sans">
+            This dashboard is strictly reserved for authorized administrators. Your current account does not have administrative privileges.
           </p>
-          <div className="bg-[#FAF5F2] border border-[#E8DCD7] p-3 text-xs text-[#2C1E1B] mb-6 font-mono break-all">
-            Logged in as: {session.user?.email} (Customer)
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-700 mb-6 font-mono break-all">
+            Logged in as: {session.user?.email}
           </div>
           <button
             onClick={handleLogout}
-            className="w-full py-3.5 bg-[#2C1E1B] hover:bg-rose-950 text-white text-xs font-semibold uppercase tracking-wider transition-all cursor-pointer shadow-sm"
+            className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-xs"
           >
             Sign Out & Switch to Admin
           </button>
@@ -1305,24 +1502,24 @@ export default function AdminPortal({
   // 2. RENDER SECURE LOGIN SCREEN IF NOT AUTHENTICATED
   if (!session) {
     return (
-      <div className="min-h-screen bg-[#FAF0EC] flex items-center justify-center p-6 select-none font-sans">
-        <div className="w-full max-w-md bg-white border border-[#E8DCD7] shadow-xl p-8 rounded-none flex flex-col justify-between">
+      <div className="min-h-screen bg-[#F4F6F9] flex items-center justify-center p-6 select-none font-sans">
+        <div className="w-full max-w-md bg-white border border-slate-200 shadow-xl p-8 rounded-2xl flex flex-col justify-between">
           <div>
             <div className="text-center mb-8">
-              <span className="font-brand text-4xl text-[#2C1E1B] tracking-widest block mb-2">AURA</span>
-              <span className="text-[10px] tracking-[0.2em] uppercase font-semibold text-[#B86B60]">Atelier Secure Login</span>
-              <p className="text-[10px] text-[#A38E88] mt-1">Authorized Personnel Only</p>
+              <span className="text-3xl font-bold font-sans text-blue-600 tracking-tight block mb-1">AURA</span>
+              <span className="text-[10px] tracking-wider uppercase font-bold text-slate-400">Admin Portal Login</span>
+              <p className="text-xs text-slate-500 mt-1">Authorized Store Administrators Only</p>
             </div>
 
-            <form onSubmit={handleLogin} className="space-y-5">
+            <form onSubmit={handleLogin} className="space-y-4">
               {authError && (
-                <div className="p-3 bg-red-50 border border-red-200 text-red-800 text-xs font-semibold rounded-none tracking-wide text-center">
+                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold rounded-xl text-center">
                   {authError}
                 </div>
               )}
 
               <div>
-                <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold text-[#705B56] mb-2">
+                <label className="block text-[11px] uppercase tracking-wider font-semibold text-slate-600 mb-1.5">
                   Administrator Email
                 </label>
                 <input
@@ -1331,13 +1528,13 @@ export default function AdminPortal({
                   placeholder="admin@aura.com"
                   value={authEmail}
                   onChange={(e) => setAuthEmail(e.target.value)}
-                  className="w-full px-4 py-3 rounded-none bg-white border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B] transition-colors placeholder-[#A8928B]/60"
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white transition-all placeholder:text-slate-400"
                 />
               </div>
 
               <div>
-                <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold text-[#705B56] mb-2">
-                  Atelier Security Password
+                <label className="block text-[11px] uppercase tracking-wider font-semibold text-slate-600 mb-1.5">
+                  Security Password
                 </label>
                 <input
                   type="password"
@@ -1345,16 +1542,16 @@ export default function AdminPortal({
                   placeholder="••••••••••••"
                   value={authPassword}
                   onChange={(e) => setAuthPassword(e.target.value)}
-                  className="w-full px-4 py-3 rounded-none bg-white border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B] transition-colors placeholder-[#A8928B]/60"
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white transition-all placeholder:text-slate-400"
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={isLoggingIn}
-                className="w-full py-4 rounded-none bg-[#2C1E1B] hover:bg-[#B86B60] text-white text-[11px] font-semibold uppercase tracking-[0.2em] transition-all duration-300 flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 cursor-pointer"
+                className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold uppercase tracking-wider transition-all duration-200 flex items-center justify-center gap-2 shadow-xs shadow-blue-600/20 disabled:opacity-50 cursor-pointer mt-2"
               >
-                {isLoggingIn ? 'Verifying Credentials...' : 'Access Portal'}
+                {isLoggingIn ? 'Verifying Credentials...' : 'Access Admin Dashboard'}
               </button>
             </form>
           </div>
@@ -1365,274 +1562,437 @@ export default function AdminPortal({
 
   // 2. RENDER WORKSPACE ONCE LOGGED IN
   return (
-    <div className="min-h-screen bg-[#FAF0EC] text-[#2C1E1B] flex flex-col md:flex-row select-none rounded-none">
+    <div className="min-h-screen bg-[#F4F6F9] text-slate-800 flex flex-col antialiased selection:bg-blue-600 selection:text-white">
 
-      {/* Mobile Top Header */}
-      <header className="md:hidden w-full bg-[#ccc2c3] p-4 flex items-center justify-between border-b border-white/10 z-20 shadow-md flex-shrink-0">
-        <button
-          onClick={() => setIsMobileDrawerOpen(true)}
-          className="p-2 -ml-2 text-white hover:text-white/80 focus:outline-none"
-          aria-label="Open sidebar drawer"
-        >
-          <Menu className="w-6 h-6" />
-        </button>
+      {/* Modern Top Header Bar */}
+      <header className="sticky top-0 z-30 bg-white border-b border-slate-200/80 px-4 sm:px-6 py-2.5 flex items-center justify-between gap-4 shadow-xs">
+        {/* Left: Mobile Drawer Trigger & Brand Logo */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsMobileDrawerOpen(true)}
+            className="md:hidden p-2 -ml-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl focus:outline-none transition-colors"
+            aria-label="Open sidebar drawer"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
 
-        <div className="flex items-center gap-2">
-          <span className="text-xl font-brand tracking-widest text-[#2C1E1B]">Aura</span>
-          <span className="text-[8px] tracking-[0.18em] uppercase font-sans text-[#2C1E1B] bg-white/50 px-1.5 py-0.5 rounded-none font-semibold">{adminRole}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xl font-bold tracking-tight text-blue-600 font-sans">AURA</span>
+            <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200/60 hidden sm:inline-block">
+              {adminRole}
+            </span>
+          </div>
         </div>
 
-        <div className="w-9" /> {/* Visual spacer */}
-      </header>
-
-      {/* Mobile Off-Canvas Drawer */}
-      <AnimatePresence>
-        {isMobileDrawerOpen && (
-          <>
-            {/* Backdrop */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              onClick={() => setIsMobileDrawerOpen(false)}
-              className="md:hidden fixed inset-0 z-40 bg-black/40 backdrop-blur-xs"
+        {/* Center: Global Quick Search Input */}
+        <div className="flex-1 max-w-md mx-2 hidden md:block">
+          <div className="relative flex items-center">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={handleSearchChange}
+              placeholder="Search products, orders, catalog..."
+              className="w-full bg-slate-100/80 hover:bg-slate-100 focus:bg-white text-xs text-slate-700 placeholder:text-slate-400 pl-9 pr-4 py-2 rounded-xl border border-slate-200/70 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
             />
-
-            {/* Drawer Container */}
-            <motion.aside
-              initial={{ x: '-100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '-100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="md:hidden fixed top-0 bottom-0 left-0 z-50 w-72 bg-[#ccc2c3] p-6 flex flex-col justify-between shadow-2xl border-r border-white/5 overflow-y-auto"
-            >
-              <div className="space-y-8">
-                {/* Header with Close */}
-                <div className="flex items-center justify-between pb-4 border-b border-white/10">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl font-brand tracking-widest text-[#2C1E1B]">Aura</span>
-                    <span className="text-[8px] tracking-[0.18em] uppercase font-sans text-[#2C1E1B] bg-white/50 px-1.5 py-0.5 rounded-none font-semibold">Atelier</span>
-                  </div>
-                  <button
-                    onClick={() => setIsMobileDrawerOpen(false)}
-                    className="p-1.5 text-white hover:text-white/80 focus:outline-none"
-                    aria-label="Close drawer"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-
-                {/* Profile Card Summary */}
-                {!isLoadingProfile && (
-                  <div className="flex items-center gap-4 bg-white p-4 rounded-none border border-white/10 w-full">
-                    {profile.avatar_url ? (
-                      <img
-                        src={profile.avatar_url}
-                        alt={profile.name}
-                        className="w-10 h-10 object-cover rounded-none border border-[#D99B91]/40 flex-shrink-0"
-                      />
-                    ) : (
-                      <div className="w-10 h-10 bg-[#FAF0EC] flex items-center justify-center border border-[#E8DCD7] rounded-none flex-shrink-0">
-                        <User className="w-4 h-4 text-[#ccc2c3]" />
-                      </div>
-                    )}
-                    <div>
-                      <h4 className="font-editorial text-base text-[#2C1E1B] font-normal leading-tight">{profile.name}</h4>
-                      <p className="text-[9px] uppercase tracking-wider text-[#2C1E1B] font-semibold mt-0.5">{profile.role_title}</p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Navigation Menu */}
-                <nav className="flex flex-col gap-2">
-                  <button
-                    onClick={() => {
-                      handleTabChange('dashboard');
-                      setIsMobileDrawerOpen(false);
-                    }}
-                    className={`py-3 px-4 text-xs font-semibold uppercase tracking-wider text-left flex items-center gap-3 transition-all rounded-none ${activeTab === 'dashboard'
-                      ? 'bg-white text-[#2C1E1B] font-bold'
-                      : 'text-white/70 hover:bg-white/5 hover:text-white'
-                      }`}
-                  >
-                    <LayoutDashboard className="w-4 h-4" />
-                    <span>Dashboard</span>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      handleTabChange('products');
-                      setIsMobileDrawerOpen(false);
-                    }}
-                    className={`py-3 px-4 text-xs font-semibold uppercase tracking-wider text-left flex items-center gap-3 transition-all rounded-none ${activeTab === 'products'
-                      ? 'bg-white text-[#2C1E1B] font-bold'
-                      : 'text-white/70 hover:bg-white/5 hover:text-white'
-                      }`}
-                  >
-                    <ShoppingBag className="w-4 h-4" />
-                    <span>Products Table</span>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      handleTabChange('customize');
-                      setIsMobileDrawerOpen(false);
-                    }}
-                    className={`py-3 px-4 text-xs font-semibold uppercase tracking-wider text-left flex items-center gap-3 transition-all rounded-none ${activeTab === 'customize'
-                      ? 'bg-white text-[#2C1E1B] font-bold'
-                      : 'text-white/70 hover:bg-white/5 hover:text-white'
-                      }`}
-                  >
-                    <Sliders className="w-4 h-4" />
-                    <span>Store Customizer</span>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      handleTabChange('profile');
-                      setIsMobileDrawerOpen(false);
-                    }}
-                    className={`py-3 px-4 text-xs font-semibold uppercase tracking-wider text-left flex items-center gap-3 transition-all rounded-none ${activeTab === 'profile'
-                      ? 'bg-white text-[#2C1E1B] font-bold'
-                      : 'text-white/70 hover:bg-white/5 hover:text-white'
-                      }`}
-                  >
-                    <User className="w-4 h-4" />
-                    <span>Owner Profile</span>
-                  </button>
-                </nav>
-              </div>
-
-              {/* Bottom Actions */}
-              <div className="pt-6 border-t border-white/10 flex flex-col gap-2 w-full mt-8">
-                <button
-                  onClick={handleLogout}
-                  className="py-3.5 w-full bg-white text-[#2C1E1B] rounded-none text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-2 border cursor-pointer hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                  <span>Log Out</span>
-                </button>
-              </div>
-            </motion.aside>
-          </>
-        )}
-      </AnimatePresence>
-
-      {/* Desktop Stationary Sidebar */}
-      <aside className="hidden md:flex md:w-80 bg-[#ccc2c3] text-white flex-col justify-between p-6 rounded-none z-10 border-r border-white/5 h-screen sticky top-0 flex-shrink-0">
-        <div className="space-y-8">
-          {/* Logo Identity */}
-          <div className="flex items-center gap-2.5 pb-6 border-b border-white/10">
-            <span className="text-2xl font-brand tracking-widest text-[#2C1E1B]">Aura</span>
-            <span className="text-[9px] tracking-[0.18em] uppercase font-sans text-[#2C1E1B] bg-white/50 px-2 py-0.5 rounded-none font-semibold">{adminRole}</span>
           </div>
+        </div>
 
-          {/* Profile Card Summary */}
-          {isLoadingProfile ? (
-            <div className="flex items-center gap-4 bg-white/60 p-4 rounded-none border border-white/10 w-full animate-pulse">
-              <div className="w-12 h-12 bg-[#2C1E1B]/10 skeleton-shimmer flex-shrink-0" />
-              <div className="space-y-2 flex-grow">
-                <div className="h-4 bg-[#2C1E1B]/10 skeleton-shimmer w-3/4" />
-                <div className="h-3 bg-[#2C1E1B]/10 skeleton-shimmer w-1/2" />
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-center gap-4 bg-white p-4 rounded-none border border-white/10 w-full">
+        {/* Right Actions: Storefront Link, Orders notification, Admin Profile */}
+        <div className="flex items-center gap-2 sm:gap-3">
+          <button
+            onClick={() => handleTabChange('orders')}
+            className="relative p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors"
+            title="Orders & Notifications"
+          >
+            <Bell className="w-4 h-4" />
+            {orderCounts.toShip > 0 && (
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-white" />
+            )}
+          </button>
+
+          <button
+            onClick={() => window.open('/', '_blank')}
+            className="hidden sm:inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-blue-600 px-3 py-1.5 rounded-xl hover:bg-slate-100 border border-slate-200/60 transition-colors"
+            title="Open Customer Storefront"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+            <span>View Store</span>
+          </button>
+
+          <div
+            onClick={() => handleTabChange('profile')}
+            className="flex items-center gap-2.5 pl-2 sm:pl-3 border-l border-slate-200 cursor-pointer hover:opacity-80 transition-opacity"
+            title="Account Profile"
+          >
+            <div className="relative">
               {profile.avatar_url ? (
                 <img
                   src={profile.avatar_url}
                   alt={profile.name}
-                  className="w-12 h-12 object-cover rounded-none border border-[#D99B91]/40 flex-shrink-0"
+                  className="w-8 h-8 rounded-full object-cover border border-slate-200"
                 />
               ) : (
-                <div className="w-12 h-12 bg-[#FAF0EC] flex items-center justify-center border border-[#E8DCD7] rounded-none flex-shrink-0">
-                  <User className="w-5 h-5 text-[#ccc2c3]" />
+                <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 font-bold text-xs flex items-center justify-center">
+                  {(profile.name || 'A')[0]}
                 </div>
               )}
+              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 rounded-full ring-2 ring-white" title="Online" />
+            </div>
+            <div className="hidden lg:block text-left">
+              <p className="text-xs font-semibold text-slate-800 leading-tight truncate max-w-[110px]">
+                {profile.name || 'Atelier Owner'}
+              </p>
+              <p className="text-[10px] text-slate-400 capitalize truncate">
+                {profile.role_title || adminRole}
+              </p>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Workspace Layout */}
+      <div className="flex flex-1 relative overflow-hidden">
+
+        {/* Mobile Off-Canvas Drawer */}
+        <AnimatePresence>
+          {isMobileDrawerOpen && (
+            <>
+              {/* Backdrop */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                onClick={() => setIsMobileDrawerOpen(false)}
+                className="md:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-xs"
+              />
+
+              {/* Drawer Container */}
+              <motion.aside
+                initial={{ x: '-100%' }}
+                animate={{ x: 0 }}
+                exit={{ x: '-100%' }}
+                transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                className="md:hidden fixed top-0 bottom-0 left-0 z-50 w-72 bg-[#131722] text-slate-300 p-5 flex flex-col justify-between shadow-2xl border-r border-slate-800/80 overflow-y-auto"
+              >
+                <div className="space-y-6">
+                  {/* Header with Close */}
+                  <div className="flex items-center justify-between pb-4 border-b border-white/10">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl font-bold tracking-tight text-blue-500 font-sans">AURA</span>
+                      <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider bg-white/10 px-1.5 py-0.5 rounded">Admin</span>
+                    </div>
+                    <button
+                      onClick={() => setIsMobileDrawerOpen(false)}
+                      className="p-1.5 text-slate-400 hover:text-white rounded-lg focus:outline-none"
+                      aria-label="Close drawer"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  {/* Navigation Groups */}
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-3 mb-1.5">Menu</p>
+                      <button
+                        onClick={() => { handleTabChange('dashboard'); setIsMobileDrawerOpen(false); }}
+                        className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white font-semibold' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <LayoutDashboard className="w-4 h-4" />
+                          <span>Dashboard</span>
+                        </div>
+                        {activeTab === 'dashboard' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />}
+                      </button>
+                    </div>
+
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-3 mb-1.5">Ecommerce</p>
+                      <div className="space-y-1">
+                        <button
+                          onClick={() => { handleTabChange('products'); setIsMobileDrawerOpen(false); }}
+                          className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'products' ? 'bg-blue-600 text-white font-semibold' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <ShoppingBag className="w-4 h-4" />
+                            <span>Manage Products</span>
+                          </div>
+                          {dashboardStats.lowStockCount > 0 ? (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded-md">
+                              {dashboardStats.lowStockCount} low
+                            </span>
+                          ) : (
+                            activeTab === 'products' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />
+                          )}
+                        </button>
+
+                        <button
+                          onClick={() => { handleTabChange('orders'); setIsMobileDrawerOpen(false); }}
+                          className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'orders' ? 'bg-blue-600 text-white font-semibold' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <Package className="w-4 h-4" />
+                            <span>Manage Orders</span>
+                          </div>
+                          {orderCounts.toShip > 0 ? (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 bg-rose-500 text-white rounded-md">
+                              {orderCounts.toShip}
+                            </span>
+                          ) : (
+                            activeTab === 'orders' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />
+                          )}
+                        </button>
+
+                        <button
+                          onClick={() => { handleTabChange('reviews'); setIsMobileDrawerOpen(false); }}
+                          className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'reviews' ? 'bg-blue-600 text-white font-semibold' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <Star className="w-4 h-4" />
+                            <span>Customer Reviews</span>
+                          </div>
+                          {customerReviews.length > 0 ? (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded-md">
+                              {customerReviews.length}
+                            </span>
+                          ) : (
+                            activeTab === 'reviews' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-3 mb-1.5">Settings</p>
+                      <div className="space-y-1">
+                        <button
+                          onClick={() => { handleTabChange('customize'); setIsMobileDrawerOpen(false); }}
+                          className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'customize' ? 'bg-blue-600 text-white font-semibold' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <Sliders className="w-4 h-4" />
+                            <span>Store Customizer</span>
+                          </div>
+                          {activeTab === 'customize' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />}
+                        </button>
+
+                        <button
+                          onClick={() => { handleTabChange('profile'); setIsMobileDrawerOpen(false); }}
+                          className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'profile' ? 'bg-blue-600 text-white font-semibold' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <User className="w-4 h-4" />
+                            <span>Owner Profile</span>
+                          </div>
+                          {activeTab === 'profile' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bottom Actions */}
+                <div className="pt-4 border-t border-white/10 flex flex-col gap-2 w-full">
+                  <a
+                    href="/"
+                    target="_blank"
+                    className="py-2.5 w-full bg-white/5 hover:bg-white/10 text-slate-300 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-2"
+                  >
+                    <Globe className="w-3.5 h-3.5" />
+                    <span>View Store</span>
+                  </a>
+                  <button
+                    onClick={handleLogout}
+                    className="py-2.5 w-full bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-2"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>Sign Out</span>
+                  </button>
+                </div>
+              </motion.aside>
+            </>
+          )}
+        </AnimatePresence>
+
+        {/* Desktop Stationary Sidebar */}
+        <aside className="hidden md:flex md:w-64 bg-[#131722] text-slate-300 flex-col justify-between p-4 z-20 border-r border-slate-800/80 sticky top-[57px] h-[calc(100vh-57px)] flex-shrink-0">
+          <div className="space-y-5 overflow-y-auto pr-1">
+
+            {/* Profile Card Summary */}
+            {isLoadingProfile ? (
+              <div className="flex items-center gap-3 bg-white/5 p-3 rounded-xl border border-white/5 w-full animate-pulse">
+                <div className="w-10 h-10 bg-white/10 rounded-full flex-shrink-0" />
+                <div className="space-y-1.5 flex-grow">
+                  <div className="h-3.5 bg-white/10 rounded w-3/4" />
+                  <div className="h-2.5 bg-white/10 rounded w-1/2" />
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3 bg-white/5 p-3 rounded-xl border border-white/5 w-full">
+                {profile.avatar_url ? (
+                  <img
+                    src={profile.avatar_url}
+                    alt={profile.name}
+                    className="w-10 h-10 object-cover rounded-full border border-blue-500/30 flex-shrink-0"
+                  />
+                ) : (
+                  <div className="w-10 h-10 bg-blue-600/20 text-blue-400 flex items-center justify-center rounded-full font-bold text-sm flex-shrink-0">
+                    {(profile.name || 'A')[0]}
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <h4 className="font-sans font-semibold text-xs text-white truncate">{profile.name}</h4>
+                  <p className="text-[10px] text-slate-400 uppercase tracking-wider truncate mt-0.5">{profile.role_title}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Navigation Groups */}
+            <div className="space-y-4">
               <div>
-                <h4 className="font-editorial text-lg text-[#2C1E1B] font-normal leading-tight">{profile.name}</h4>
-                <p className="text-[10px] uppercase tracking-wider text-[#2C1E1B] font-semibold mt-0.5">{profile.role_title}</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-3 mb-1.5">Menu</p>
+                <button
+                  onClick={() => handleTabChange('dashboard')}
+                  className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white font-semibold shadow-xs shadow-blue-600/30' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                  title="Dashboard Overview"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <LayoutDashboard className="w-4 h-4 opacity-90" />
+                    <span>Dashboard</span>
+                  </div>
+                  {activeTab === 'dashboard' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />}
+                </button>
+              </div>
+
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-3 mb-1.5">Ecommerce</p>
+                <div className="space-y-1">
+                  <button
+                    onClick={() => handleTabChange('products')}
+                    className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'products' ? 'bg-blue-600 text-white font-semibold shadow-xs shadow-blue-600/30' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                    title="Products Inventory"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <ShoppingBag className="w-4 h-4 opacity-90" />
+                      <span>Manage Products</span>
+                    </div>
+                    {dashboardStats.lowStockCount > 0 ? (
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded-md">
+                        {dashboardStats.lowStockCount} low
+                      </span>
+                    ) : (
+                      activeTab === 'products' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => handleTabChange('orders')}
+                    className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'orders' ? 'bg-blue-600 text-white font-semibold shadow-xs shadow-blue-600/30' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                    title="Manage Orders & Courier Dispatch"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Package className="w-4 h-4 opacity-90" />
+                      <span>Manage Orders</span>
+                    </div>
+                    {orderCounts.toShip > 0 ? (
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 bg-rose-500 text-white rounded-md">
+                        {orderCounts.toShip} new
+                      </span>
+                    ) : (
+                      activeTab === 'orders' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => handleTabChange('reviews')}
+                    className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'reviews' ? 'bg-blue-600 text-white font-semibold shadow-xs shadow-blue-600/30' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                    title="Customer Reviews & Ratings"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Star className="w-4 h-4 opacity-90" />
+                      <span>Customer Reviews</span>
+                    </div>
+                    {customerReviews.length > 0 ? (
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded-md">
+                        {customerReviews.length}
+                      </span>
+                    ) : (
+                      activeTab === 'reviews' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-3 mb-1.5">Settings</p>
+                <div className="space-y-1">
+                  <button
+                    onClick={() => handleTabChange('customize')}
+                    className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'customize' ? 'bg-blue-600 text-white font-semibold shadow-xs shadow-blue-600/30' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                    title="Store Customizer"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Sliders className="w-4 h-4 opacity-90" />
+                      <span>Store Customizer</span>
+                    </div>
+                    {activeTab === 'customize' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />}
+                  </button>
+
+                  <button
+                    onClick={() => handleTabChange('profile')}
+                    className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'profile' ? 'bg-blue-600 text-white font-semibold shadow-xs shadow-blue-600/30' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                    title="Owner Profile"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <User className="w-4 h-4 opacity-90" />
+                      <span>Owner Profile</span>
+                    </div>
+                    {activeTab === 'profile' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />}
+                  </button>
+                </div>
               </div>
             </div>
-          )}
+          </div>
 
-          {/* Navigation Menu */}
-          <nav className="flex flex-col gap-2">
-            <button
-              onClick={() => handleTabChange('dashboard')}
-              className={`py-3.5 px-4 text-xs font-semibold uppercase tracking-wider text-left flex items-center gap-3 transition-all rounded-none ${activeTab === 'dashboard'
-                ? 'bg-white text-[#2C1E1B] font-bold'
-                : 'text-white/70 hover:bg-white/5 hover:text-white'
-                }`}
-              title="Dashboard Overview"
+          {/* Bottom Actions */}
+          <div className="pt-3 border-t border-slate-800/80 flex flex-col gap-1.5 w-full">
+            <a
+              href="/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="py-2 px-3 w-full text-slate-400 hover:text-white hover:bg-white/5 rounded-xl text-xs font-medium transition-all flex items-center gap-2.5"
             >
-              <LayoutDashboard className="w-4 h-4" />
-              <span>Dashboard</span>
-            </button>
-
+              <Globe className="w-4 h-4 text-slate-500" />
+              <span>Visit Website</span>
+            </a>
             <button
-              onClick={() => handleTabChange('products')}
-              className={`py-3.5 px-4 text-xs font-semibold uppercase tracking-wider text-left flex items-center gap-3 transition-all rounded-none ${activeTab === 'products'
-                ? 'bg-white text-[#2C1E1B] font-bold'
-                : 'text-white/70 hover:bg-white/5 hover:text-white'
-                }`}
-              title="Products Table"
+              onClick={handleLogout}
+              className="py-2 px-3 w-full text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-xl text-xs font-semibold transition-all flex items-center gap-2.5 cursor-pointer"
+              title="Log Out"
             >
-              <ShoppingBag className="w-4 h-4" />
-              <span>Products Table</span>
+              <LogOut className="w-4 h-4" />
+              <span>Sign Out</span>
             </button>
+          </div>
+        </aside>
 
-            <button
-              onClick={() => handleTabChange('customize')}
-              className={`py-3.5 px-4 text-xs font-semibold uppercase tracking-wider text-left flex items-center gap-3 transition-all rounded-none ${activeTab === 'customize'
-                ? 'bg-white text-[#2C1E1B] font-bold'
-                : 'text-white/70 hover:bg-white/5 hover:text-white'
-                }`}
-              title="Store Customizer"
-            >
-              <Sliders className="w-4 h-4" />
-              <span>Store Customizer</span>
-            </button>
-
-            <button
-              onClick={() => handleTabChange('profile')}
-              className={`py-3.5 px-4 text-xs font-semibold uppercase tracking-wider text-left flex items-center gap-3 transition-all rounded-none ${activeTab === 'profile'
-                ? 'bg-white text-[#2C1E1B] font-bold'
-                : 'text-white/70 hover:bg-white/5 hover:text-white'
-                }`}
-              title="Owner Profile"
-            >
-              <User className="w-4 h-4" />
-              <span>Owner Profile</span>
-            </button>
-          </nav>
-        </div>
-
-        {/* Bottom Actions */}
-        <div className="pt-6 border-t border-white/10 flex flex-col gap-2 w-full">
-          <button
-            onClick={handleLogout}
-            className="py-3.5 w-full bg-white text-[#2C1E1B] rounded-none text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-2 border cursor-pointer hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200"
-            title="Log Out"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span>Log Out</span>
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Panel Content Area */}
-      <main className="flex-1 p-6 sm:p-12 overflow-y-auto max-h-screen overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
+        {/* Main Panel Content Area */}
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto max-h-[calc(100vh-57px)] bg-[#F4F6F9] overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
 
         {/* TAB CONTENTS */}
         {activeTab === 'dashboard' && (
           <AdminDashboardTab
             dashboardStats={dashboardStats}
+            orderCounts={orderCounts}
+            visitorStats={visitorStats}
+            averageReviewRating={averageReviewRating}
+            totalReviewsCount={customerReviews.length}
             isLoadingStats={isLoadingStats}
             onRefresh={fetchDashboardStats}
             onAddProduct={handleOpenAddProduct}
-            onNavigateTab={handleTabChange}
+            onNavigateTab={handleNavigateTab}
             onEditProduct={handleEditProductClick}
           />
         )}
@@ -1666,6 +2026,27 @@ export default function AdminPortal({
           />
         )}
 
+        {activeTab === 'orders' && (
+          <AdminOrdersTab
+            orders={ordersList}
+            orderCounts={orderCounts}
+            isLoading={isLoadingOrders}
+            onRefresh={fetchDashboardStats}
+            onUpdateOrderStatus={handleUpdateOrderStatus}
+            onUpdateOrderTracking={handleUpdateOrderTracking}
+            initialFilterTab={orderFilterTab}
+          />
+        )}
+
+        {activeTab === 'reviews' && (
+          <AdminReviewsTab
+            reviews={customerReviews}
+            isLoading={isLoadingReviews}
+            onRefresh={fetchDashboardStats}
+            onDeleteReview={handleDeleteReview}
+          />
+        )}
+
         {activeTab === 'customize' && (
           <AdminCustomizerTab
             localHeroConfig={localHeroConfig}
@@ -1694,6 +2075,7 @@ export default function AdminPortal({
           />
         )}
       </main>
+      </div>
 
       {/* MODALS */}
       <AdminProductModal
@@ -1729,22 +2111,22 @@ export default function AdminPortal({
               initial={{ opacity: 0, scale: 0.96, y: 15 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.96, y: 15 }}
-              className="w-full max-w-sm bg-[#FAF5F2] border border-[#E8DCD7] shadow-2xl p-6 text-center rounded-none relative"
+              className="w-full max-w-sm bg-white border border-slate-200 shadow-2xl p-6 text-center rounded-2xl relative"
             >
-              <div className="mx-auto w-12 h-12 rounded-none bg-rose-100 flex items-center justify-center text-rose-600 mb-4">
+              <div className="mx-auto w-12 h-12 rounded-2xl bg-rose-100 flex items-center justify-center text-rose-600 mb-4">
                 <Trash2 className="w-5 h-5" />
               </div>
-              <h3 className="font-editorial text-lg text-[#2C1E1B] mb-2 font-normal">
+              <h3 className="font-sans font-bold text-lg text-slate-900 mb-2">
                 Confirm Removal
               </h3>
-              <p className="text-xs text-[#705B56] leading-relaxed mb-6 font-sans">
+              <p className="text-xs text-slate-500 leading-relaxed mb-6 font-sans">
                 {confirmDialog.message}
               </p>
               <div className="flex items-center gap-3">
                 <button
                   type="button"
                   onClick={() => setConfirmDialog(null)}
-                  className="w-1/2 py-3 bg-white hover:bg-gray-50 text-[#705B56] border border-[#E8DCD7] text-xs font-semibold uppercase tracking-wider rounded-none transition-all"
+                  className="w-1/2 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-all"
                 >
                   Cancel
                 </button>
@@ -1754,7 +2136,7 @@ export default function AdminPortal({
                     confirmDialog.onConfirm();
                     setConfirmDialog(null);
                   }}
-                  className="w-1/2 py-3 bg-[#2C1E1B] hover:bg-rose-700 text-white text-xs font-semibold uppercase tracking-wider rounded-none transition-all"
+                  className="w-1/2 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-xl transition-all shadow-sm shadow-rose-600/20"
                 >
                   Delete
                 </button>
@@ -1772,33 +2154,25 @@ export default function AdminPortal({
               initial={{ opacity: 0, scale: 0.96, y: 15 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.96, y: 15 }}
-              className="w-full max-w-sm bg-[#FAF5F2] border border-[#E8DCD7] shadow-2xl p-6 text-center rounded-none relative"
+              className="w-full max-w-sm bg-white border border-slate-200 shadow-2xl p-6 text-center rounded-2xl relative"
             >
-              <div className="mx-auto w-12 h-12 rounded-none flex items-center justify-center mb-4">
-                {notification.type === 'success' ? (
-                  <div className="w-12 h-12 bg-emerald-100 flex items-center justify-center text-emerald-600">
-                    <Check className="w-5 h-5" />
-                  </div>
-                ) : notification.type === 'warning' ? (
-                  <div className="w-12 h-12 bg-amber-100 flex items-center justify-center text-amber-600">
-                    <AlertTriangle className="w-5 h-5" />
-                  </div>
+              <div className="mx-auto w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mb-4">
+                {notification.type === 'error' ? (
+                  <XCircle className="w-6 h-6 text-rose-600" />
                 ) : (
-                  <div className="w-12 h-12 bg-rose-100 flex items-center justify-center text-rose-600">
-                    <XCircle className="w-5 h-5" />
-                  </div>
+                  <Check className="w-6 h-6 text-emerald-600" />
                 )}
               </div>
-              <h3 className="font-editorial text-lg text-[#2C1E1B] mb-2 font-normal">
+              <h3 className="font-sans font-bold text-lg text-slate-900 mb-2">
                 {notification.title}
               </h3>
-              <p className="text-xs text-[#705B56] leading-relaxed mb-6 font-sans">
+              <p className="text-xs text-slate-500 leading-relaxed mb-6 font-sans">
                 {notification.message}
               </p>
               <button
                 type="button"
                 onClick={() => setNotification(null)}
-                className="w-full py-3 bg-[#2C1E1B] hover:bg-[#ccc2c3] text-white hover:text-[#2C1E1B] text-xs font-semibold uppercase tracking-wider rounded-none transition-all"
+                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl transition-all shadow-sm shadow-blue-600/20"
               >
                 Okay
               </button>

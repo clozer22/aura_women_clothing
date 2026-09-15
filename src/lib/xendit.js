@@ -43,17 +43,22 @@ export async function createSecureOrderInvoice({
     throw new Error(data.error || `Payment gateway error (${response.status})`);
   }
 
-  if (!data.invoiceUrl) {
+  if (!data.invoiceUrl && !data.isCod && paymentMethod !== 'COD') {
     throw new Error('Payment gateway did not return a valid checkout URL.');
   }
 
   return {
     success: true,
+    isCod: data.isCod || paymentMethod === 'COD',
     invoiceId: data.invoiceId,
     invoiceUrl: data.invoiceUrl,
     orderReference: data.orderReference,
     totalAmount: data.totalAmount,
     order: data.order,
+    trackingNumber: data.trackingNumber,
+    courierName: data.courierName,
+    waybillUrl: data.waybillUrl,
+    redirectUrl: data.redirectUrl,
   };
 }
 

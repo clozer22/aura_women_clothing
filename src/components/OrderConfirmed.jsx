@@ -35,24 +35,33 @@ export default function OrderConfirmed({ order, onContinueShopping, onViewOrders
     let intervalId;
     let pollCount = 0;
 
+    // If COD, verification loop is not needed
+    if (activeOrder?.payment_method === 'COD') {
+      setIsVerifying(false);
+    }
+
     const fetchStatus = async () => {
       if (!activeOrder?.order_reference) {
         setIsVerifying(false);
         return;
       }
       try {
-        // Direct server-side reconciliation with Xendit
+        // Direct server-side reconciliation
         try {
           const verifyRes = await fetch(
             `/api/verify-payment?ref=${encodeURIComponent(activeOrder.order_reference)}`
           );
           if (verifyRes.ok) {
             const check = await verifyRes.json();
-            if (check.paymentStatus === 'PAID') {
+            if (check.isCod || check.paymentStatus === 'COD_PENDING' || check.paymentStatus === 'PAID') {
               setLiveOrder((prev) => ({
                 ...prev,
-                payment_status: 'PAID',
-                status: check.fulfillmentStatus || 'PROCESSING',
+                payment_method: check.isCod ? 'COD' : prev?.payment_method,
+                payment_status: check.paymentStatus === 'PAID' ? 'PAID' : (prev?.payment_status || 'PENDING'),
+                status: check.fulfillmentStatus || prev?.status || 'TO_SHIP',
+                tracking_number: check.trackingNumber || prev?.tracking_number,
+                courier_name: check.courierName || prev?.courier_name,
+                waybill_url: check.waybillUrl || prev?.waybill_url,
               }));
               setIsVerifying(false);
               if (intervalId) clearInterval(intervalId);
@@ -69,7 +78,7 @@ export default function OrderConfirmed({ order, onContinueShopping, onViewOrders
 
         if (data && !error) {
           setLiveOrder(data);
-          if (data.payment_status === 'PAID') {
+          if (data.payment_method === 'COD' || data.payment_status === 'PAID') {
             setIsVerifying(false);
             if (intervalId) clearInterval(intervalId);
           }
@@ -136,7 +145,11 @@ export default function OrderConfirmed({ order, onContinueShopping, onViewOrders
         className="max-w-xl w-full bg-white border border-[#E8DCD7] p-8 sm:p-10 shadow-lg text-center rounded-none space-y-6"
       >
         {/* Status Circular Icon */}
-        {liveOrder?.payment_status === 'PAID' ? (
+        {liveOrder?.payment_method === 'COD' ? (
+          <div className="w-16 h-16 bg-emerald-50 border-2 border-emerald-500/30 text-emerald-700 rounded-full flex items-center justify-center mx-auto shadow-sm">
+            <Truck className="w-8 h-8 stroke-[2.3]" />
+          </div>
+        ) : liveOrder?.payment_status === 'PAID' ? (
           <div className="w-16 h-16 bg-emerald-50 border-2 border-emerald-500/30 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-sm">
             <Check className="w-8 h-8 stroke-[2.5]" />
           </div>
@@ -152,7 +165,11 @@ export default function OrderConfirmed({ order, onContinueShopping, onViewOrders
 
         {/* Header Text */}
         <div>
-          {liveOrder?.payment_status === 'PAID' ? (
+          {liveOrder?.payment_method === 'COD' ? (
+            <span className="text-[11px] font-brand uppercase tracking-[0.25em] font-bold text-emerald-800 bg-emerald-50 px-3 py-1 border border-emerald-200">
+              Cash on Delivery (COD) Dispatched
+            </span>
+          ) : liveOrder?.payment_status === 'PAID' ? (
             <span className="text-[11px] font-brand uppercase tracking-[0.25em] font-bold text-emerald-800 bg-emerald-50 px-3 py-1 border border-emerald-200">
               Payment Verified & Confirmed
             </span>
@@ -163,10 +180,18 @@ export default function OrderConfirmed({ order, onContinueShopping, onViewOrders
           )}
 
           <h1 className="font-brand text-3xl sm:text-4xl text-[#2C1E1B] font-bold tracking-wide mt-3 mb-2">
-            {liveOrder?.payment_status === 'PAID' ? 'ORDER CONFIRMED!' : 'ORDER RECEIVED'}
+            {liveOrder?.payment_method === 'COD'
+              ? 'ORDER PLACED & BOOKED!'
+              : liveOrder?.payment_status === 'PAID'
+              ? 'ORDER CONFIRMED!'
+              : 'ORDER RECEIVED'}
           </h1>
           <p className="text-xs sm:text-sm text-[#705B56] leading-relaxed max-w-md mx-auto">
-            {liveOrder?.payment_status === 'PAID' ? (
+            {liveOrder?.payment_method === 'COD' ? (
+              <>
+                Thank you for ordering with <span className="font-bold text-[#2C1E1B]">Aura Studio</span>. Your Cash on Delivery order is booked with our courier. Please prepare exact cash of <span className="font-bold text-[#2C1E1B]">₱{(Number(liveOrder.total_amount) || 0).toLocaleString()}</span> upon rider arrival.
+              </>
+            ) : liveOrder?.payment_status === 'PAID' ? (
               <>
                 Thank you for choosing <span className="font-bold text-[#2C1E1B]">Aura Studio</span>. Your payment has been securely verified and your order is being prepared at our Manila Studio.
               </>
@@ -249,11 +274,22 @@ export default function OrderConfirmed({ order, onContinueShopping, onViewOrders
             <Truck className="w-5 h-5 text-[#B86B60] flex-shrink-0 mt-0.5" />
             <div>
               <p className="font-bold uppercase tracking-wider text-[10px] text-[#E8DCD7]">
-                Estimated Delivery
+                {liveOrder?.courier_name || 'Courier Dispatch'}
               </p>
-              <p className="text-[11px] text-white/90 font-medium">
-                2 – 4 Business Days (Door-to-door tracking)
-              </p>
+              {liveOrder?.tracking_number ? (
+                <div className="space-y-0.5">
+                  <p className="text-[11px] text-white font-medium">
+                    Tracking #: <span className="font-mono text-amber-300 font-semibold">{liveOrder.tracking_number}</span>
+                  </p>
+                  <p className="text-[10px] text-white/70">
+                    Booked with courier • Est. 2–4 business days
+                  </p>
+                </div>
+              ) : (
+                <p className="text-[11px] text-white/90 font-medium">
+                  2 – 4 Business Days (Door-to-door tracking)
+                </p>
+              )}
             </div>
           </div>
 

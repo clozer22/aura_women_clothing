@@ -33,22 +33,22 @@ const AdminProductModal = memo(({
           initial={{ opacity: 0, scale: 0.95, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 15 }}
-          className="relative z-10 w-full max-w-lg bg-white rounded-none shadow-2xl border border-[#E8DCD7] p-6 sm:p-8 flex flex-col max-h-[90vh] md:max-h-[85vh]"
+          className="relative z-10 w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 p-6 sm:p-8 flex flex-col max-h-[90vh] md:max-h-[85vh]"
         >
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 text-[#705B56] hover:text-[#2C1E1B] transition-colors p-1 z-10 cursor-pointer"
+            className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors p-1 z-10 cursor-pointer"
             aria-label="Close form modal"
           >
             <X className="w-5 h-5" />
           </button>
 
-          <div className="mb-6 flex-shrink-0">
-            <span className="font-script text-[4rem] sm:text-[4.5rem] leading-none text-[#B86B60] block -mb-1">
-              {editingProductId ? 'Garment Refinement' : 'Garment Creation'}
+          <div className="mb-5 flex-shrink-0 pb-3 border-b border-slate-100">
+            <span className="text-[10px] uppercase font-bold tracking-wider text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200/60 inline-block mb-1">
+              {editingProductId ? 'Product Editor' : 'New Product'}
             </span>
-            <h3 className="text-xl sm:text-2xl font-editorial text-[#2C1E1B]">
-              {editingProductId ? 'Edit Product Details' : 'Upload New Product'}
+            <h3 className="text-xl font-bold font-sans text-slate-900">
+              {editingProductId ? 'Edit Product Details' : 'Add New Product'}
             </h3>
           </div>
 

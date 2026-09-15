@@ -17,6 +17,9 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import CustomerAuthModal from './components/CustomerAuthModal';
 import PasswordPromptBanner from './components/PasswordPromptBanner';
 import PageSkeleton from './components/common/PageSkeleton';
+import { recordSiteVisit } from './lib/visitorTracking';
+import CookieConsentBanner from './components/CookieConsentBanner';
+import LegalModal from './components/LegalModal';
 
 // Code-split route-level components for optimized INP and instant initial paint
 const AdminPortal = React.lazy(() => import('./components/AdminPortal'));
@@ -74,6 +77,11 @@ function MainApp() {
   const [pendingCheckoutItems, setPendingCheckoutItems] = useState(null);
   const [completedOrder, setCompletedOrder] = useState(getInitialOrder());
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [legalModalState, setLegalModalState] = useState({ isOpen: false, tab: 'privacy' });
+
+  const handleOpenLegal = (tab = 'privacy') => {
+    setLegalModalState({ isOpen: true, tab });
+  };
 
   // Only show splash screen on very first visit in this session
   const [showSplash, setShowSplash] = useState(() => {
@@ -195,6 +203,10 @@ function MainApp() {
 
   // Page-specific on-demand data fetching: only load data needed for the current active page!
   useEffect(() => {
+    if (currentView !== 'admin') {
+      recordSiteVisit(window.location.pathname);
+    }
+
     if (currentView === 'home') {
       fetchProducts();
       fetchStorefrontConfig();
@@ -547,7 +559,7 @@ function MainApp() {
       </main>
 
       {/* Footer */}
-      <Footer onNavigateAdmin={navigateToAdmin} />
+      <Footer onNavigateAdmin={navigateToAdmin} onOpenLegal={handleOpenLegal} />
 
       {/* Quick View Modal */}
       {selectedProduct && (
@@ -584,6 +596,16 @@ function MainApp() {
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }
         }}
+      />
+
+      {/* Interactive Cookie Consent Banner */}
+      <CookieConsentBanner onOpenLegal={handleOpenLegal} />
+
+      {/* Comprehensive Legal Policies & Legitimacy Hub Modal */}
+      <LegalModal
+        isOpen={legalModalState.isOpen}
+        initialTab={legalModalState.tab}
+        onClose={() => setLegalModalState(prev => ({ ...prev, isOpen: false }))}
       />
 
     </div>

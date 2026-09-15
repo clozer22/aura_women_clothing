@@ -10,7 +10,8 @@ function localApiPlugin() {
         if (
           url === '/api/create-order-invoice' ||
           url === '/api/xendit-webhook' ||
-          url === '/api/verify-payment'
+          url === '/api/verify-payment' ||
+          url === '/api/shipmates-book'
         ) {
           if (!res.status) {
             res.status = function (code) {
@@ -46,6 +47,9 @@ function localApiPlugin() {
                 await mod.default(req, res);
               } else if (url === '/api/verify-payment') {
                 const mod = await server.ssrLoadModule('./api/verify-payment.js');
+                await mod.default(req, res);
+              } else if (url === '/api/shipmates-book') {
+                const mod = await server.ssrLoadModule('./api/shipmates-book.js');
                 await mod.default(req, res);
               }
             } catch (err) {

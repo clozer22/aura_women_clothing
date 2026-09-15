@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { PRODUCTS } from '../src/data/products.js';
+import { bookShipmentWithShipmates } from './lib/shipmates.js';
 
 export default async function handler(req, res) {
   // CORS Preflight & Headers
@@ -119,7 +120,69 @@ export default async function handler(req, res) {
     // 5. Generate Cryptographically Non-Guessable Order Reference
     const orderReference = `AC-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
 
-    // 6. Call Xendit API Server-to-Server
+    // 6. Special Handling for Cash on Delivery (COD)
+    if (paymentMethod === 'COD') {
+      // Enforce strict limit: 1,000 PHP and below
+      if (totalAmount > 1000) {
+        return res.status(400).json({
+          error: 'Cash on Delivery (COD) is strictly available for orders with a total of ₱1,000 or below. Please select an e-wallet or credit/debit card.',
+        });
+      }
+
+      // Store Order in Supabase with TO_SHIP Status & COD Payment Method
+      const codOrder = {
+        order_reference: orderReference,
+        customer_name: customer.fullName,
+        customer_phone: cleanPhone,
+        customer_email: customer.email || '',
+        shipping_address: shippingAddress,
+        items: verifiedItems,
+        subtotal: verifiedSubtotal,
+        shipping_fee: shippingFee,
+        total_amount: totalAmount,
+        payment_method: 'COD',
+        payment_status: 'PENDING', // Payment collected upon physical delivery
+        status: 'TO_SHIP',
+        user_id: userId || null,
+        created_at: new Date().toISOString(),
+      };
+
+      if (supabase) {
+        try {
+          await supabase.from('orders').insert([codOrder]);
+        } catch (insertErr) {
+          console.warn('Notice: Could not insert COD order into Supabase:', insertErr.message);
+        }
+      }
+
+      // Automatically dispatch courier booking to Shipmates in the background!
+      let shipmentResult = null;
+      try {
+        shipmentResult = await bookShipmentWithShipmates(codOrder, { preferredCourier: 'J&T Express' });
+        if (shipmentResult) {
+          codOrder.tracking_number = shipmentResult.trackingNumber;
+          codOrder.courier_name = shipmentResult.courierName;
+          codOrder.waybill_url = shipmentResult.waybillUrl;
+          codOrder.shipment_status = 'BOOKED';
+        }
+      } catch (shipErr) {
+        console.warn('[COD Shipmates Dispatch] Background booking warning:', shipErr.message);
+      }
+
+      return res.status(200).json({
+        success: true,
+        isCod: true,
+        orderReference,
+        totalAmount,
+        order: codOrder,
+        trackingNumber: codOrder.tracking_number,
+        courierName: codOrder.courier_name,
+        waybillUrl: codOrder.waybill_url,
+        redirectUrl: `/order-confirmed?ref=${orderReference}`,
+      });
+    }
+
+    // 7. Call Xendit API Server-to-Server for Online Payments
     const xenditApiKey =
       process.env.XENDIT_SECRET_KEY ||
       process.env.VITE_XENDIT_API_KEY ||
