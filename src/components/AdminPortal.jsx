@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useTransition, useCallback } from '
 import { motion, AnimatePresence } from 'framer-motion';
 import { User, ShoppingBag, Sliders, ArrowLeft, Search, Plus, X, Globe, Save, Trash2, LogOut, Upload, AlertTriangle, XCircle, Check, Edit, Star, Menu, ChevronLeft, ChevronRight, Loader2, LayoutDashboard, TrendingUp, Package, ShieldCheck, Users, CheckCircle2, DollarSign, Boxes, ArrowUpRight, Sparkles, RefreshCw, Bell, ExternalLink } from 'lucide-react';
 import { PRODUCTS } from '../data/products';
-import { supabase } from '../lib/supabaseClient';
+import { supabaseAdmin as supabase } from '../lib/supabaseClient';
 import { invalidateProductsCache, saveCachedProducts, getCachedProducts } from '../lib/productCache';
 import AdminDashboardTab from './admin/AdminDashboardTab';
 import AdminProductsTab from './admin/AdminProductsTab';
@@ -10,6 +10,9 @@ import AdminOrdersTab from './admin/AdminOrdersTab';
 import AdminReviewsTab from './admin/AdminReviewsTab';
 import AdminCustomizerTab from './admin/AdminCustomizerTab';
 import AdminProfileTab from './admin/AdminProfileTab';
+import AdminStaffTab from './admin/AdminStaffTab';
+import AdminCustomersTab from './admin/AdminCustomersTab';
+import AdminPromotionsTab from './admin/AdminPromotionsTab';
 import AdminProductModal from './admin/AdminProductModal';
 import AdminBulkModal from './admin/AdminBulkModal';
 import { fetchSiteVisitorStats } from '../lib/visitorTracking';
@@ -130,20 +133,36 @@ export default function AdminPortal({
   // Website Visitors Traffic states
   const [visitorStats, setVisitorStats] = useState({ totalVisits: 0, todayVisits: 0 });
 
+  // Granular page permissions state
+  const [permissions, setPermissions] = useState(['dashboard', 'products', 'orders', 'reviews', 'customize', 'profile']);
+
+  const hasPermission = useCallback((tabKey) => {
+    if (adminRole === 'Super Admin') return true;
+    if (tabKey === 'staff') return adminRole === 'Super Admin';
+    if (!permissions || !Array.isArray(permissions)) return true;
+    return permissions.includes(tabKey);
+  }, [adminRole, permissions]);
+
   const handleTabChange = useCallback((tab) => {
+    if (!hasPermission(tab)) {
+      return;
+    }
     startTabTransition(() => {
       setActiveTab(tab);
     });
-  }, []);
+  }, [hasPermission]);
 
   const handleNavigateTab = useCallback((tab, subfilter = null) => {
+    if (!hasPermission(tab)) {
+      return;
+    }
     if (subfilter) {
       setOrderFilterTab(subfilter);
     }
     startTabTransition(() => {
       setActiveTab(tab);
     });
-  }, []);
+  }, [hasPermission]);
 
   const [dashboardStats, setDashboardStats] = useState({
     totalSales: 0,
@@ -512,12 +531,21 @@ export default function AdminPortal({
     }
   };
 
-  // Monitor Supabase session changes using a single listener
+  // Monitor Supabase admin session changes using isolated admin client
   useEffect(() => {
     let active = true;
 
+    // Check initial session from secure vault
+    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
+      if (active) {
+        setSession(initialSession);
+        setIsCheckingSession(false);
+      }
+    }).catch(() => {
+      if (active) setIsCheckingSession(false);
+    });
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('Supabase Auth Event:', event);
       if (active) {
         setSession(session);
         setIsCheckingSession(false);
@@ -548,17 +576,30 @@ export default function AdminPortal({
           role_title: profData.role_title || (adminRole === 'Super Admin' ? 'Super Administrator' : 'Administrator'),
           avatar_url: profData.avatar_url || '',
           bio: profData.bio || 'Bespoke designer commanding elegance for the modern profile.',
-          email: session.user.email
+          email: session.user.email,
+          role: profData.role || adminRole,
+          permissions: profData.permissions || ['dashboard', 'products', 'orders', 'reviews', 'customize', 'profile'],
+          is_active: profData.is_active !== false,
         };
         setProfile(profObj);
         setEditProfileForm(profObj);
+        if (profData.permissions && Array.isArray(profData.permissions)) {
+          setPermissions(profData.permissions);
+          if (adminRole !== 'Super Admin' && !profData.permissions.includes(activeTab)) {
+            const firstAllowed = profData.permissions[0] || 'dashboard';
+            setActiveTab(firstAllowed);
+          }
+        }
       } else {
         const defaultProf = {
           name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Administrator',
           role_title: adminRole === 'Super Admin' ? 'Super Administrator' : 'Administrator',
           avatar_url: '',
           bio: 'Bespoke designer commanding elegance for the modern profile.',
-          email: session.user.email
+          email: session.user.email,
+          role: adminRole,
+          permissions: ['dashboard', 'products', 'orders', 'reviews', 'customize', 'profile'],
+          is_active: true,
         };
         setProfile(defaultProf);
         setEditProfileForm(defaultProf);
@@ -744,6 +785,7 @@ export default function AdminPortal({
         totalProducts,
         lowStockCount: lowStockItems.length,
         lowStockItems,
+        topSolds: [...(prodsData || [])].sort((a, b) => (Number(b.solds) || 0) - (Number(a.solds) || 0)).slice(0, 5),
         adminCount,
         verifiedUserCount,
         recentOrders,
@@ -791,17 +833,39 @@ export default function AdminPortal({
     setOrderCounts(counts);
   };
 
-  const handleUpdateOrderStatus = async (orderId, newStatus) => {
+  const handleUpdateOrderStatus = async (orderId, newStatus, modifierInfo = null) => {
     try {
+      const existingOrder = ordersList.find(o => o.id === orderId);
+      const modifier = modifierInfo || {
+        name: profile.name || session?.user?.email?.split('@')[0] || 'Administrator',
+        email: session?.user?.email || '',
+        role: adminRole,
+        action: `Status changed to ${newStatus}`,
+        timestamp: new Date().toISOString()
+      };
+
+      const existingAudit = Array.isArray(existingOrder?.audit_trail) ? existingOrder.audit_trail : [];
+      const updatedAudit = [modifier, ...existingAudit].slice(0, 50);
+
       const { error } = await supabase
         .from('orders')
-        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .update({
+          status: newStatus,
+          last_touched_by: modifier,
+          audit_trail: updatedAudit,
+          updated_at: new Date().toISOString()
+        })
         .eq('id', orderId);
 
       if (error) throw error;
 
       setOrdersList(prev => {
-        const next = prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o);
+        const next = prev.map(o => o.id === orderId ? {
+          ...o,
+          status: newStatus,
+          last_touched_by: modifier,
+          audit_trail: updatedAudit
+        } : o);
         recalculateOrderCounts(next);
         return next;
       });
@@ -811,20 +875,40 @@ export default function AdminPortal({
     }
   };
 
-  const handleUpdateOrderTracking = async (orderId, trackingNumber, courierName) => {
+  const handleUpdateOrderTracking = async (orderId, trackingNumber, courierName, modifierInfo = null) => {
     try {
+      const existingOrder = ordersList.find(o => o.id === orderId);
+      const modifier = modifierInfo || {
+        name: profile.name || session?.user?.email?.split('@')[0] || 'Administrator',
+        email: session?.user?.email || '',
+        role: adminRole,
+        action: `Updated tracking (${courierName} #${trackingNumber})`,
+        timestamp: new Date().toISOString()
+      };
+
+      const existingAudit = Array.isArray(existingOrder?.audit_trail) ? existingOrder.audit_trail : [];
+      const updatedAudit = [modifier, ...existingAudit].slice(0, 50);
+
       const { error } = await supabase
         .from('orders')
         .update({
           tracking_number: trackingNumber,
           courier_name: courierName,
+          last_touched_by: modifier,
+          audit_trail: updatedAudit,
           updated_at: new Date().toISOString()
         })
         .eq('id', orderId);
 
       if (error) throw error;
 
-      setOrdersList(prev => prev.map(o => o.id === orderId ? { ...o, tracking_number: trackingNumber, courier_name: courierName } : o));
+      setOrdersList(prev => prev.map(o => o.id === orderId ? {
+        ...o,
+        tracking_number: trackingNumber,
+        courier_name: courierName,
+        last_touched_by: modifier,
+        audit_trail: updatedAudit
+      } : o));
       triggerNotification('success', 'Tracking Saved', `Parcel tracking #${trackingNumber} recorded.`);
     } catch (err) {
       triggerNotification('error', 'Tracking Update Failed', err.message);
@@ -1182,6 +1266,7 @@ export default function AdminPortal({
   }, []);
 
   const handleOpenAddProduct = useCallback(() => {
+    if (!hasPermission('products')) return;
     setEditingProductId(null);
     setNewProduct({
       name: '',
@@ -1202,9 +1287,10 @@ export default function AdminPortal({
       statusBadge: ''
     });
     setIsAddModalOpen(true);
-  }, []);
+  }, [hasPermission]);
 
   const handleEditProductClick = (product) => {
+    if (!hasPermission('products')) return;
     setEditingProductId(product.id);
     setNewProduct({
       name: product.name,
@@ -1694,102 +1780,161 @@ export default function AdminPortal({
 
                   {/* Navigation Groups */}
                   <div className="space-y-4">
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-3 mb-1.5">Menu</p>
-                      <button
-                        onClick={() => { handleTabChange('dashboard'); setIsMobileDrawerOpen(false); }}
-                        className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white font-semibold' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <LayoutDashboard className="w-4 h-4" />
-                          <span>Dashboard</span>
+                    {hasPermission('dashboard') && (
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-3 mb-1.5">Menu</p>
+                        <button
+                          onClick={() => { handleTabChange('dashboard'); setIsMobileDrawerOpen(false); }}
+                          className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white font-semibold' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <LayoutDashboard className="w-4 h-4" />
+                            <span>Dashboard</span>
+                          </div>
+                          {activeTab === 'dashboard' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />}
+                        </button>
+                      </div>
+                    )}
+
+                    {(hasPermission('products') || hasPermission('orders') || hasPermission('reviews')) && (
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-3 mb-1.5">Ecommerce</p>
+                        <div className="space-y-1">
+                          {hasPermission('products') && (
+                            <button
+                              onClick={() => { handleTabChange('products'); setIsMobileDrawerOpen(false); }}
+                              className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'products' ? 'bg-blue-600 text-white font-semibold' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <ShoppingBag className="w-4 h-4" />
+                                <span>Manage Products</span>
+                              </div>
+                              {dashboardStats.lowStockCount > 0 ? (
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded-md">
+                                  {dashboardStats.lowStockCount} low
+                                </span>
+                              ) : (
+                                activeTab === 'products' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />
+                              )}
+                            </button>
+                          )}
+
+                          {hasPermission('orders') && (
+                            <button
+                              onClick={() => { handleTabChange('orders'); setIsMobileDrawerOpen(false); }}
+                              className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'orders' ? 'bg-blue-600 text-white font-semibold' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <Package className="w-4 h-4" />
+                                <span>Manage Orders</span>
+                              </div>
+                              {orderCounts.toShip > 0 ? (
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 bg-rose-500 text-white rounded-md">
+                                  {orderCounts.toShip}
+                                </span>
+                              ) : (
+                                activeTab === 'orders' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />
+                              )}
+                            </button>
+                          )}
+
+                          {hasPermission('orders') && (
+                            <button
+                              onClick={() => { handleTabChange('customers'); setIsMobileDrawerOpen(false); }}
+                              className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'customers' ? 'bg-blue-600 text-white font-semibold' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <Users className="w-4 h-4" />
+                                <span>Customer CRM</span>
+                              </div>
+                              {activeTab === 'customers' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />}
+                            </button>
+                          )}
+
+                          {hasPermission('products') && (
+                            <button
+                              onClick={() => { handleTabChange('promotions'); setIsMobileDrawerOpen(false); }}
+                              className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'promotions' ? 'bg-blue-600 text-white font-semibold' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <Sparkles className="w-4 h-4" />
+                                <span>Promotions</span>
+                              </div>
+                              {activeTab === 'promotions' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />}
+                            </button>
+                          )}
+
+                          {hasPermission('reviews') && (
+                            <button
+                              onClick={() => { handleTabChange('reviews'); setIsMobileDrawerOpen(false); }}
+                              className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'reviews' ? 'bg-blue-600 text-white font-semibold' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <Star className="w-4 h-4" />
+                                <span>Customer Reviews</span>
+                              </div>
+                              {customerReviews.length > 0 ? (
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded-md">
+                                  {customerReviews.length}
+                                </span>
+                              ) : (
+                                activeTab === 'reviews' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />
+                              )}
+                            </button>
+                          )}
                         </div>
-                        {activeTab === 'dashboard' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />}
-                      </button>
-                    </div>
+                      </div>
+                    )}
 
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-3 mb-1.5">Ecommerce</p>
-                      <div className="space-y-1">
+                    {(hasPermission('customize') || hasPermission('profile')) && (
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-3 mb-1.5">Settings</p>
+                        <div className="space-y-1">
+                          {hasPermission('customize') && (
+                            <button
+                              onClick={() => { handleTabChange('customize'); setIsMobileDrawerOpen(false); }}
+                              className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'customize' ? 'bg-blue-600 text-white font-semibold' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <Sliders className="w-4 h-4" />
+                                <span>Store Customizer</span>
+                              </div>
+                              {activeTab === 'customize' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />}
+                            </button>
+                          )}
+
+                          {hasPermission('profile') && (
+                            <button
+                              onClick={() => { handleTabChange('profile'); setIsMobileDrawerOpen(false); }}
+                              className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'profile' ? 'bg-blue-600 text-white font-semibold' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <User className="w-4 h-4" />
+                                <span>Owner Profile</span>
+                              </div>
+                              {activeTab === 'profile' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {adminRole === 'Super Admin' && (
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-3 mb-1.5">Governance</p>
                         <button
-                          onClick={() => { handleTabChange('products'); setIsMobileDrawerOpen(false); }}
-                          className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'products' ? 'bg-blue-600 text-white font-semibold' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                          onClick={() => { handleTabChange('staff'); setIsMobileDrawerOpen(false); }}
+                          className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'staff' ? 'bg-indigo-600 text-white font-semibold shadow-xs shadow-indigo-600/30' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                          title="Staff & Role Governance"
                         >
                           <div className="flex items-center gap-2.5">
-                            <ShoppingBag className="w-4 h-4" />
-                            <span>Manage Products</span>
+                            <ShieldCheck className="w-4 h-4 opacity-90 text-indigo-400" />
+                            <span>Staff & Roles</span>
                           </div>
-                          {dashboardStats.lowStockCount > 0 ? (
-                            <span className="text-[9px] font-bold px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded-md">
-                              {dashboardStats.lowStockCount} low
-                            </span>
-                          ) : (
-                            activeTab === 'products' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />
-                          )}
-                        </button>
-
-                        <button
-                          onClick={() => { handleTabChange('orders'); setIsMobileDrawerOpen(false); }}
-                          className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'orders' ? 'bg-blue-600 text-white font-semibold' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
-                        >
-                          <div className="flex items-center gap-2.5">
-                            <Package className="w-4 h-4" />
-                            <span>Manage Orders</span>
-                          </div>
-                          {orderCounts.toShip > 0 ? (
-                            <span className="text-[9px] font-bold px-1.5 py-0.5 bg-rose-500 text-white rounded-md">
-                              {orderCounts.toShip}
-                            </span>
-                          ) : (
-                            activeTab === 'orders' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />
-                          )}
-                        </button>
-
-                        <button
-                          onClick={() => { handleTabChange('reviews'); setIsMobileDrawerOpen(false); }}
-                          className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'reviews' ? 'bg-blue-600 text-white font-semibold' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
-                        >
-                          <div className="flex items-center gap-2.5">
-                            <Star className="w-4 h-4" />
-                            <span>Customer Reviews</span>
-                          </div>
-                          {customerReviews.length > 0 ? (
-                            <span className="text-[9px] font-bold px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded-md">
-                              {customerReviews.length}
-                            </span>
-                          ) : (
-                            activeTab === 'reviews' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />
-                          )}
+                          {activeTab === 'staff' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />}
                         </button>
                       </div>
-                    </div>
-
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-3 mb-1.5">Settings</p>
-                      <div className="space-y-1">
-                        <button
-                          onClick={() => { handleTabChange('customize'); setIsMobileDrawerOpen(false); }}
-                          className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'customize' ? 'bg-blue-600 text-white font-semibold' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
-                        >
-                          <div className="flex items-center gap-2.5">
-                            <Sliders className="w-4 h-4" />
-                            <span>Store Customizer</span>
-                          </div>
-                          {activeTab === 'customize' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />}
-                        </button>
-
-                        <button
-                          onClick={() => { handleTabChange('profile'); setIsMobileDrawerOpen(false); }}
-                          className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'profile' ? 'bg-blue-600 text-white font-semibold' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
-                        >
-                          <div className="flex items-center gap-2.5">
-                            <User className="w-4 h-4" />
-                            <span>Owner Profile</span>
-                          </div>
-                          {activeTab === 'profile' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />}
-                        </button>
-                      </div>
-                    </div>
+                    )}
                   </div>
                 </div>
 
@@ -1851,108 +1996,169 @@ export default function AdminPortal({
 
             {/* Navigation Groups */}
             <div className="space-y-4">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-3 mb-1.5">Menu</p>
-                <button
-                  onClick={() => handleTabChange('dashboard')}
-                  className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white font-semibold shadow-xs shadow-blue-600/30' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
-                  title="Dashboard Overview"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <LayoutDashboard className="w-4 h-4 opacity-90" />
-                    <span>Dashboard</span>
+              {hasPermission('dashboard') && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-3 mb-1.5">Menu</p>
+                  <button
+                    onClick={() => handleTabChange('dashboard')}
+                    className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white font-semibold shadow-xs shadow-blue-600/30' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                    title="Dashboard Overview"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <LayoutDashboard className="w-4 h-4 opacity-90" />
+                      <span>Dashboard</span>
+                    </div>
+                    {activeTab === 'dashboard' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />}
+                  </button>
+                </div>
+              )}
+
+              {(hasPermission('products') || hasPermission('orders') || hasPermission('reviews')) && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-3 mb-1.5">Ecommerce</p>
+                  <div className="space-y-1">
+                    {hasPermission('products') && (
+                      <button
+                        onClick={() => handleTabChange('products')}
+                        className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'products' ? 'bg-blue-600 text-white font-semibold shadow-xs shadow-blue-600/30' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                        title="Products Inventory"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <ShoppingBag className="w-4 h-4 opacity-90" />
+                          <span>Manage Products</span>
+                        </div>
+                        {dashboardStats.lowStockCount > 0 ? (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded-md">
+                            {dashboardStats.lowStockCount} low
+                          </span>
+                        ) : (
+                          activeTab === 'products' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />
+                        )}
+                      </button>
+                    )}
+
+                    {hasPermission('orders') && (
+                      <button
+                        onClick={() => handleTabChange('orders')}
+                        className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'orders' ? 'bg-blue-600 text-white font-semibold shadow-xs shadow-blue-600/30' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                        title="Manage Orders & Courier Dispatch"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Package className="w-4 h-4 opacity-90" />
+                          <span>Manage Orders</span>
+                        </div>
+                        {orderCounts.toShip > 0 ? (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 bg-rose-500 text-white rounded-md">
+                            {orderCounts.toShip} new
+                          </span>
+                        ) : (
+                          activeTab === 'orders' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />
+                        )}
+                      </button>
+                    )}
+
+                    {hasPermission('orders') && (
+                      <button
+                        onClick={() => handleTabChange('customers')}
+                        className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'customers' ? 'bg-blue-600 text-white font-semibold shadow-xs shadow-blue-600/30' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                        title="Customer CRM & Lifetime Value"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Users className="w-4 h-4 opacity-90" />
+                          <span>Customer CRM</span>
+                        </div>
+                        {activeTab === 'customers' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />}
+                      </button>
+                    )}
+
+                    {hasPermission('products') && (
+                      <button
+                        onClick={() => handleTabChange('promotions')}
+                        className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'promotions' ? 'bg-blue-600 text-white font-semibold shadow-xs shadow-blue-600/30' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                        title="Discount Codes & Promotions"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Sparkles className="w-4 h-4 opacity-90" />
+                          <span>Promotions</span>
+                        </div>
+                        {activeTab === 'promotions' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />}
+                      </button>
+                    )}
+
+                    {hasPermission('reviews') && (
+                      <button
+                        onClick={() => handleTabChange('reviews')}
+                        className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'reviews' ? 'bg-blue-600 text-white font-semibold shadow-xs shadow-blue-600/30' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                        title="Customer Reviews & Ratings"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Star className="w-4 h-4 opacity-90" />
+                          <span>Customer Reviews</span>
+                        </div>
+                        {customerReviews.length > 0 ? (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded-md">
+                            {customerReviews.length}
+                          </span>
+                        ) : (
+                          activeTab === 'reviews' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />
+                        )}
+                      </button>
+                    )}
                   </div>
-                  {activeTab === 'dashboard' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />}
-                </button>
-              </div>
+                </div>
+              )}
 
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-3 mb-1.5">Ecommerce</p>
-                <div className="space-y-1">
+              {(hasPermission('customize') || hasPermission('profile')) && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-3 mb-1.5">Settings</p>
+                  <div className="space-y-1">
+                    {hasPermission('customize') && (
+                      <button
+                        onClick={() => handleTabChange('customize')}
+                        className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'customize' ? 'bg-blue-600 text-white font-semibold shadow-xs shadow-blue-600/30' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                        title="Store Customizer"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Sliders className="w-4 h-4 opacity-90" />
+                          <span>Store Customizer</span>
+                        </div>
+                        {activeTab === 'customize' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />}
+                      </button>
+                    )}
+
+                    {hasPermission('profile') && (
+                      <button
+                        onClick={() => handleTabChange('profile')}
+                        className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'profile' ? 'bg-blue-600 text-white font-semibold shadow-xs shadow-blue-600/30' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                        title="Owner Profile"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <User className="w-4 h-4 opacity-90" />
+                          <span>Owner Profile</span>
+                        </div>
+                        {activeTab === 'profile' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {adminRole === 'Super Admin' && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-3 mb-1.5">Governance</p>
                   <button
-                    onClick={() => handleTabChange('products')}
-                    className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'products' ? 'bg-blue-600 text-white font-semibold shadow-xs shadow-blue-600/30' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
-                    title="Products Inventory"
+                    onClick={() => handleTabChange('staff')}
+                    className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'staff' ? 'bg-indigo-600 text-white font-semibold shadow-xs shadow-indigo-600/30' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                    title="Staff & Role Governance"
                   >
                     <div className="flex items-center gap-2.5">
-                      <ShoppingBag className="w-4 h-4 opacity-90" />
-                      <span>Manage Products</span>
+                      <ShieldCheck className="w-4 h-4 opacity-90 text-indigo-400" />
+                      <span>Staff & Roles</span>
                     </div>
-                    {dashboardStats.lowStockCount > 0 ? (
-                      <span className="text-[9px] font-bold px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded-md">
-                        {dashboardStats.lowStockCount} low
-                      </span>
-                    ) : (
-                      activeTab === 'products' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />
-                    )}
-                  </button>
-
-                  <button
-                    onClick={() => handleTabChange('orders')}
-                    className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'orders' ? 'bg-blue-600 text-white font-semibold shadow-xs shadow-blue-600/30' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
-                    title="Manage Orders & Courier Dispatch"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <Package className="w-4 h-4 opacity-90" />
-                      <span>Manage Orders</span>
-                    </div>
-                    {orderCounts.toShip > 0 ? (
-                      <span className="text-[9px] font-bold px-1.5 py-0.5 bg-rose-500 text-white rounded-md">
-                        {orderCounts.toShip} new
-                      </span>
-                    ) : (
-                      activeTab === 'orders' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />
-                    )}
-                  </button>
-
-                  <button
-                    onClick={() => handleTabChange('reviews')}
-                    className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'reviews' ? 'bg-blue-600 text-white font-semibold shadow-xs shadow-blue-600/30' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
-                    title="Customer Reviews & Ratings"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <Star className="w-4 h-4 opacity-90" />
-                      <span>Customer Reviews</span>
-                    </div>
-                    {customerReviews.length > 0 ? (
-                      <span className="text-[9px] font-bold px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded-md">
-                        {customerReviews.length}
-                      </span>
-                    ) : (
-                      activeTab === 'reviews' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />
-                    )}
+                    {activeTab === 'staff' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />}
                   </button>
                 </div>
-              </div>
-
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-3 mb-1.5">Settings</p>
-                <div className="space-y-1">
-                  <button
-                    onClick={() => handleTabChange('customize')}
-                    className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'customize' ? 'bg-blue-600 text-white font-semibold shadow-xs shadow-blue-600/30' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
-                    title="Store Customizer"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <Sliders className="w-4 h-4 opacity-90" />
-                      <span>Store Customizer</span>
-                    </div>
-                    {activeTab === 'customize' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />}
-                  </button>
-
-                  <button
-                    onClick={() => handleTabChange('profile')}
-                    className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'profile' ? 'bg-blue-600 text-white font-semibold shadow-xs shadow-blue-600/30' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
-                    title="Owner Profile"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <User className="w-4 h-4 opacity-90" />
-                      <span>Owner Profile</span>
-                    </div>
-                    {activeTab === 'profile' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />}
-                  </button>
-                </div>
-              </div>
+              )}
             </div>
           </div>
 
@@ -1994,6 +2200,7 @@ export default function AdminPortal({
             onAddProduct={handleOpenAddProduct}
             onNavigateTab={handleNavigateTab}
             onEditProduct={handleEditProductClick}
+            hasPermission={hasPermission}
           />
         )}
 
@@ -2035,7 +2242,22 @@ export default function AdminPortal({
             onUpdateOrderStatus={handleUpdateOrderStatus}
             onUpdateOrderTracking={handleUpdateOrderTracking}
             initialFilterTab={orderFilterTab}
+            currentAdmin={{
+              name: profile.name || session?.user?.email?.split('@')[0] || 'Administrator',
+              email: session?.user?.email || '',
+              role: adminRole,
+            }}
           />
+        )}
+
+        {activeTab === 'customers' && (
+          <AdminCustomersTab
+            orders={ordersList}
+          />
+        )}
+
+        {activeTab === 'promotions' && (
+          <AdminPromotionsTab />
         )}
 
         {activeTab === 'reviews' && (
@@ -2072,6 +2294,14 @@ export default function AdminPortal({
             userEmail={session?.user?.email}
             onAvatarUpload={handleAvatarUpload}
             onUpdateProfile={handleUpdateProfile}
+          />
+        )}
+
+        {activeTab === 'staff' && adminRole === 'Super Admin' && (
+          <AdminStaffTab
+            currentAdminEmail={session?.user?.email || ''}
+            currentAdminRole={adminRole}
+            onNotification={triggerNotification}
           />
         )}
       </main>

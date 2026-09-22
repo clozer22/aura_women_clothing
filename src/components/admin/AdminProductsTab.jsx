@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
 import { motion } from 'framer-motion';
-import { Search, Plus, Star, Edit, Trash2, Globe, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { Search, Plus, Star, Edit, Trash2, Globe, ChevronLeft, ChevronRight, Loader2, FileText } from 'lucide-react';
 import LuxuryButton from '../common/LuxuryButton';
 
 const AdminProductsTab = memo(({
@@ -26,6 +26,58 @@ const AdminProductsTab = memo(({
   onDeleteSelected,
   onPageChange,
 }) => {
+  const handleExportCSV = () => {
+    if (!productList || productList.length === 0) return;
+
+    const headers = [
+      'Product ID',
+      'Name',
+      'Category',
+      'Sub Type',
+      'Price',
+      'Quantity',
+      'Rating',
+      'Sold',
+      'Created At',
+      'Status Badge'
+    ];
+
+    const escapeCSV = (str) => {
+      if (str === null || str === undefined) return '""';
+      const s = String(str).replace(/"/g, '""');
+      return `"${s}"`;
+    };
+
+    const csvRows = [headers.join(',')];
+
+    productList.forEach(product => {
+      const row = [
+        product.id,
+        product.name,
+        product.category,
+        product.subType,
+        product.price,
+        product.qty,
+        product.rating,
+        product.solds,
+        product.created_at,
+        product.statusBadge
+      ].map(escapeCSV);
+
+      csvRows.push(row.join(','));
+    });
+
+    const csvContent = csvRows.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `Products_Export_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
@@ -50,13 +102,22 @@ const AdminProductsTab = memo(({
           </p>
         </div>
 
-        <button
-          onClick={onAddProduct}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl shadow-xs shadow-blue-600/20 transition-all cursor-pointer self-start sm:self-auto"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add New Product</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          <button
+            onClick={handleExportCSV}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-xl border border-emerald-200 shadow-xs transition-all cursor-pointer"
+          >
+            <FileText className="w-4 h-4" />
+            <span>Export CSV</span>
+          </button>
+          <button
+            onClick={onAddProduct}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl shadow-xs shadow-blue-600/20 transition-all cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add New Product</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter & Search Bar */}

@@ -22,7 +22,9 @@ import {
   DollarSign,
   Send,
   FileText,
-  Printer
+  Printer,
+  UserCheck,
+  History
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -34,11 +36,14 @@ const AdminOrdersTab = ({
   onUpdateOrderStatus,
   onUpdateOrderTracking,
   initialFilterTab = 'ALL',
+  currentAdmin = null,
 }) => {
   const [activeTab, setActiveTab] = useState(initialFilterTab || 'ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(null);
+  const [selectedOrderIds, setSelectedOrderIds] = useState([]);
+  const [isBulkBooking, setIsBulkBooking] = useState(false);
   const [editingTrackingId, setEditingTrackingId] = useState(null);
   const [trackingForm, setTrackingForm] = useState({ courierName: 'J&T Express', trackingNumber: '' });
   const [bookingShipmateId, setBookingShipmateId] = useState(null);
@@ -112,11 +117,45 @@ const AdminOrdersTab = ({
     });
   }, [orders, activeTab, searchQuery]);
 
+  const formatTimeAgo = (dateStr) => {
+    if (!dateStr) return '';
+    try {
+      const d = new Date(dateStr);
+      const now = new Date();
+      const diffSec = Math.floor((now - d) / 1000);
+      if (diffSec < 60) return 'just now';
+      const diffMin = Math.floor(diffSec / 60);
+      if (diffMin < 60) return `${diffMin}m ago`;
+      const diffHour = Math.floor(diffMin / 60);
+      if (diffHour < 24) return `${diffHour}h ago`;
+      const diffDays = Math.floor(diffHour / 24);
+      if (diffDays < 7) return `${diffDays}d ago`;
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    } catch {
+      return '';
+    }
+  };
+
   const handleStatusChange = async (order, newStatus) => {
     if (!onUpdateOrderStatus) return;
     setIsUpdatingStatus(order.id);
+    const modifierInfo = {
+      name: currentAdmin?.name || currentAdmin?.email?.split('@')[0] || 'Administrator',
+      email: currentAdmin?.email || '',
+      role: currentAdmin?.role || 'Admin',
+      action: `Status changed to ${newStatus}`,
+      timestamp: new Date().toISOString(),
+    };
     try {
-      await onUpdateOrderStatus(order.id, newStatus);
+      await onUpdateOrderStatus(order.id, newStatus, modifierInfo);
+      if (selectedOrder && selectedOrder.id === order.id) {
+        setSelectedOrder((prev) => ({
+          ...prev,
+          status: newStatus,
+          last_touched_by: modifierInfo,
+          audit_trail: [modifierInfo, ...(Array.isArray(prev.audit_trail) ? prev.audit_trail : [])]
+        }));
+      }
     } finally {
       setIsUpdatingStatus(null);
     }
@@ -132,9 +171,25 @@ const AdminOrdersTab = ({
 
   const handleSaveTracking = async (orderId) => {
     if (!onUpdateOrderTracking) return;
+    const modifierInfo = {
+      name: currentAdmin?.name || currentAdmin?.email?.split('@')[0] || 'Administrator',
+      email: currentAdmin?.email || '',
+      role: currentAdmin?.role || 'Admin',
+      action: `Tracking updated (${trackingForm.courierName} #${trackingForm.trackingNumber})`,
+      timestamp: new Date().toISOString(),
+    };
     try {
-      await onUpdateOrderTracking(orderId, trackingForm.courierName, trackingForm.trackingNumber);
+      await onUpdateOrderTracking(orderId, trackingForm.trackingNumber, trackingForm.courierName, modifierInfo);
       setEditingTrackingId(null);
+      if (selectedOrder && selectedOrder.id === orderId) {
+        setSelectedOrder((prev) => ({
+          ...prev,
+          courier_name: trackingForm.courierName,
+          tracking_number: trackingForm.trackingNumber,
+          last_touched_by: modifierInfo,
+          audit_trail: [modifierInfo, ...(Array.isArray(prev.audit_trail) ? prev.audit_trail : [])]
+        }));
+      }
     } catch (err) {
       console.error('Failed to update tracking:', err);
     }
@@ -161,6 +216,18 @@ const AdminOrdersTab = ({
         throw new Error(data.error || 'Failed to dispatch booking to Shipmates');
       }
 
+      const modifierInfo = {
+        name: currentAdmin?.name || currentAdmin?.email?.split('@')[0] || 'Administrator',
+        email: currentAdmin?.email || '',
+        role: currentAdmin?.role || 'Admin',
+        action: `Booked with ${data.courierName} (Waybill #${data.trackingNumber})`,
+        timestamp: new Date().toISOString(),
+      };
+
+      if (onUpdateOrderTracking) {
+        await onUpdateOrderTracking(order.id, data.trackingNumber, data.courierName, modifierInfo);
+      }
+
       const updatedOrderObj = {
         ...order,
         tracking_number: data.trackingNumber,
@@ -168,6 +235,7 @@ const AdminOrdersTab = ({
         waybill_url: data.waybillUrl,
         shipment_status: 'BOOKED',
         status: 'TO_SHIP',
+        last_touched_by: modifierInfo,
       };
 
       setShipmentFeedback({
@@ -191,6 +259,8 @@ const AdminOrdersTab = ({
           waybill_url: data.waybillUrl,
           shipment_status: 'BOOKED',
           status: 'TO_SHIP',
+          last_touched_by: modifierInfo,
+          audit_trail: [modifierInfo, ...(Array.isArray(prev.audit_trail) ? prev.audit_trail : [])],
         }));
       }
     } catch (err) {
@@ -203,6 +273,69 @@ const AdminOrdersTab = ({
     } finally {
       setBookingShipmateId(null);
     }
+  };
+
+  const handleBulkBookShipmates = async () => {
+    setIsBulkBooking(true);
+    setShipmentFeedback(null);
+    const ordersToBook = filteredOrders.filter(o => selectedOrderIds.includes(o.id));
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const order of ordersToBook) {
+      try {
+        const res = await fetch('/api/shipmates-book', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orderReference: order.order_reference }),
+        });
+        const text = await res.text();
+        let data = {};
+        try {
+          data = text ? JSON.parse(text) : {};
+        } catch(e) {}
+        
+        if (res.ok && data.success) {
+          const modifierInfo = {
+            name: currentAdmin?.name || currentAdmin?.email?.split('@')[0] || 'Administrator',
+            email: currentAdmin?.email || '',
+            role: currentAdmin?.role || 'Admin',
+            action: `Bulk Booked with ${data.courierName} (#${data.trackingNumber})`,
+            timestamp: new Date().toISOString(),
+          };
+          if (onUpdateOrderTracking) {
+            await onUpdateOrderTracking(order.id, data.trackingNumber, data.courierName, modifierInfo);
+          }
+          successCount++;
+        } else {
+          failCount++;
+        }
+      } catch (err) {
+        failCount++;
+      }
+    }
+
+    setShipmentFeedback({
+      type: successCount > 0 ? 'success' : 'error',
+      orderRef: 'BULK',
+      message: `Bulk Booking Complete: ${successCount} successful, ${failCount} failed.`,
+    });
+
+    if (onRefresh) await onRefresh();
+    setIsBulkBooking(false);
+    setSelectedOrderIds([]);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedOrderIds.length === filteredOrders.length && filteredOrders.length > 0) {
+      setSelectedOrderIds([]);
+    } else {
+      setSelectedOrderIds(filteredOrders.map(o => o.id));
+    }
+  };
+
+  const toggleSelectOrder = (id) => {
+    setSelectedOrderIds(prev => prev.includes(id) ? prev.filter(oid => oid !== id) : [...prev, id]);
   };
 
   const formatDate = (dateStr) => {
@@ -245,6 +378,79 @@ const AdminOrdersTab = ({
         return 'bg-amber-50 text-amber-700 border-amber-200';
     }
   };
+  const handleExportCSV = () => {
+    if (!orders || orders.length === 0) return;
+
+    // Define CSV headers
+    const headers = [
+      'Order ID',
+      'Order Reference',
+      'Date Created',
+      'Customer Name',
+      'Email',
+      'Phone',
+      'Address',
+      'Barangay',
+      'City',
+      'Province',
+      'Zip',
+      'Payment Method',
+      'Payment Status',
+      'Order Status',
+      'Subtotal',
+      'Shipping Fee',
+      'Discount',
+      'Total Amount',
+      'Courier Name',
+      'Tracking Number'
+    ];
+
+    // Escape CSV values
+    const escapeCSV = (str) => {
+      if (str === null || str === undefined) return '""';
+      const s = String(str).replace(/"/g, '""');
+      return `"${s}"`;
+    };
+
+    const csvRows = [headers.join(',')];
+
+    orders.forEach(order => {
+      const row = [
+        order.id,
+        order.order_reference,
+        formatDate(order.created_at),
+        order.customer_name,
+        order.customer_email,
+        order.customer_phone,
+        order.customer_address,
+        order.customer_barangay,
+        order.customer_city,
+        order.customer_province,
+        order.customer_zip,
+        order.payment_method,
+        order.payment_status,
+        order.status,
+        order.subtotal,
+        order.shipping_fee,
+        order.discount_amount,
+        order.total_amount,
+        order.courier_name,
+        order.tracking_number
+      ].map(escapeCSV);
+
+      csvRows.push(row.join(','));
+    });
+
+    const csvContent = csvRows.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `Orders_Export_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   return (
     <div className="space-y-6">
@@ -265,14 +471,23 @@ const AdminOrdersTab = ({
           </p>
         </div>
 
-        <button
-          onClick={onRefresh}
-          disabled={isLoading}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-xl border border-slate-200/80 shadow-xs transition-all disabled:opacity-50 self-start sm:self-auto"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-blue-600' : 'text-slate-500'}`} />
-          <span>{isLoading ? 'Syncing...' : 'Sync Orders'}</span>
-        </button>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button
+            onClick={handleExportCSV}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-xl border border-emerald-200 shadow-xs transition-all cursor-pointer"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span>Export CSV</span>
+          </button>
+          <button
+            onClick={onRefresh}
+            disabled={isLoading}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-xl border border-slate-200/80 shadow-xs transition-all disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-blue-600' : 'text-slate-500'}`} />
+            <span>{isLoading ? 'Syncing...' : 'Sync Orders'}</span>
+          </button>
+        </div>
       </div>
 
       {/* Shipment Feedback Banner */}
@@ -374,6 +589,47 @@ const AdminOrdersTab = ({
         </div>
       </div>
 
+      {/* Bulk Action Bar */}
+      {selectedOrderIds.length > 0 && (
+        <div className="bg-blue-50/70 p-3 border border-blue-200 rounded-xl flex items-center justify-between shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="bg-blue-600 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center shadow-xs">
+              {selectedOrderIds.length}
+            </div>
+            <span className="text-sm font-semibold text-blue-900">Orders Selected</span>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setSelectedOrderIds([])}
+              className="px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 cursor-pointer transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleBulkBookShipmates}
+              disabled={isBulkBooking}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-xs shadow-blue-500/20 transition-all cursor-pointer disabled:opacity-50"
+            >
+              <Send className={`w-3.5 h-3.5 ${isBulkBooking ? 'animate-spin' : ''}`} />
+              <span>{isBulkBooking ? 'Processing...' : 'Bulk Book Rider'}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Select All Row */}
+      {filteredOrders.length > 0 && (
+        <div className="flex items-center gap-2 px-4 py-2 border-b border-slate-100">
+          <input
+            type="checkbox"
+            checked={selectedOrderIds.length === filteredOrders.length}
+            onChange={toggleSelectAll}
+            className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+          />
+          <span className="text-xs font-semibold text-slate-500">Select All Displayed</span>
+        </div>
+      )}
+
       {/* Orders List */}
       {isLoading ? (
         <div className="space-y-3">
@@ -408,8 +664,15 @@ const AdminOrdersTab = ({
               >
                 {/* Header Row: Ref, Date, Customer, Payment Badge, Amount */}
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-3 border-b border-slate-100">
-                  <div className="space-y-1">
-                    <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+                  <div className="flex items-start lg:items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedOrderIds.includes(order.id)}
+                      onChange={() => toggleSelectOrder(order.id)}
+                      className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer mt-1 lg:mt-0"
+                    />
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
                       <span className="font-sans font-bold text-sm text-slate-900">
                         {order.order_reference}
                       </span>
@@ -456,6 +719,25 @@ const AdminOrdersTab = ({
                       {order.customer_phone ? ` (${order.customer_phone})` : ''}
                       {order.customer_email ? ` • ${order.customer_email}` : ''}
                     </p>
+
+                    {/* Last touched by indicator */}
+                    {order.last_touched_by && (
+                      <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px] text-slate-500">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
+                          <UserCheck className="w-3 h-3 text-indigo-600 shrink-0" />
+                          <span>Last touched by: <strong className="text-slate-900 font-semibold">{order.last_touched_by.name || order.last_touched_by.email}</strong> ({order.last_touched_by.role || 'Staff'})</span>
+                        </span>
+                        <span className="text-slate-400">•</span>
+                        <span className="text-slate-500">{formatTimeAgo(order.last_touched_by.timestamp) || formatDate(order.last_touched_by.timestamp)}</span>
+                        {order.last_touched_by.action && (
+                          <>
+                            <span className="text-slate-300">•</span>
+                            <span className="text-slate-500 italic">"{order.last_touched_by.action}"</span>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
                   </div>
 
                   <div className="flex items-center justify-between lg:justify-end gap-5">
@@ -924,6 +1206,46 @@ const AdminOrdersTab = ({
                   <span>Total</span>
                   <span>₱{(Number(selectedOrder.total_amount) || 0).toLocaleString()}</span>
                 </div>
+              </div>
+
+              {/* Audit Trail & Modifier History Section */}
+              <div className="border-t border-slate-100 pt-4 space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-bold text-slate-800">
+                    <History className="w-4 h-4 text-indigo-600" />
+                    <span>Audit Trail & Modifier History</span>
+                  </div>
+                  {selectedOrder.last_touched_by && (
+                    <span className="text-[10px] text-slate-500">
+                      Last edited by <strong className="text-slate-800">{selectedOrder.last_touched_by.name || selectedOrder.last_touched_by.email}</strong> ({formatTimeAgo(selectedOrder.last_touched_by.timestamp) || 'recently'})
+                    </span>
+                  )}
+                </div>
+
+                {Array.isArray(selectedOrder.audit_trail) && selectedOrder.audit_trail.length > 0 ? (
+                  <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 divide-y divide-slate-200/60 max-h-48 overflow-y-auto space-y-2">
+                    {selectedOrder.audit_trail.map((entry, idx) => (
+                      <div key={idx} className="pt-2 first:pt-0 flex items-start justify-between gap-3 text-[11px]">
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-1.5">
+                            <strong className="text-slate-900 font-semibold">{entry.name || entry.email || 'Admin'}</strong>
+                            <span className="text-[9px] font-bold px-1.5 py-0.2 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded">
+                              {entry.role || 'Staff'}
+                            </span>
+                          </div>
+                          <p className="text-slate-600">{entry.action || 'Updated order details'}</p>
+                        </div>
+                        <span className="text-[10px] text-slate-400 shrink-0">
+                          {formatDate(entry.timestamp)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-3 text-center text-[11px] text-slate-400">
+                    No manual modifications recorded yet.
+                  </div>
+                )}
               </div>
 
               <button

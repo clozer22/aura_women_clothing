@@ -37,6 +37,7 @@ const AdminDashboardTab = memo(({
   onAddProduct,
   onNavigateTab,
   onEditProduct,
+  hasPermission = () => true,
 }) => {
   // TikTok Shop Fulfillment Pipeline Items
   const fulfillmentPipeline = [
@@ -141,13 +142,15 @@ const AdminDashboardTab = memo(({
             <span>{isLoadingStats ? 'Refreshing...' : 'Refresh'}</span>
           </button>
 
-          <button
-            onClick={onAddProduct}
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl shadow-xs shadow-blue-600/20 transition-all"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Add Product</span>
-          </button>
+          {hasPermission('products') && (
+            <button
+              onClick={onAddProduct}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl shadow-xs shadow-blue-600/20 transition-all cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Product</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -229,24 +232,34 @@ const AdminDashboardTab = memo(({
             </p>
           </div>
 
-          <button
-            onClick={() => onNavigateTab('orders', 'ALL')}
-            className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer transition-colors"
-          >
-            <span>Manage All Orders</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
+          {hasPermission('orders') && (
+            <button
+              onClick={() => onNavigateTab('orders', 'ALL')}
+              className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer transition-colors"
+            >
+              <span>Manage All Orders</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
         {/* Pipeline Cards Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
           {fulfillmentPipeline.map((item) => {
             const Icon = item.icon;
+            const canManageOrders = hasPermission('orders');
             return (
               <button
                 key={item.id}
-                onClick={() => onNavigateTab('orders', item.id)}
-                className={`p-3.5 border text-left transition-all hover:shadow-sm hover:-translate-y-0.5 cursor-pointer rounded-xl group flex flex-col justify-between ${item.color}`}
+                type="button"
+                disabled={!canManageOrders}
+                onClick={() => canManageOrders && onNavigateTab('orders', item.id)}
+                className={`p-3.5 border text-left transition-all rounded-xl group flex flex-col justify-between ${
+                  canManageOrders
+                    ? `${item.color} hover:shadow-sm hover:-translate-y-0.5 cursor-pointer`
+                    : 'bg-slate-50/70 border-slate-200/60 opacity-80 cursor-default'
+                }`}
+                title={canManageOrders ? `Inspect ${item.label} orders` : `${item.label} orders count`}
               >
                 <div className="flex items-center justify-between w-full mb-3">
                   <Icon className="w-4 h-4 opacity-80" />
@@ -255,7 +268,7 @@ const AdminDashboardTab = memo(({
                   </span>
                 </div>
                 <div>
-                  <h4 className="font-bold text-xs font-sans text-slate-900 group-hover:text-blue-600 transition-colors">
+                  <h4 className={`font-bold text-xs font-sans text-slate-900 ${canManageOrders ? 'group-hover:text-blue-600' : ''} transition-colors`}>
                     {item.label}
                   </h4>
                   <p className="text-[10px] text-slate-500 mt-0.5 leading-tight truncate">{item.sublabel}</p>
@@ -281,13 +294,15 @@ const AdminDashboardTab = memo(({
               </div>
             </div>
 
-            <button
-              onClick={() => onNavigateTab('products')}
-              className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1 self-start sm:self-auto cursor-pointer"
-            >
-              <span>View Inventory</span>
-              <ArrowUpRight className="w-3.5 h-3.5" />
-            </button>
+            {hasPermission('products') && (
+              <button
+                onClick={() => onNavigateTab('products')}
+                className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1 self-start sm:self-auto cursor-pointer"
+              >
+                <span>View Inventory</span>
+                <ArrowUpRight className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
 
           {isLoadingStats ? (
@@ -345,24 +360,26 @@ const AdminDashboardTab = memo(({
                         {isOutOfStock ? '0 Left (Out)' : `${qty} left`}
                       </span>
 
-                      <button
-                        onClick={() => onEditProduct(item)}
-                        className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-[10px] font-semibold rounded-lg transition-all flex items-center gap-1 cursor-pointer"
-                        title="Restock or Edit this garment"
-                      >
-                        <Edit className="w-3 h-3" />
-                        <span>Restock</span>
-                      </button>
+                      {hasPermission('products') && (
+                        <button
+                          onClick={() => onEditProduct(item)}
+                          className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-[10px] font-semibold rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                          title="Restock or Edit this garment"
+                        >
+                          <Edit className="w-3 h-3" />
+                          <span>Restock</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
               })}
 
-              {dashboardStats.lowStockItems.length > 6 && (
+              {hasPermission('products') && dashboardStats.lowStockItems.length > 6 && (
                 <div className="pt-3 text-center">
                   <button
                     onClick={() => onNavigateTab('products')}
-                    className="text-xs font-semibold text-blue-600 hover:text-blue-700 transition-colors"
+                    className="text-xs font-semibold text-blue-600 hover:text-blue-700 transition-colors cursor-pointer"
                   >
                     + View {dashboardStats.lowStockItems.length - 6} more low stock garments in Products Table →
                   </button>
@@ -381,13 +398,15 @@ const AdminDashboardTab = memo(({
                 <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
                 <h3 className="text-sm font-bold font-sans text-slate-900">Customer Ratings</h3>
               </div>
-              <button
-                onClick={() => onNavigateTab('reviews')}
-                className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer"
-              >
-                <span>View All</span>
-                <ArrowRight className="w-3 h-3" />
-              </button>
+              {hasPermission('reviews') && (
+                <button
+                  onClick={() => onNavigateTab('reviews')}
+                  className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer"
+                >
+                  <span>View All</span>
+                  <ArrowRight className="w-3 h-3" />
+                </button>
+              )}
             </div>
 
             <div className="flex items-center justify-between p-3.5 bg-slate-50 border border-slate-200/70 rounded-xl">
@@ -418,6 +437,65 @@ const AdminDashboardTab = memo(({
             </div>
           </div>
 
+          {/* TOP PERFORMING ITEMS RANKING */}
+          <div className="bg-white border border-slate-200/80 p-5 sm:p-6 rounded-2xl shadow-xs space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Star className="w-4 h-4 text-amber-500" />
+                <h3 className="text-sm font-bold font-sans text-slate-900">Top Performing Items</h3>
+              </div>
+              {hasPermission('products') && (
+                <button
+                  onClick={() => onNavigateTab('products')}
+                  className="text-xs font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
+                >
+                  View Catalog →
+                </button>
+              )}
+            </div>
+
+            {isLoadingStats ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-10 bg-slate-100 animate-pulse rounded-lg" />
+                ))}
+              </div>
+            ) : (dashboardStats.topSolds || []).length === 0 ? (
+              <div className="py-6 text-center space-y-1.5 border border-dashed border-slate-200 bg-slate-50/50 rounded-xl">
+                <ShoppingBag className="w-5 h-5 text-slate-400 mx-auto" />
+                <p className="text-xs text-slate-600">No items sold yet.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {dashboardStats.topSolds.map((item, index) => (
+                  <div key={item.id} className="py-2.5 flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-6 h-6 flex-shrink-0 flex items-center justify-center bg-slate-100 text-slate-500 rounded-full font-bold text-[10px]">
+                        #{index + 1}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-semibold text-slate-800 truncate">
+                          {item.name}
+                        </div>
+                        <div className="text-[10px] text-slate-400 truncate">
+                          {item.category}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <div className="font-semibold text-slate-900">
+                        {item.solds || 0} Sold
+                      </div>
+                      <div className="text-[10px] text-emerald-600 font-semibold">
+                        ₱{(Number(item.price || 0) * Number(item.solds || 0)).toLocaleString()} Rev
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* RECENT ORDERS FEED */}
           <div className="bg-white border border-slate-200/80 p-5 sm:p-6 rounded-2xl shadow-xs space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
@@ -425,12 +503,14 @@ const AdminDashboardTab = memo(({
                 <TrendingUp className="w-4 h-4 text-blue-600" />
                 <h3 className="text-sm font-bold font-sans text-slate-900">Recent Orders</h3>
               </div>
-              <button
-                onClick={() => onNavigateTab('orders', 'ALL')}
-                className="text-xs font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
-              >
-                View All →
-              </button>
+              {hasPermission('orders') && (
+                <button
+                  onClick={() => onNavigateTab('orders', 'ALL')}
+                  className="text-xs font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
+                >
+                  View All →
+                </button>
+              )}
             </div>
 
             {isLoadingStats ? (
@@ -483,48 +563,58 @@ const AdminDashboardTab = memo(({
           </div>
 
           {/* QUICK SYSTEM SHORTCUTS */}
-          <div className="bg-white border border-slate-200/80 p-5 sm:p-6 rounded-2xl shadow-xs space-y-3">
-            <h3 className="text-xs font-bold font-sans text-slate-400 uppercase tracking-wider pb-2 border-b border-slate-100">
-              Operations Shortcuts
-            </h3>
-            <div className="grid grid-cols-2 gap-2.5 pt-1">
-              <button
-                onClick={() => onNavigateTab('orders', 'TO_SHIP')}
-                className="p-3 bg-slate-50 hover:bg-slate-100/80 border border-slate-200/70 text-left transition-all rounded-xl group cursor-pointer"
-              >
-                <Clock className="w-4 h-4 text-purple-600 mb-1 group-hover:scale-110 transition-transform" />
-                <div className="text-xs font-semibold text-slate-800">Ship Parcels</div>
-                <div className="text-[10px] text-slate-400">{orderCounts.toShip || 0} to dispatch</div>
-              </button>
+          {(hasPermission('orders') || hasPermission('products') || hasPermission('reviews') || hasPermission('customize')) && (
+            <div className="bg-white border border-slate-200/80 p-5 sm:p-6 rounded-2xl shadow-xs space-y-3">
+              <h3 className="text-xs font-bold font-sans text-slate-400 uppercase tracking-wider pb-2 border-b border-slate-100">
+                Operations Shortcuts
+              </h3>
+              <div className="grid grid-cols-2 gap-2.5 pt-1">
+                {hasPermission('orders') && (
+                  <button
+                    onClick={() => onNavigateTab('orders', 'TO_SHIP')}
+                    className="p-3 bg-slate-50 hover:bg-slate-100/80 border border-slate-200/70 text-left transition-all rounded-xl group cursor-pointer"
+                  >
+                    <Clock className="w-4 h-4 text-purple-600 mb-1 group-hover:scale-110 transition-transform" />
+                    <div className="text-xs font-semibold text-slate-800">Ship Parcels</div>
+                    <div className="text-[10px] text-slate-400">{orderCounts.toShip || 0} to dispatch</div>
+                  </button>
+                )}
 
-              <button
-                onClick={() => onNavigateTab('products')}
-                className="p-3 bg-slate-50 hover:bg-slate-100/80 border border-slate-200/70 text-left transition-all rounded-xl group cursor-pointer"
-              >
-                <ShoppingBag className="w-4 h-4 text-blue-600 mb-1 group-hover:scale-110 transition-transform" />
-                <div className="text-xs font-semibold text-slate-800">Manage Catalog</div>
-                <div className="text-[10px] text-slate-400">{dashboardStats.totalProducts || 0} styles</div>
-              </button>
+                {hasPermission('products') && (
+                  <button
+                    onClick={() => onNavigateTab('products')}
+                    className="p-3 bg-slate-50 hover:bg-slate-100/80 border border-slate-200/70 text-left transition-all rounded-xl group cursor-pointer"
+                  >
+                    <ShoppingBag className="w-4 h-4 text-blue-600 mb-1 group-hover:scale-110 transition-transform" />
+                    <div className="text-xs font-semibold text-slate-800">Manage Catalog</div>
+                    <div className="text-[10px] text-slate-400">{dashboardStats.totalProducts || 0} styles</div>
+                  </button>
+                )}
 
-              <button
-                onClick={() => onNavigateTab('reviews')}
-                className="p-3 bg-slate-50 hover:bg-slate-100/80 border border-slate-200/70 text-left transition-all rounded-xl group cursor-pointer"
-              >
-                <Star className="w-4 h-4 text-amber-500 mb-1 group-hover:scale-110 transition-transform" />
-                <div className="text-xs font-semibold text-slate-800">Reviews Hub</div>
-                <div className="text-[10px] text-slate-400">{totalReviewsCount} reviews</div>
-              </button>
+                {hasPermission('reviews') && (
+                  <button
+                    onClick={() => onNavigateTab('reviews')}
+                    className="p-3 bg-slate-50 hover:bg-slate-100/80 border border-slate-200/70 text-left transition-all rounded-xl group cursor-pointer"
+                  >
+                    <Star className="w-4 h-4 text-amber-500 mb-1 group-hover:scale-110 transition-transform" />
+                    <div className="text-xs font-semibold text-slate-800">Reviews Hub</div>
+                    <div className="text-[10px] text-slate-400">{totalReviewsCount} reviews</div>
+                  </button>
+                )}
 
-              <button
-                onClick={() => onNavigateTab('customize')}
-                className="p-3 bg-slate-50 hover:bg-slate-100/80 border border-slate-200/70 text-left transition-all rounded-xl group cursor-pointer"
-              >
-                <Sliders className="w-4 h-4 text-slate-600 mb-1 group-hover:scale-110 transition-transform" />
-                <div className="text-xs font-semibold text-slate-800">Store Design</div>
-                <div className="text-[10px] text-slate-400">Customizer</div>
-              </button>
+                {hasPermission('customize') && (
+                  <button
+                    onClick={() => onNavigateTab('customize')}
+                    className="p-3 bg-slate-50 hover:bg-slate-100/80 border border-slate-200/70 text-left transition-all rounded-xl group cursor-pointer"
+                  >
+                    <Sliders className="w-4 h-4 text-slate-600 mb-1 group-hover:scale-110 transition-transform" />
+                    <div className="text-xs font-semibold text-slate-800">Store Design</div>
+                    <div className="text-[10px] text-slate-400">Customizer</div>
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </motion.div>

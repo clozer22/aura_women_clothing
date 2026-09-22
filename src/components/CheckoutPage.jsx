@@ -70,6 +70,12 @@ export default function CheckoutPage({
   const [isProcessingOrder, setIsProcessingOrder] = useState(false);
   const [paymentError, setPaymentError] = useState(null);
 
+  // Promo Code State
+  const [promoCodeInput, setPromoCodeInput] = useState('');
+  const [appliedPromo, setAppliedPromo] = useState(null);
+  const [promoError, setPromoError] = useState('');
+  const [isApplyingPromo, setIsApplyingPromo] = useState(false);
+
   // Load saved profile / address from localStorage on mount
   useEffect(() => {
     try {
@@ -215,9 +221,43 @@ export default function CheckoutPage({
     (sum, item) => sum + (Number(item.price) || 0) * (item.quantity || 1),
     0
   );
+  
+  const discountAmount = appliedPromo 
+    ? (appliedPromo.discount_type === 'percentage' 
+        ? subtotal * (appliedPromo.discount_value / 100)
+        : appliedPromo.discount_value)
+    : 0;
+    
   const shippingFee = checkoutItems.length > 0 ? 150 : 0;
-  const totalAmount = subtotal + shippingFee;
+  const totalAmount = Math.max(0, subtotal - discountAmount + shippingFee);
   const isCodEligible = totalAmount <= 1000;
+
+  const handleApplyPromo = async () => {
+    if (!promoCodeInput.trim()) return;
+    setIsApplyingPromo(true);
+    setPromoError('');
+    try {
+      const { data, error } = await supabase
+        .from('promotions')
+        .select('*')
+        .eq('code', promoCodeInput.trim().toUpperCase())
+        .single();
+      
+      if (error || !data) throw new Error("Invalid promo code.");
+      
+      if (!data.is_active) throw new Error("This promo code is no longer active.");
+      if (data.expires_at && new Date(data.expires_at) < new Date()) throw new Error("This promo code has expired.");
+      if (data.usage_limit && data.times_used >= data.usage_limit) throw new Error("This promo code has reached its usage limit.");
+      if (data.min_order_value && subtotal < data.min_order_value) throw new Error(`Minimum order value of ₱${data.min_order_value} required.`);
+      
+      setAppliedPromo(data);
+      setPromoCodeInput('');
+    } catch (err) {
+      setPromoError(err.message);
+    } finally {
+      setIsApplyingPromo(false);
+    }
+  };
 
   // Auto-switch away from COD if cart total exceeds 1,000 PHP limit
   useEffect(() => {
@@ -311,6 +351,10 @@ export default function CheckoutPage({
         try {
           localStorage.removeItem('aura_guest_orders');
           localStorage.setItem('aura_last_order', JSON.stringify(result.order));
+          
+          if (appliedPromo) {
+            await supabase.from('promotions').update({ times_used: appliedPromo.times_used + 1 }).eq('id', appliedPromo.id);
+          }
         } catch (err) {}
       }
 
@@ -1038,12 +1082,60 @@ export default function CheckoutPage({
                 ))}
               </div>
 
+              {/* Promo Code Input */}
+              <div className="pt-4 border-t border-[#E8DCD7]">
+                {appliedPromo ? (
+                  <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 p-3 text-xs">
+                    <div className="flex items-center gap-2 text-emerald-800">
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span className="font-bold">Promo {appliedPromo.code} applied!</span>
+                    </div>
+                    <button 
+                      onClick={() => setAppliedPromo(null)}
+                      className="text-emerald-700 hover:text-emerald-900 font-semibold underline"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-wider font-bold text-[#705B56] mb-1.5">
+                      Gift Card or Discount Code
+                    </label>
+                    <div className="flex gap-2">
+                      <input 
+                        type="text" 
+                        value={promoCodeInput}
+                        onChange={(e) => setPromoCodeInput(e.target.value)}
+                        placeholder="Enter code" 
+                        className="flex-1 px-3 py-2 border border-[#E8DCD7] bg-[#FAF5F2] text-xs focus:outline-none focus:border-[#2C1E1B] rounded-none"
+                      />
+                      <button 
+                        type="button"
+                        onClick={handleApplyPromo}
+                        disabled={isApplyingPromo || !promoCodeInput.trim()}
+                        className="px-4 py-2 bg-[#2C1E1B] text-white text-[10px] uppercase font-bold tracking-widest disabled:opacity-50"
+                      >
+                        {isApplyingPromo ? '...' : 'Apply'}
+                      </button>
+                    </div>
+                    {promoError && <p className="text-[10px] text-rose-600 mt-1.5">{promoError}</p>}
+                  </div>
+                )}
+              </div>
+
               {/* Pricing breakdown */}
               <div className="space-y-2 text-xs font-brand pt-4 border-t border-[#E8DCD7]">
                 <div className="flex justify-between text-[#705B56]">
                   <span>Subtotal</span>
                   <span className="font-semibold text-[#2C1E1B]">₱{subtotal.toLocaleString()}</span>
                 </div>
+                {appliedPromo && (
+                  <div className="flex justify-between text-emerald-700 font-semibold">
+                    <span>Discount ({appliedPromo.code})</span>
+                    <span>-₱{discountAmount.toLocaleString()}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-[#705B56]">
                   <span>Nationwide Shipping</span>
                   <span className="font-semibold text-[#2C1E1B]">₱{shippingFee.toLocaleString()}</span>

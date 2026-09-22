@@ -38,12 +38,15 @@ import {
   invalidateProductsCache
 } from './lib/productCache';
 
+// Secret Admin Route driven by .env (defaults to obscure path if not specified)
+const ADMIN_ROUTE = (import.meta.env.VITE_ADMIN_ROUTE || '/hq-atelier-gateway-92x').trim();
+
 function MainApp() {
   const { user } = useAuth();
 
   const getInitialView = () => {
     const path = window.location.pathname;
-    if (path === '/admin-dashboard') return 'admin';
+    if (path === ADMIN_ROUTE) return 'admin';
     if (path === '/full-catalog') return 'full-catalog';
     if (path === '/checkout') return 'checkout';
     if (path === '/orders') return 'orders';
@@ -222,8 +225,12 @@ function MainApp() {
   useEffect(() => {
     const checkCurrentPath = () => {
       const path = window.location.pathname;
-      if (path === '/admin-dashboard') {
+      if (path === ADMIN_ROUTE) {
         setCurrentView('admin');
+      } else if (path === '/admin-dashboard' || path === '/admin') {
+        // Obfuscation decoy: silently redirect to home, hiding the real admin portal
+        window.history.replaceState(null, '', '/');
+        setCurrentView('home');
       } else if (path === '/full-catalog') {
         setCurrentView('full-catalog');
       } else if (path === '/checkout') {
@@ -293,7 +300,7 @@ function MainApp() {
 
   const navigateToAdmin = () => {
     setCurrentView('admin');
-    window.history.pushState(null, '', '/admin-dashboard');
+    window.history.pushState(null, '', ADMIN_ROUTE);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
