@@ -213,6 +213,8 @@ const AdminProductModal = memo(({
                     <img
                       src={newProduct.image}
                       alt="Product Preview"
+                      loading="lazy"
+                      decoding="async"
                       className="w-16 h-20 object-cover border border-[#E8DCD7] bg-white flex-shrink-0"
                     />
                   )}

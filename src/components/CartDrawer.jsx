@@ -149,6 +149,8 @@ export default function CartDrawer({ isOpen, onClose, cartItems, onUpdateQuantit
                         <img
                           src={item.image}
                           alt={item.name}
+                          loading="lazy"
+                          decoding="async"
                           className="w-20 h-24 object-cover object-center rounded-none bg-[#FAF5F2]"
                         />
                         <div className="flex-1 flex flex-col justify-between">

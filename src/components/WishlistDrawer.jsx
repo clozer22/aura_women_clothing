@@ -105,6 +105,8 @@ export default function WishlistDrawer({ isOpen, onClose, onProceedToCheckout, o
                     <img
                       src={item.image}
                       alt={item.name}
+                      loading="lazy"
+                      decoding="async"
                       className="w-20 h-24 object-cover object-center flex-shrink-0 bg-[#FAF5F2]"
                     />
 

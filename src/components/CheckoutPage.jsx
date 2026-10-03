@@ -800,6 +800,8 @@ export default function CheckoutPage({
                           <img
                             src={item.image}
                             alt={item.name}
+                            loading="lazy"
+                            decoding="async"
                             className="w-12 h-14 object-cover bg-[#FAF5F2]"
                           />
                           <div>
@@ -1061,6 +1063,8 @@ export default function CheckoutPage({
                     <img
                       src={item.image}
                       alt={item.name}
+                      loading="lazy"
+                      decoding="async"
                       className="w-16 h-20 object-cover bg-[#FAF5F2] flex-shrink-0"
                     />
                     <div className="flex-1 min-w-0">

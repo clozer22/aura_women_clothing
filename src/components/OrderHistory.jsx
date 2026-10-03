@@ -683,6 +683,8 @@ export default function OrderHistory({ onBackToShop }) {
                             <img
                               src={item.image}
                               alt={item.name}
+                              loading="lazy"
+                              decoding="async"
                               className="w-14 h-16 object-cover bg-[#FAF5F2] border border-[#E8DCD7]"
                             />
                           )}
@@ -812,6 +814,8 @@ export default function OrderHistory({ onBackToShop }) {
                   <img
                     src={reviewModal.item.image}
                     alt={reviewModal.item.name}
+                    loading="lazy"
+                    decoding="async"
                     className="w-14 h-16 object-cover border border-[#E8DCD7] bg-white flex-shrink-0"
                   />
                 )}

@@ -1,14 +1,14 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, memo } from 'react';
 import { motion } from 'framer-motion';
 
-import defaultHeroBanner from '../images/aura-banner.jpg';
+import defaultHeroBanner from '../images/aura-banner.webp';
 
 const DEFAULT_CONFIG = {
   posterUrl: defaultHeroBanner,
   title: 'Aura',
 };
 
-export default function Hero({ config }) {
+function Hero({ config }) {
   const activeConfig = {
     ...DEFAULT_CONFIG,
     ...config,
@@ -119,6 +119,10 @@ export default function Hero({ config }) {
               ref={mediaRef}
               src={activeConfig.posterUrl}
               alt="Aura Editorial Close-up"
+              // LCP element: intentionally NOT lazy — load it first, at high priority
+              loading="eager"
+              fetchpriority="high"
+              decoding="async"
               onLoad={() => setMediaLoaded(true)}
               onError={() => setMediaLoaded(true)}
               className={`w-full h-full object-cover object-[center_28%] scale-105 group-hover:scale-100 transition-all duration-[1200ms] ease-out rounded-none ${mediaLoaded ? 'opacity-100' : 'opacity-0'
@@ -142,3 +146,5 @@ export default function Hero({ config }) {
     </section>
   );
 }
+
+export default memo(Hero);

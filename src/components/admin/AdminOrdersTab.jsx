@@ -788,6 +788,8 @@ const AdminOrdersTab = ({
                           <img
                             src={item.image}
                             alt={item.name}
+                            loading="lazy"
+                            decoding="async"
                             className="w-10 h-12 object-cover bg-white border border-slate-200 rounded-lg flex-shrink-0"
                           />
                         )}
@@ -1166,6 +1168,8 @@ const AdminOrdersTab = ({
                           <img
                             src={item.image}
                             alt={item.name}
+                            loading="lazy"
+                            decoding="async"
                             className="w-12 h-14 object-cover bg-slate-100 border border-slate-200 rounded-lg"
                           />
                         )}

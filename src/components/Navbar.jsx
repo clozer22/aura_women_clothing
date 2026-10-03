@@ -15,7 +15,7 @@ import {
   KeyRound,
   ShieldCheck,
 } from 'lucide-react';
-import cartBasketIcon from '../images/icons/CART BASKET.png';
+import cartBasketIcon from '../images/icons/cart-basket.webp';
 import { getWishlist, subscribeWishlist } from '../lib/wishlistManager';
 import { useAuth } from '../context/AuthContext';
 
@@ -216,7 +216,7 @@ export default function Navbar({
             title="Shopping Bag"
             aria-label="View Shopping Bag"
           >
-            <img src={cartBasketIcon} alt="Cart" className="w-[55px] h-[55px] object-contain" />
+            <img src={cartBasketIcon} alt="Cart" width={55} height={55} loading="lazy" decoding="async" className="w-[55px] h-[55px] object-contain" />
             {wishlistCount > 0 && (
               <span className="absolute -top-1 -right-1 bg-[#B86B60] text-white text-[9px] w-4 h-4 rounded-full flex items-center justify-center font-bold shadow-md">
                 {wishlistCount}
@@ -384,7 +384,7 @@ export default function Navbar({
           className="p-1 text-[#2C1E1B] bg-transparent border-none focus:outline-none flex items-center justify-center rounded-none relative cursor-pointer"
           aria-label="View Shopping Bag"
         >
-          <img src={cartBasketIcon} alt="Cart" className="w-[28px] h-[28px] object-contain" />
+          <img src={cartBasketIcon} alt="Cart" width={28} height={28} loading="lazy" decoding="async" className="w-[28px] h-[28px] object-contain" />
           {wishlistCount > 0 && (
             <span className="absolute -top-1 -right-1 bg-[#B86B60] text-white text-[8px] w-3.5 h-3.5 rounded-full flex items-center justify-center font-bold shadow-md">
               {wishlistCount}

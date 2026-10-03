@@ -1,8 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PRODUCTS, CATEGORIES } from '../data/products';
 import { Search, SlidersHorizontal, ArrowRight, Sparkles } from 'lucide-react';
 import ShimmerImage from './ShimmerImage';
+import LazyVideo from './common/LazyVideo';
 
 const isVideoUrl = (url) => url && (url.startsWith('data:video/') || url.match(/\.(mp4|mov|webm)($|\?)/i));
 
@@ -29,7 +30,7 @@ function SkeletonCard() {
   );
 }
 
-export default function ProductCatalog({ products, isLoading, onSelectProduct, onViewFullCatalog }) {
+function ProductCatalog({ products, isLoading, onSelectProduct, onViewFullCatalog }) {
   const [selectedCategory, setSelectedCategory] = useState('All Collections');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('featured');
@@ -134,12 +135,8 @@ export default function ProductCatalog({ products, isLoading, onSelectProduct, o
                         {/* Studio Model Full Body Image or Video */}
                         <div className="relative flex-1 flex items-center justify-center my-2 overflow-hidden rounded-none w-full h-[260px] sm:h-[340px]">
                           {isVideoUrl(product.image) ? (
-                            <video
+                            <LazyVideo
                               src={product.image}
-                              autoPlay
-                              loop
-                              muted
-                              playsInline
                               className={`w-full h-full object-cover object-top rounded-none ${isSoldOut ? 'opacity-65' : ''}`}
                             />
                           ) : (
@@ -228,3 +225,5 @@ export default function ProductCatalog({ products, isLoading, onSelectProduct, o
     </section>
   );
 }
+
+export default memo(ProductCatalog);

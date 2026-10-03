@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef, useEffect, useTransition } from 'reac
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, ChevronsUpDown, ArrowLeft, Eye, RotateCcw, Filter, Search, X, ShoppingBag, Sparkles, ChevronLeft, ChevronRight } from 'lucide-react';
 import ShimmerImage from './ShimmerImage';
+import LazyVideo from './common/LazyVideo';
 
 const isVideoUrl = (url) => url && (url.startsWith('data:video/') || url.match(/\.(mp4|mov|webm)($|\?)/i));
 
@@ -478,12 +479,8 @@ export default function FullCatalogView({ products, isLoading, onBackToHome, onS
                   {/* Studio Model Full Body Image or Video */}
                   <div className="relative flex-1 flex items-center justify-center my-2 overflow-hidden rounded-none w-full h-[260px] sm:h-[340px]">
                     {isVideoUrl(product.image) ? (
-                      <video
+                      <LazyVideo
                         src={product.image}
-                        autoPlay
-                        loop
-                        muted
-                        playsInline
                         className={`w-full h-full object-cover object-top rounded-none ${isSoldOut ? 'opacity-65' : ''}`}
                       />
                     ) : (

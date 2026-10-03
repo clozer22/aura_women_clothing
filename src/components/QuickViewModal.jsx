@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Star, Sparkles, Check, Heart, ArrowRight, ShoppingBag } from 'lucide-react';
-import sizeChartImg from '../images/size_chart.png';
+import sizeChartImg from '../images/size_chart.webp';
 import { addToWishlist, isInWishlist } from '../lib/wishlistManager';
 
 const isVideoUrl = (url) => url && (url.startsWith('data:video/') || url.match(/\.(mp4|mov|webm)($|\?)/i));
@@ -141,6 +141,8 @@ export default function QuickViewModal({ product, onClose, onBuyNow, onOpenWishl
               <img
                 src={product.image}
                 alt={product.name}
+                loading="lazy"
+                decoding="async"
                 className="w-full h-full object-cover object-center"
               />
             )}
@@ -266,6 +268,8 @@ export default function QuickViewModal({ product, onClose, onBuyNow, onOpenWishl
               <img
                 src={product.sizeChart || sizeChartImg}
                 alt={`${product.name} Size Chart`}
+                loading="lazy"
+                decoding="async"
                 className="w-full h-auto object-contain max-h-[70vh] mt-6"
               />
             </motion.div>

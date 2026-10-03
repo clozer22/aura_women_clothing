@@ -378,7 +378,7 @@ export default function AdminStaffTab({
                       }`}
                     >
                       {staff.avatar_url ? (
-                        <img src={staff.avatar_url} alt="" className="w-full h-full object-cover rounded-2xl" />
+                        <img src={staff.avatar_url} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover rounded-2xl" />
                       ) : (
                         (staff.name || staff.email || 'A').charAt(0).toUpperCase()
                       )}

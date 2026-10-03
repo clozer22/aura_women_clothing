@@ -331,7 +331,7 @@ const AdminDashboardTab = memo(({
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="w-11 h-13 bg-slate-100 border border-slate-200 rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center">
                         {item.image ? (
-                          <img src={item.image} alt={item.name} className="w-full h-full object-cover" loading="lazy" />
+                          <img src={item.image} alt={item.name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
                         ) : (
                           <Package className="w-4 h-4 text-slate-400" />
                         )}

@@ -128,6 +128,8 @@ export default function AboutSection({ config }) {
               ref={mediaRef}
               src={mediaUrl}
               alt="Aura Atelier Brand Background"
+              loading="lazy"
+              decoding="async"
               onLoad={() => setLoaded(true)}
               onError={() => setLoaded(true)}
               className={`h-full w-auto max-w-none sm:absolute sm:inset-0 sm:w-full sm:h-full sm:object-cover sm:object-center transition-opacity duration-700 ease-out ${

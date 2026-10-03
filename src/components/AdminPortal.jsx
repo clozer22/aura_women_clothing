@@ -1716,6 +1716,8 @@ export default function AdminPortal({
                 <img
                   src={profile.avatar_url}
                   alt={profile.name}
+                  loading="lazy"
+                  decoding="async"
                   className="w-8 h-8 rounded-full object-cover border border-slate-200"
                 />
               ) : (
@@ -1980,6 +1982,8 @@ export default function AdminPortal({
                   <img
                     src={profile.avatar_url}
                     alt={profile.name}
+                    loading="lazy"
+                    decoding="async"
                     className="w-10 h-10 object-cover rounded-full border border-blue-500/30 flex-shrink-0"
                   />
                 ) : (

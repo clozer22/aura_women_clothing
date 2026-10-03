@@ -77,6 +77,8 @@ const AdminBulkModal = memo(({
                   <img
                     src={bulkSizeChart}
                     alt="Bulk Size Chart Preview"
+                    loading="lazy"
+                    decoding="async"
                     className="w-20 h-16 object-contain border border-[#E8DCD7] bg-white flex-shrink-0"
                   />
                   <div className="space-y-1.5">

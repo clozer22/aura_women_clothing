@@ -142,6 +142,8 @@ const AdminProfileTab = memo(({
               <img
                 src={profile.avatar_url}
                 alt="Admin Portrait"
+                loading="lazy"
+                decoding="async"
                 className="w-full h-full object-cover rounded-2xl"
               />
             ) : (
