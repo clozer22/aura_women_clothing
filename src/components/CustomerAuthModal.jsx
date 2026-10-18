@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Mail, Lock, User, ArrowRight, ShieldCheck, KeyRound, Loader2, CheckCircle2 } from 'lucide-react';
 import { useAuth, isAdminEmail } from '../context/AuthContext';
+import { trackLead } from '../lib/metaPixel';
 
 export default function CustomerAuthModal({ isOpen, onClose, onSuccess, initialMode = 'signin' }) {
   const { signInWithGoogle, signUpWithEmail, verifyEmailOtp, resendEmailOtp, signInWithEmail } = useAuth();
@@ -137,6 +138,9 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess, initialM
     setErrorMsg('');
     try {
       await verifyEmailOtp({ email: cleanEmail, token: cleanOtp });
+      try {
+        trackLead('Customer Sign Up', { email: cleanEmail });
+      } catch (e) {}
       setSuccessMsg('Account verified and activated successfully!');
       setTimeout(() => {
         if (onSuccess) onSuccess();

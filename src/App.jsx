@@ -20,6 +20,7 @@ import PageSkeleton from './components/common/PageSkeleton';
 import { recordSiteVisit } from './lib/visitorTracking';
 import CookieConsentBanner from './components/CookieConsentBanner';
 import LegalModal from './components/LegalModal';
+import { trackPageView, trackViewContent, trackInitiateCheckout } from './lib/metaPixel';
 
 // Code-split route-level components for optimized INP and instant initial paint
 const AdminPortal = React.lazy(() => import('./components/AdminPortal'));
@@ -208,6 +209,7 @@ function MainApp() {
   useEffect(() => {
     if (currentView !== 'admin') {
       recordSiteVisit(window.location.pathname);
+      trackPageView(currentView);
     }
 
     if (currentView === 'home') {
@@ -220,6 +222,13 @@ function MainApp() {
     }
     // If currentView is 'admin', 'orders', or 'order-confirmed', skip storefront fetching entirely!
   }, [currentView]);
+
+  // Track product modal views
+  useEffect(() => {
+    if (selectedProduct) {
+      trackViewContent(selectedProduct);
+    }
+  }, [selectedProduct?.id]);
 
   // Route URL listener on mount & popstate history listener
   useEffect(() => {
@@ -320,6 +329,14 @@ function MainApp() {
       showToast('Please sign in or create an account to proceed to checkout.');
       return;
     }
+
+    const estTotal = validItems.reduce(
+      (sum, item) => sum + (Number(item.price) || 0) * (item.quantity || 1),
+      0
+    );
+    try {
+      trackInitiateCheckout(validItems, estTotal);
+    } catch (e) {}
 
     setCheckoutItems(validItems);
     setCurrentView('checkout');

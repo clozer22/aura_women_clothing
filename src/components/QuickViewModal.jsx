@@ -1,13 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Star, Sparkles, Check, Heart, ArrowRight, ShoppingBag } from 'lucide-react';
 import sizeChartImg from '../images/size_chart.webp';
 import { addToWishlist, isInWishlist } from '../lib/wishlistManager';
+import { trackViewContent } from '../lib/metaPixel';
 
 const isVideoUrl = (url) => url && (url.startsWith('data:video/') || url.match(/\.(mp4|mov|webm)($|\?)/i));
 
 export default function QuickViewModal({ product, onClose, onBuyNow, onOpenWishlist }) {
   if (!product) return null;
+
+  useEffect(() => {
+    if (product) {
+      trackViewContent(product);
+    }
+  }, [product?.id]);
 
   const [showSizeChart, setShowSizeChart] = useState(false);
 

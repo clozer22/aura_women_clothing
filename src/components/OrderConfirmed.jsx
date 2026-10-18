@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { removeItemsFromWishlist, clearWishlist } from '../lib/wishlistManager';
 import { supabase } from '../lib/supabaseClient';
+import { trackPurchase } from '../lib/metaPixel';
 
 export default function OrderConfirmed({ order, onContinueShopping, onViewOrders }) {
   const [copied, setCopied] = useState(false);
@@ -109,7 +110,18 @@ export default function OrderConfirmed({ order, onContinueShopping, onViewOrders
     } else {
       clearWishlist();
     }
-  }, []);
+
+    // Report Purchase event to Meta Pixel (deduplicated per order reference)
+    if (activeOrder?.order_reference) {
+      try {
+        const dedupeKey = `meta_pixel_purchased_${activeOrder.order_reference}`;
+        if (!sessionStorage.getItem(dedupeKey)) {
+          trackPurchase(activeOrder);
+          sessionStorage.setItem(dedupeKey, '1');
+        }
+      } catch (e) {}
+    }
+  }, [activeOrder?.order_reference]);
 
   if (!activeOrder) {
     return (

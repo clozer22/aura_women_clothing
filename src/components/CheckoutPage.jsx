@@ -22,6 +22,7 @@ import { createSecureOrderInvoice } from '../lib/xendit';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import { removeItemsFromWishlist } from '../lib/wishlistManager';
+import { trackInitiateCheckout } from '../lib/metaPixel';
 
 export default function CheckoutPage({
   checkoutItems = [],
@@ -76,7 +77,7 @@ export default function CheckoutPage({
   const [promoError, setPromoError] = useState('');
   const [isApplyingPromo, setIsApplyingPromo] = useState(false);
 
-  // Load saved profile / address from localStorage on mount
+  // Load saved profile / address from localStorage on mount & report InitiateCheckout to Meta Pixel
   useEffect(() => {
     try {
       const saved = localStorage.getItem('aura_saved_shipping_address');
@@ -85,6 +86,16 @@ export default function CheckoutPage({
         setFormData((prev) => ({ ...prev, ...parsed }));
       }
     } catch (e) {}
+
+    if (Array.isArray(checkoutItems) && checkoutItems.length > 0) {
+      try {
+        const initialSubtotal = checkoutItems.reduce(
+          (sum, item) => sum + (Number(item.price) || 0) * (item.quantity || 1),
+          0
+        );
+        trackInitiateCheckout(checkoutItems, initialSubtotal + 150);
+      } catch (err) {}
+    }
   }, []);
 
   // Pre-fill logged-in customer info (email is strictly locked to authenticated user)

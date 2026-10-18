@@ -8,6 +8,7 @@
  */
 
 import { supabase } from './supabaseClient';
+import { trackAddToCart } from './metaPixel';
 
 let currentUserId = null;
 let currentItems = [];
@@ -155,6 +156,18 @@ export async function addToWishlist(product, selectedSize = 'Standard', selected
 
   saveLocal(updated);
   notify(updated);
+
+  // Report conversion event to Meta Pixel
+  try {
+    trackAddToCart({
+      id: product.id,
+      name: product.name,
+      price: Number(product.price) || 0,
+      size: cleanSize,
+      color: cleanColor,
+      quantity: 1,
+    });
+  } catch (e) {}
 
   // If user is authenticated, sync with Supabase public.wishlists
   if (currentUserId) {

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Send, MapPin, Mail, Check } from 'lucide-react';
+import { trackLead } from '../lib/metaPixel';
 
 export default function ContactSection() {
   const [formData, setFormData] = useState({ name: '', email: '', message: '' });
@@ -60,6 +61,10 @@ export default function ContactSection() {
 
       const result = await response.json();
       if (result.success) {
+        try {
+          trackLead('Contact Form Inquiry', { email: formData.email, name: formData.name });
+        } catch (e) {}
+
         setSubmitted(true);
         setFormData({ name: '', email: '', message: '' });
         setTimeout(() => {
