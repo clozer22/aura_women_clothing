@@ -122,8 +122,22 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
     setErrorMsg('');
     setProfileSuccess('');
 
+    const cleanName = (fullName || '').replace(/<[^>]*>?/gm, '').trim().slice(0, 80);
+    if (!cleanName) {
+      setErrorMsg('Full name cannot be empty.');
+      setIsUpdatingProfile(false);
+      return;
+    }
+
+    const cleanPhone = (phone || '').replace(/\D/g, '').slice(0, 11);
+    if (cleanPhone && (cleanPhone.length !== 11 || !/^09\d{9}$/.test(cleanPhone))) {
+      setErrorMsg('Phone number must be a valid 11-digit Philippine mobile number (09XXXXXXXXX).');
+      setIsUpdatingProfile(false);
+      return;
+    }
+
     try {
-      await updateProfileData({ full_name: fullName, phone });
+      await updateProfileData({ full_name: cleanName, phone: cleanPhone });
       setProfileSuccess('Profile details saved successfully.');
       setTimeout(() => setProfileSuccess(''), 4000);
     } catch (err) {
@@ -136,8 +150,12 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
   // Save / Create Password
   const handleSetPassword = async (e) => {
     e.preventDefault();
-    if (newPassword.length < 6) {
-      setErrorMsg('Password must be at least 6 characters.');
+    if (newPassword.length < 8) {
+      setErrorMsg('Password must be at least 8 characters long.');
+      return;
+    }
+    if (!/[a-zA-Z]/.test(newPassword) || !/\d/.test(newPassword)) {
+      setErrorMsg('Password must contain both letters and at least one number.');
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -170,8 +188,14 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
   const handleSaveAddress = (e) => {
     e.preventDefault();
     setIsSavingAddress(true);
+    setErrorMsg('');
     try {
-      localStorage.setItem('aura_saved_shipping_address', JSON.stringify(addressData));
+      const sanitizedAddress = {
+        ...addressData,
+        street: (addressData.street || '').replace(/<[^>]*>?/gm, '').trim().slice(0, 150),
+        zipCode: (addressData.zipCode || '').replace(/\D/g, '').trim().slice(0, 10),
+      };
+      localStorage.setItem('aura_saved_shipping_address', JSON.stringify(sanitizedAddress));
       setAddressSuccess('Default delivery address saved for faster checkout.');
       setTimeout(() => setAddressSuccess(''), 4000);
     } catch (err) {
@@ -447,14 +471,14 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-[11px] uppercase font-bold tracking-wider text-[#705B56] mb-2">
-                    {hasSetPassword ? 'New Password *' : 'Create Password *'} (Min. 6 characters)
+                    {hasSetPassword ? 'New Password *' : 'Create Password *'} (Min. 8 characters, letters & numbers)
                   </label>
                   <div className="relative">
                     <Lock className="w-4 h-4 text-[#A38E88] absolute left-3.5 top-3.5" />
                     <input
                       type="password"
                       required
-                      minLength={6}
+                      minLength={8}
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
                       placeholder="••••••••"
@@ -472,7 +496,7 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
                     <input
                       type="password"
                       required
-                      minLength={6}
+                      minLength={8}
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="••••••••"

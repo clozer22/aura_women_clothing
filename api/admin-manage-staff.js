@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseServerClient } from './lib/supabaseServer.js';
 
 export default async function handler(req, res) {
   // CORS Headers
@@ -19,25 +19,56 @@ export default async function handler(req, res) {
   }
 
   try {
-    const supabaseUrl =
-      process.env.VITE_SUPABASE_URL ||
-      process.env.SUPABASE_URL ||
-      'https://pcmlleeuxbymomjxhwlv.supabase.co';
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     const anonKey =
       process.env.VITE_SUPABASE_ANON_KEY ||
-      process.env.SUPABASE_ANON_KEY ||
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBjbWxsZWV1eGJ5bW9tanhod2x2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgzNzA2NzgsImV4cCI6MjEwMzk0NjY3OH0.WZCqgnt_7l88U-Yl_rAvhmXQLSKy70hT1Wjq8rf_qC0';
+      process.env.SUPABASE_ANON_KEY;
 
-    const supabase = createClient(supabaseUrl, serviceRoleKey || anonKey, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
-    });
+    const supabase = getSupabaseServerClient(serviceRoleKey || anonKey);
+    if (!supabase) {
+      return res.status(500).json({ error: 'Supabase configuration missing' });
+    }
 
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
     const action = body.action || req.query?.action || 'list';
+
+    // Administrative Authentication Verification
+    const authHeader = req.headers.authorization || req.headers.Authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+
+    let callerUser = null;
+    let callerEmail = '';
+    let isSuperAdminCaller = false;
+
+    if (token) {
+      const { data: authUserData, error: authUserErr } = await supabase.auth.getUser(token);
+      if (!authUserErr && authUserData?.user) {
+        callerUser = authUserData.user;
+        callerEmail = (callerUser.email || '').toLowerCase();
+        isSuperAdminCaller = callerEmail.endsWith('@superadmin.com');
+      }
+    }
+
+    // Check if any admin profiles exist yet (initial bootstrapping check)
+    const { count: profileCount } = await supabase
+      .from('admin_profiles')
+      .select('*', { count: 'exact', head: true });
+
+    const isBootstrapping = (profileCount === 0 || profileCount === null);
+
+    // Enforce administrative authentication if not bootstrapping
+    if (!isBootstrapping) {
+      if (!callerUser) {
+        return res.status(401).json({
+          error: 'Unauthorized: Valid administrative session bearer token required.',
+        });
+      }
+      if (!callerEmail.endsWith('@admin.com') && !callerEmail.endsWith('@superadmin.com')) {
+        return res.status(403).json({
+          error: 'Forbidden: Caller is not an authorized administrator.',
+        });
+      }
+    }
 
     // 1. LIST ALL STAFF & ADMIN PROFILES
     if (action === 'list') {
@@ -217,6 +248,10 @@ export default async function handler(req, res) {
       const { staffId } = body;
       if (!staffId) {
         return res.status(400).json({ error: 'staffId is required' });
+      }
+
+      if (!isBootstrapping && !isSuperAdminCaller) {
+        return res.status(403).json({ error: 'Forbidden: Only Super Administrators can delete staff accounts' });
       }
 
       if (serviceRoleKey) {

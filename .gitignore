@@ -30,3 +30,13 @@ yarn-error.log*
 
 # AI Agents config (contains secrets)
 .agents/mcp_config.json
+
+# Supabase temp artifacts
+supabase/.temp/
+
+# Generated manuals and PDF documents
+*.pdf
+
+# Agent skills
+.agents/skills/ecommerce-security-and-logistics/
+.agents/skills/parallax-animation/

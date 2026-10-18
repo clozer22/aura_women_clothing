@@ -323,18 +323,18 @@ export default function CheckoutPage({
       // 1. Call Secure Serverless Invoice & Order Endpoint
       const result = await createSecureOrderInvoice({
         customer: {
-          fullName: formData.fullName,
-          email: formData.email || user?.email || '',
-          phone: formData.phone,
+          fullName: (formData.fullName || '').trim(),
+          email: (formData.email || user?.email || '').trim().toLowerCase(),
+          phone: (formData.phone || '').trim(),
         },
         shippingAddress: {
-          street: formData.street,
-          region: formData.regionName,
+          street: (formData.street || '').trim(),
+          region: formData.regionName || '',
           province: formData.provinceName || 'Metro Manila',
-          city: formData.cityName,
-          barangay: formData.barangayName,
-          zipCode: formData.zipCode,
-          country: formData.country,
+          city: formData.cityName || '',
+          barangay: formData.barangayName || '',
+          zipCode: (formData.zipCode || '').trim(),
+          country: 'Philippines',
         },
         items: checkoutItems.map((item) => ({
           id: item.id,
@@ -343,7 +343,7 @@ export default function CheckoutPage({
           quantity: item.quantity || 1,
         })),
         paymentMethod,
-        userId: user?.id || null,
+        promoCode: appliedPromo?.code || null,
       });
 
       // 2. Save active order for immediate state
@@ -351,10 +351,6 @@ export default function CheckoutPage({
         try {
           localStorage.removeItem('aura_guest_orders');
           localStorage.setItem('aura_last_order', JSON.stringify(result.order));
-          
-          if (appliedPromo) {
-            await supabase.from('promotions').update({ times_used: appliedPromo.times_used + 1 }).eq('id', appliedPromo.id);
-          }
         } catch (err) {}
       }
 

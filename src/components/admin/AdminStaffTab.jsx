@@ -28,6 +28,7 @@ import {
   UserX
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { supabase } from '../../lib/supabaseClient';
 
 export const ALL_AVAILABLE_PAGES = [
   { id: 'dashboard', label: 'Dashboard Overview', desc: 'KPI metrics, revenue stats, visitor trends', icon: LayoutDashboard },
@@ -46,6 +47,20 @@ export default function AdminStaffTab({
   const [staffList, setStaffList] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Helper to attach Supabase session token to administrative endpoints
+  const getAuthHeaders = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers = { 'Content-Type': 'application/json' };
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+      return headers;
+    } catch {
+      return { 'Content-Type': 'application/json' };
+    }
+  };
   
   // Modal states
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -71,7 +86,8 @@ export default function AdminStaffTab({
   const fetchStaffList = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/admin-manage-staff?action=list');
+      const headers = await getAuthHeaders();
+      const res = await fetch('/api/admin-manage-staff?action=list', { headers });
       const data = await res.json();
       if (data && Array.isArray(data.staff)) {
         setStaffList(data.staff);
@@ -144,9 +160,10 @@ export default function AdminStaffTab({
 
     setIsSubmittingNew(true);
     try {
+      const headers = await getAuthHeaders();
       const res = await fetch('/api/admin-manage-staff', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           action: 'create',
           email: fullEmail,
@@ -193,9 +210,10 @@ export default function AdminStaffTab({
     if (!selectedStaffForEdit) return;
     setIsUpdatingPerms(true);
     try {
+      const headers = await getAuthHeaders();
       const res = await fetch('/api/admin-manage-staff', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           action: 'update-permissions',
           staffId: selectedStaffForEdit.id,
@@ -222,9 +240,10 @@ export default function AdminStaffTab({
   const handleToggleStatus = async (staff) => {
     const newStatus = !staff.is_active;
     try {
+      const headers = await getAuthHeaders();
       const res = await fetch('/api/admin-manage-staff', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           action: 'toggle-status',
           staffId: staff.id,
@@ -243,6 +262,32 @@ export default function AdminStaffTab({
       await fetchStaffList();
     } catch (err) {
       onNotification('error', 'Status Change Failed', err.message);
+    }
+  };
+
+  // Permanently Delete Staff
+  const handleDeleteStaff = async (staff) => {
+    if (!window.confirm(`Are you sure you want to permanently remove staff account ${staff.email}? This action cannot be undone.`)) {
+      return;
+    }
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch('/api/admin-manage-staff', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          action: 'delete',
+          staffId: staff.id,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.error || 'Failed to delete staff member');
+      }
+      onNotification('success', 'Staff Removed', `${staff.email} has been permanently deleted.`);
+      await fetchStaffList();
+    } catch (err) {
+      onNotification('error', 'Deletion Failed', err.message);
     }
   };
 
@@ -489,6 +534,16 @@ export default function AdminStaffTab({
                       title={staff.is_active !== false ? 'Suspend staff member' : 'Reactivate account'}
                     >
                       {staff.is_active !== false ? 'Suspend' : 'Activate'}
+                    </button>
+                  )}
+
+                  {!isMe && currentAdminRole === 'Super Admin' && (
+                    <button
+                      onClick={() => handleDeleteStaff(staff)}
+                      className="p-1.5 rounded-xl text-xs font-semibold border border-rose-200 text-rose-600 hover:bg-rose-50 transition-all cursor-pointer"
+                      title="Permanently remove staff account"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   )}
                 </div>

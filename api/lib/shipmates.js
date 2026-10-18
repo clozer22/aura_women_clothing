@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseServerClient } from './supabaseServer.js';
 
 /**
  * Shipmates Courier Dispatcher Service (Supports Test Mode & Sandbox Simulator)
@@ -7,18 +7,7 @@ import { createClient } from '@supabase/supabase-js';
 
 // Helper to get server-side Supabase client
 function getSupabaseClient() {
-  const supabaseUrl =
-    process.env.VITE_SUPABASE_URL ||
-    process.env.SUPABASE_URL ||
-    'https://pcmlleeuxbymomjxhwlv.supabase.co';
-  const supabaseKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.VITE_SUPABASE_ANON_KEY ||
-    process.env.SUPABASE_ANON_KEY ||
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBjbWxsZWV1eGJ5bW9tanhod2x2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgzNzA2NzgsImV4cCI6MjEwMzk0NjY3OH0.WZCqgnt_7l88U-Yl_rAvhmXQLSKy70hT1Wjq8rf_qC0';
-
-  if (!supabaseUrl || !supabaseKey) return null;
-  return createClient(supabaseUrl, supabaseKey);
+  return getSupabaseServerClient();
 }
 
 /**
@@ -26,13 +15,13 @@ function getSupabaseClient() {
  * @param {Object} order - Full order record from database
  * @returns {Promise<Object>} Shipment result
  */
-export async function bookShipmentWithShipmates(order) {
+export async function bookShipmentWithShipmates(order, options = {}) {
   if (!order || !order.order_reference) {
     throw new Error('Invalid order object passed to Shipmates booking service');
   }
 
-  // Idempotency check: Don't re-book if already booked with tracking number
-  if (order.tracking_number && (order.shipment_status === 'BOOKED' || order.status === 'TO_SHIP')) {
+  // Idempotency check: Don't re-book if already booked with tracking number unless forceRebook is requested
+  if (!options.forceRebook && order.tracking_number && (order.shipment_status === 'BOOKED' || order.status === 'TO_SHIP')) {
     console.log(`[Shipmates] Order ${order.order_reference} already booked with tracking: ${order.tracking_number}`);
     return {
       success: true,
@@ -82,12 +71,13 @@ export async function bookShipmentWithShipmates(order) {
     .join(', ') || 'Aura Women Clothing Apparel';
 
   const totalQuantity = itemsList.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0);
-  const estimatedWeightKg = Math.max(0.3, Number((totalQuantity * 0.35).toFixed(2)));
+  const estimatedWeightKg = options.weightKg ? Number(options.weightKg) : Math.max(0.3, Number((totalQuantity * 0.35).toFixed(2)));
 
-  const preferredCourier = process.env.SHIPMATES_DEFAULT_COURIER || 'J&T Express';
+  const preferredCourier = options.preferredCourier || process.env.SHIPMATES_DEFAULT_COURIER || 'J&T Express';
 
   const isCod = String(order.payment_method || '').toUpperCase() === 'COD';
   const codAmount = isCod ? (Number(order.total_amount) || Number(order.subtotal) || 0) : 0;
+  const dispatchNotes = options.notes || (isCod ? `COD Collection: ₱${codAmount} - Handle with care` : 'Fragile: Designer Apparel - Handle with care');
 
   // 4. Construct Shipmates Booking Payload
   const shipmatesPayload = {
@@ -103,13 +93,15 @@ export async function bookShipmentWithShipmates(order) {
       declared_value: Number(order.total_amount) || Number(order.subtotal) || 1000,
       is_cod: isCod,
       cod_amount: codAmount,
+      pouch_size: options.pouchSize || 'small',
     },
     pickup_date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    notes: isCod ? `COD Collection: ₱${codAmount} - Handle with care` : 'Fragile: Designer Apparel - Handle with care',
+    notes: dispatchNotes,
     metadata: {
       xendit_invoice_id: order.xendit_invoice_id || (order.payment_details && order.payment_details.xendit_id) || null,
       payment_method: order.payment_method || (isCod ? 'COD' : 'ONLINE'),
       platform: 'Aura Web Atelier',
+      pouch_size: options.pouchSize || 'small',
     },
   };
 

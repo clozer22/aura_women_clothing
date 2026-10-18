@@ -148,15 +148,31 @@ export function AuthProvider({ children }) {
 
   // Sign Up with Email and Password (triggers OTP email from Supabase)
   const signUpWithEmail = async ({ email, password, fullName }) => {
-    if (isAdminEmail(email)) {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const cleanName = (fullName || '').replace(/<[^>]*>?/gm, '').trim().slice(0, 80);
+
+    if (isAdminEmail(cleanEmail)) {
       throw new Error('This email address cannot be registered as a customer account.');
     }
+
+    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      throw new Error('Please provide a valid email address.');
+    }
+
+    // Password validation: minimum 8 characters, at least 1 letter, at least 1 number
+    if (!password || password.length < 8) {
+      throw new Error('Password must be at least 8 characters long.');
+    }
+    if (!/[a-zA-Z]/.test(password) || !/\d/.test(password)) {
+      throw new Error('Password must contain both letters and at least one number.');
+    }
+
     const { data, error } = await supabase.auth.signUp({
-      email,
+      email: cleanEmail,
       password,
       options: {
         data: {
-          full_name: fullName,
+          full_name: cleanName,
         },
       },
     });
@@ -167,18 +183,25 @@ export function AuthProvider({ children }) {
 
   // Verify 6-digit OTP code sent to Email
   const verifyEmailOtp = async ({ email, token }) => {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const cleanToken = (token || '').replace(/\D/g, '').trim().slice(0, 6);
+
+    if (cleanToken.length !== 6) {
+      throw new Error('Please enter a valid 6-digit verification code.');
+    }
+
     // Try signup OTP verification
     const { data, error } = await supabase.auth.verifyOtp({
-      email,
-      token: token.trim(),
+      email: cleanEmail,
+      token: cleanToken,
       type: 'signup',
     });
 
     if (error) {
       // Fallback: try email OTP verification type
       const retry = await supabase.auth.verifyOtp({
-        email,
-        token: token.trim(),
+        email: cleanEmail,
+        token: cleanToken,
         type: 'email',
       });
       if (retry.error) throw retry.error;
@@ -190,20 +213,22 @@ export function AuthProvider({ children }) {
 
   // Resend OTP verification email
   const resendEmailOtp = async (email) => {
+    const cleanEmail = (email || '').trim().toLowerCase();
     const { error } = await supabase.auth.resend({
       type: 'signup',
-      email,
+      email: cleanEmail,
     });
     if (error) throw error;
   };
 
   // Direct Sign In with Email & Password
   const signInWithEmail = async ({ email, password }) => {
-    if (isAdminEmail(email)) {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    if (isAdminEmail(cleanEmail)) {
       throw new Error('Admin accounts cannot log in as customers. Please use your personal email or log in via the Admin Dashboard.');
     }
     const { data, error } = await supabase.auth.signInWithPassword({
-      email,
+      email: cleanEmail,
       password,
     });
 
@@ -221,6 +246,13 @@ export function AuthProvider({ children }) {
 
   // Create / Update Personal Password (especially for Google users)
   const updatePassword = async (newPassword) => {
+    if (!newPassword || newPassword.length < 8) {
+      throw new Error('Password must be at least 8 characters long.');
+    }
+    if (!/[a-zA-Z]/.test(newPassword) || !/\d/.test(newPassword)) {
+      throw new Error('Password must contain both letters and at least one number.');
+    }
+
     const { error } = await supabase.auth.updateUser({
       password: newPassword,
     });
@@ -241,20 +273,39 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Update Profile Information (name, phone, avatar)
+  // Update Profile Information (name, phone, avatar) - Whitelisted & Sanitized against privilege escalation
   const updateProfileData = async (updates) => {
-    if (!user?.id) return;
+    if (!user?.id || !updates || typeof updates !== 'object') return;
+
+    const allowed = {};
+
+    if (typeof updates.full_name === 'string') {
+      let cleaned = updates.full_name.replace(/<[^>]*>?/gm, '').trim();
+      if (/^[=+\-@]/.test(cleaned)) cleaned = `'${cleaned}`;
+      allowed.full_name = cleaned.slice(0, 80);
+    }
+
+    if (typeof updates.phone === 'string') {
+      const cleanPhone = updates.phone.replace(/\D/g, '').slice(0, 11);
+      allowed.phone = cleanPhone;
+    }
+
+    if (typeof updates.avatar_url === 'string') {
+      allowed.avatar_url = updates.avatar_url.trim().slice(0, 500);
+    }
+
+    if (Object.keys(allowed).length === 0) return;
 
     const { error } = await supabase
       .from('user_profiles')
       .update({
-        ...updates,
+        ...allowed,
         updated_at: new Date().toISOString(),
       })
       .eq('id', user.id);
 
     if (error) throw error;
-    setProfile((prev) => (prev ? { ...prev, ...updates } : null));
+    setProfile((prev) => (prev ? { ...prev, ...allowed } : null));
   };
 
   // Determine if Google user needs to be prompted to set password

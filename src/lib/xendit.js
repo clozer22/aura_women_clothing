@@ -4,34 +4,46 @@
  * Eliminates client-side secret API keys and prevents price tampering.
  */
 
+import { supabase } from './supabaseClient';
+
 /**
  * Creates a verified Xendit Invoice through the secure serverless API
  * @param {Object} params
  * @param {Object} params.customer - { fullName, email, phone }
  * @param {Object} params.shippingAddress - { street, region, province, city, barangay, zipCode, country }
  * @param {Array} params.items - Array of { id, quantity, size, color }
- * @param {string} params.paymentMethod - 'GCASH' | 'MAYA' | 'CARD'
- * @param {string} [params.userId] - Optional authenticated user ID
+ * @param {string} params.paymentMethod - 'GCASH' | 'MAYA' | 'CARD' | 'COD'
+ * @param {string} [params.promoCode] - Optional applied coupon/promo code
  */
 export async function createSecureOrderInvoice({
   customer,
   shippingAddress,
   items = [],
   paymentMethod = 'GCASH',
-  userId = null,
+  promoCode = null,
 }) {
+  // Retrieve authenticated session token to prevent identity spoofing
+  let authToken = '';
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      authToken = session.access_token;
+    }
+  } catch (e) {}
+
   const payload = {
     customer,
     shippingAddress,
     items,
     paymentMethod,
-    userId,
+    promoCode: promoCode || null,
   };
 
   const response = await fetch('/api/create-order-invoice', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
     },
     body: JSON.stringify(payload),
   });
@@ -54,6 +66,8 @@ export async function createSecureOrderInvoice({
     invoiceUrl: data.invoiceUrl,
     orderReference: data.orderReference,
     totalAmount: data.totalAmount,
+    discountAmount: data.discountAmount || 0,
+    promoCode: data.promoCode || null,
     order: data.order,
     trackingNumber: data.trackingNumber,
     courierName: data.courierName,

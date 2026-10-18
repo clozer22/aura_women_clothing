@@ -1,5 +1,6 @@
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseServerClient } from './lib/supabaseServer.js';
 import { bookShipmentWithShipmates } from './lib/shipmates.js';
+import { ensureServerEnv } from './lib/envHelper.js';
 
 export default async function handler(req, res) {
   // CORS Preflight & Headers
@@ -16,6 +17,7 @@ export default async function handler(req, res) {
   }
 
   try {
+    ensureServerEnv();
     const url = new URL(req.url, 'http://localhost');
     const ref =
       req.query?.ref ||
@@ -30,19 +32,9 @@ export default async function handler(req, res) {
     const cleanRef = ref.trim().toUpperCase();
 
     // 1. Check if Order is Cash on Delivery (COD) in Supabase
-    const supabaseUrl =
-      process.env.VITE_SUPABASE_URL ||
-      process.env.SUPABASE_URL ||
-      'https://pcmlleeuxbymomjxhwlv.supabase.co';
-    const supabaseKey =
-      process.env.SUPABASE_SERVICE_ROLE_KEY ||
-      process.env.VITE_SUPABASE_ANON_KEY ||
-      process.env.SUPABASE_ANON_KEY ||
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBjbWxsZWV1eGJ5bW9tanhod2x2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgzNzA2NzgsImV4cCI6MjEwMzk0NjY3OH0.WZCqgnt_7l88U-Yl_rAvhmXQLSKy70hT1Wjq8rf_qC0';
-
-    if (supabaseUrl && supabaseKey) {
+    const sb = getSupabaseServerClient();
+    if (sb) {
       try {
-        const sb = createClient(supabaseUrl, supabaseKey);
         const { data: existingOrder } = await sb
           .from('orders')
           .select('*')
@@ -70,8 +62,12 @@ export default async function handler(req, res) {
     // 2. Initialize Xendit API Authorization
     const xenditApiKey =
       process.env.XENDIT_SECRET_KEY ||
-      process.env.VITE_XENDIT_API_KEY ||
-      'xnd_development_G4K4iGkpjDrzT6EQIDzZShzp7oK77GiaEhAYWPCIC4e0ROvsmVSSi2tZZKScBK';
+      process.env.VITE_XENDIT_API_KEY;
+
+    if (!xenditApiKey) {
+      console.error('[verify-payment] Missing XENDIT_SECRET_KEY in server environment.');
+      return res.status(500).json({ error: 'Payment gateway configuration error.' });
+    }
 
     const authHeader = Buffer.from(`${xenditApiKey}:`).toString('base64');
 
@@ -103,17 +99,7 @@ export default async function handler(req, res) {
 
     // 3. Update Supabase if Paid
     if (isPaid) {
-      const supabaseUrl =
-        process.env.VITE_SUPABASE_URL ||
-        process.env.SUPABASE_URL ||
-        'https://pcmlleeuxbymomjxhwlv.supabase.co';
-      const supabaseKey =
-        process.env.SUPABASE_SERVICE_ROLE_KEY ||
-        process.env.VITE_SUPABASE_ANON_KEY ||
-        process.env.SUPABASE_ANON_KEY ||
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBjbWxsZWV1eGJ5bW9tanhod2x2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgzNzA2NzgsImV4cCI6MjEwMzk0NjY3OH0.WZCqgnt_7l88U-Yl_rAvhmXQLSKy70hT1Wjq8rf_qC0';
-
-      const supabase = createClient(supabaseUrl, supabaseKey);
+      const supabase = getSupabaseServerClient();
 
       try {
         await supabase

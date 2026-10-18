@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseServerClient } from './lib/supabaseServer.js';
 import { bookShipmentWithShipmates } from './lib/shipmates.js';
 
 export default async function handler(req, res) {
@@ -38,17 +38,32 @@ export default async function handler(req, res) {
     const cleanRef = String(orderRef).trim().toUpperCase();
 
     // 1. Initialize Supabase
-    const supabaseUrl =
-      process.env.VITE_SUPABASE_URL ||
-      process.env.SUPABASE_URL ||
-      'https://pcmlleeuxbymomjxhwlv.supabase.co';
-    const supabaseKey =
-      process.env.SUPABASE_SERVICE_ROLE_KEY ||
-      process.env.VITE_SUPABASE_ANON_KEY ||
-      process.env.SUPABASE_ANON_KEY ||
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBjbWxsZWV1eGJ5bW9tanhod2x2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgzNzA2NzgsImV4cCI6MjEwMzk0NjY3OH0.WZCqgnt_7l88U-Yl_rAvhmXQLSKy70hT1Wjq8rf_qC0';
+    const supabase = getSupabaseServerClient();
+    if (!supabase) {
+      return res.status(500).json({ error: 'Supabase configuration missing' });
+    }
 
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    // 2. Verify Administrative Privileges (Prevent unauthorized courier dispatches)
+    const authHeader = req.headers.authorization || req.headers.Authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Administrative authorization token required to book courier shipments' });
+    }
+    const token = authHeader.substring(7).trim();
+    const { data: userData, error: userErr } = await supabase.auth.getUser(token);
+    if (userErr || !userData?.user?.email) {
+      return res.status(401).json({ error: 'Invalid or expired administrative session' });
+    }
+
+    const { data: adminProfile } = await supabase
+      .from('admin_profiles')
+      .select('id, is_active')
+      .eq('email', userData.user.email.toLowerCase())
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (!adminProfile) {
+      return res.status(403).json({ error: 'Forbidden: Active staff credentials required to dispatch couriers' });
+    }
 
     // 2. Fetch Order from Supabase
     const { data: order, error: fetchErr } = await supabase
@@ -67,8 +82,16 @@ export default async function handler(req, res) {
 
     console.log(`[Shipmates API] Processing booking request for Order: ${cleanRef}`);
 
-    // 3. Dispatch to Shipmates
-    const result = await bookShipmentWithShipmates(order);
+    const bookingOptions = {
+      preferredCourier: body.preferredCourier || req.query?.courier || 'J&T Express',
+      weightKg: body.weightKg || req.query?.weight,
+      pouchSize: body.pouchSize || 'small',
+      notes: body.notes,
+      forceRebook: Boolean(body.forceRebook || req.query?.force),
+    };
+
+    // 3. Dispatch to Shipmates / J&T
+    const result = await bookShipmentWithShipmates(order, bookingOptions);
 
     return res.status(200).json({
       success: true,

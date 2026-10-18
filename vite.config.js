@@ -1,6 +1,11 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 
+// Polyfill WebSocket in Node.js < 22 for Supabase JS client in local API middleware
+if (typeof globalThis.WebSocket === 'undefined') {
+  globalThis.WebSocket = class DummyWebSocket {};
+}
+
 function localApiPlugin() {
   return {
     name: 'local-api-endpoints',
@@ -14,6 +19,10 @@ function localApiPlugin() {
           url === '/api/shipmates-book' ||
           url === '/api/admin-manage-staff'
         ) {
+          // Keep process.env in sync with .env during local development
+          const freshEnv = loadEnv(server.config.mode || 'development', process.cwd(), '');
+          Object.assign(process.env, freshEnv);
+
           if (!res.status) {
             res.status = function (code) {
               this.statusCode = code;

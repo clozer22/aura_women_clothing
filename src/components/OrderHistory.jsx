@@ -212,10 +212,10 @@ export default function OrderHistory({ onBackToShop }) {
         order.customer_name ||
         'Verified Buyer',
       user_email: user?.email || order.customer_email || null,
-      rating: Number(reviewRating) || 5,
-      comment: reviewComment.trim(),
-      fit_feedback: reviewFit,
-      tags: reviewTags,
+      rating: Math.min(5, Math.max(1, parseInt(reviewRating, 10) || 5)),
+      comment: (reviewComment || '').replace(/<[^>]*>?/gm, '').trim().slice(0, 1000),
+      fit_feedback: (reviewFit || '').replace(/<[^>]*>?/gm, '').trim().slice(0, 50),
+      tags: Array.isArray(reviewTags) ? reviewTags.map((t) => String(t).replace(/<[^>]*>?/gm, '').trim().slice(0, 30)) : [],
       is_verified_purchase: true,
       updated_at: new Date().toISOString()
     };

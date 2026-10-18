@@ -1,6 +1,26 @@
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseServerClient } from './lib/supabaseServer.js';
 import { PRODUCTS } from '../src/data/products.js';
 import { bookShipmentWithShipmates } from './lib/shipmates.js';
+import { ensureServerEnv } from './lib/envHelper.js';
+
+
+// Input sanitization against XSS and CSV/formula injection
+function sanitizeText(value, maxLen = 100) {
+  if (typeof value !== 'string') return '';
+  let cleaned = value.replace(/<[^>]*>?/gm, '').trim();
+  // Neutralize spreadsheet formula injection characters (=, +, -, @)
+  if (/^[=+\-@]/.test(cleaned)) {
+    cleaned = `'${cleaned}`;
+  }
+  return cleaned.slice(0, maxLen);
+}
+
+function sanitizeEmail(email) {
+  if (typeof email !== 'string') return '';
+  const cleaned = email.trim().toLowerCase();
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(cleaned) ? cleaned.slice(0, 100) : '';
+}
 
 export default async function handler(req, res) {
   // CORS Preflight & Headers
@@ -21,44 +41,66 @@ export default async function handler(req, res) {
   }
 
   try {
+    ensureServerEnv();
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
-    const { customer, shippingAddress, items, paymentMethod = 'GCASH', userId = null } = body;
+    const { customer, shippingAddress, items, paymentMethod = 'GCASH', promoCode } = body;
 
-    // 1. Strict Validation
-    if (!customer?.fullName?.trim()) {
+    // 1. Strict Input Validation & Sanitization
+    if (!customer?.fullName || typeof customer.fullName !== 'string' || !customer.fullName.trim()) {
       return res.status(400).json({ error: 'Customer full name is required' });
     }
-    if (!customer?.phone?.trim()) {
+    const cleanCustomerName = sanitizeText(customer.fullName, 80);
+
+    if (!customer?.phone || typeof customer.phone !== 'string' || !customer.phone.trim()) {
       return res.status(400).json({ error: 'Mobile number is required' });
     }
     const cleanPhone = customer.phone.replace(/\D/g, '');
     if (cleanPhone.length !== 11 || !/^09\d{9}$/.test(cleanPhone)) {
       return res.status(400).json({ error: 'Valid 11-digit Philippine mobile number required (09XXXXXXXXX)' });
     }
+
+    const cleanEmail = sanitizeEmail(customer.email || '');
+
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'No order items specified' });
     }
+
     if (!shippingAddress?.street || !shippingAddress?.city) {
       return res.status(400).json({ error: 'Incomplete delivery address provided' });
     }
 
-    // 2. Initialize Supabase Server-Side Client
-    const supabaseUrl =
-      process.env.VITE_SUPABASE_URL ||
-      process.env.SUPABASE_URL ||
-      'https://pcmlleeuxbymomjxhwlv.supabase.co';
-    const supabaseKey =
-      process.env.SUPABASE_SERVICE_ROLE_KEY ||
-      process.env.VITE_SUPABASE_ANON_KEY ||
-      process.env.SUPABASE_ANON_KEY ||
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBjbWxsZWV1eGJ5bW9tanhod2x2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgzNzA2NzgsImV4cCI6MjEwMzk0NjY3OH0.WZCqgnt_7l88U-Yl_rAvhmXQLSKy70hT1Wjq8rf_qC0';
+    const cleanShippingAddress = {
+      street: sanitizeText(shippingAddress.street, 150),
+      city: sanitizeText(shippingAddress.city, 80),
+      province: sanitizeText(shippingAddress.province || 'Metro Manila', 80),
+      region: sanitizeText(shippingAddress.region || '', 80),
+      barangay: sanitizeText(shippingAddress.barangay || '', 80),
+      zipCode: sanitizeText(shippingAddress.zipCode, 10),
+      country: 'Philippines',
+    };
 
-    let supabase = null;
-    if (supabaseUrl && supabaseKey) {
-      supabase = createClient(supabaseUrl, supabaseKey);
+    // 2. Initialize Supabase Server-Side Client
+    const supabase = getSupabaseServerClient();
+
+    // 3. Authenticate User Identity via Bearer Token (Prevent spoofing `userId`)
+    let verifiedUserId = null;
+    const authHeader = req.headers.authorization || req.headers.Authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.substring(7).trim();
+      if (token && supabase) {
+        try {
+          const { data: userData, error: authErr } = await supabase.auth.getUser(token);
+          if (authErr || !userData?.user) {
+            return res.status(401).json({ error: 'Your session has expired or is invalid. Please sign in again.' });
+          }
+          verifiedUserId = userData.user.id;
+        } catch (e) {
+          return res.status(401).json({ error: 'Authentication verification failed.' });
+        }
+      }
     }
 
-    // 3. Fetch Verified Prices from Database (Prevent Client-Side Price Tampering)
+    // 4. Fetch Verified Prices from Database (Prevent Client-Side Price Tampering)
     const productIds = items.map((i) => i.id);
     const verifiedProductMap = new Map();
 
@@ -86,7 +128,7 @@ export default async function handler(req, res) {
       }
     }
 
-    // 4. Calculate Verified Subtotal and Items
+    // 5. Calculate Verified Subtotal and Validate Item Quantities
     const verifiedItems = [];
     let verifiedSubtotal = 0;
 
@@ -99,28 +141,77 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: `Garment "${match.name}" is currently sold out.` });
       }
 
-      const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
+      // Enforce bounds: min 1, max 20 per item
+      const qty = Math.min(20, Math.max(1, parseInt(item.quantity, 10) || 1));
       const unitPrice = Number(match.price) || 0;
       verifiedSubtotal += unitPrice * qty;
 
       verifiedItems.push({
         id: match.id,
-        name: match.name,
+        name: sanitizeText(match.name, 100),
         price: unitPrice,
         quantity: qty,
-        size: item.size || 'Standard',
-        color: item.color || 'Standard',
+        size: sanitizeText(item.size || 'Standard', 30),
+        color: sanitizeText(item.color || 'Standard', 30),
         image: match.image || item.image || '',
       });
     }
 
-    const shippingFee = verifiedItems.length > 0 ? 150 : 0;
-    const totalAmount = verifiedSubtotal + shippingFee;
+    // 6. Server-Side Promo Code Validation & Computation
+    let verifiedDiscount = 0;
+    let verifiedPromoCode = null;
+    let promoRecord = null;
 
-    // 5. Generate Cryptographically Non-Guessable Order Reference
+    if (promoCode && typeof promoCode === 'string' && promoCode.trim()) {
+      const cleanCode = promoCode.trim().toUpperCase().slice(0, 30);
+      if (supabase) {
+        try {
+          const { data: promo, error: promoErr } = await supabase
+            .from('promotions')
+            .select('*')
+            .eq('code', cleanCode)
+            .maybeSingle();
+
+          if (promoErr || !promo) {
+            return res.status(400).json({ error: `Promo code "${cleanCode}" is invalid.` });
+          }
+          if (!promo.is_active) {
+            return res.status(400).json({ error: `Promo code "${cleanCode}" is no longer active.` });
+          }
+          if (promo.expires_at && new Date(promo.expires_at) < new Date()) {
+            return res.status(400).json({ error: `Promo code "${cleanCode}" has expired.` });
+          }
+          if (promo.usage_limit && (promo.times_used || 0) >= promo.usage_limit) {
+            return res.status(400).json({ error: `Promo code "${cleanCode}" has reached its maximum usage limit.` });
+          }
+          if (promo.min_order_value && verifiedSubtotal < Number(promo.min_order_value)) {
+            return res.status(400).json({
+              error: `Promo code "${cleanCode}" requires a minimum order value of ₱${Number(promo.min_order_value).toLocaleString()}.`,
+            });
+          }
+
+          if (promo.discount_type === 'percentage') {
+            verifiedDiscount = Math.round((verifiedSubtotal * Number(promo.discount_value)) / 100);
+          } else {
+            verifiedDiscount = Math.round(Number(promo.discount_value) || 0);
+          }
+          verifiedDiscount = Math.min(verifiedDiscount, verifiedSubtotal);
+          verifiedPromoCode = cleanCode;
+          promoRecord = promo;
+        } catch (err) {
+          console.warn('Error during server-side promo verification:', err.message);
+          return res.status(400).json({ error: 'Could not verify promotion code. Please try again.' });
+        }
+      }
+    }
+
+    const shippingFee = verifiedItems.length > 0 ? 150 : 0;
+    const totalAmount = Math.max(0, verifiedSubtotal - verifiedDiscount + shippingFee);
+
+    // 7. Generate Cryptographically Non-Guessable Order Reference
     const orderReference = `AC-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
 
-    // 6. Special Handling for Cash on Delivery (COD)
+    // 8. Special Handling for Cash on Delivery (COD)
     if (paymentMethod === 'COD') {
       // Enforce strict limit: 1,000 PHP and below
       if (totalAmount > 1000) {
@@ -132,30 +223,38 @@ export default async function handler(req, res) {
       // Store Order in Supabase with TO_SHIP Status & COD Payment Method
       const codOrder = {
         order_reference: orderReference,
-        customer_name: customer.fullName,
+        customer_name: cleanCustomerName,
         customer_phone: cleanPhone,
-        customer_email: customer.email || '',
-        shipping_address: shippingAddress,
+        customer_email: cleanEmail,
+        shipping_address: cleanShippingAddress,
         items: verifiedItems,
         subtotal: verifiedSubtotal,
+        discount_amount: verifiedDiscount,
+        promo_code: verifiedPromoCode,
         shipping_fee: shippingFee,
         total_amount: totalAmount,
         payment_method: 'COD',
         payment_status: 'PENDING', // Payment collected upon physical delivery
         status: 'TO_SHIP',
-        user_id: userId || null,
+        user_id: verifiedUserId,
         created_at: new Date().toISOString(),
       };
 
       if (supabase) {
         try {
           await supabase.from('orders').insert([codOrder]);
+          if (promoRecord?.id) {
+            await supabase
+              .from('promotions')
+              .update({ times_used: (promoRecord.times_used || 0) + 1 })
+              .eq('id', promoRecord.id);
+          }
         } catch (insertErr) {
           console.warn('Notice: Could not insert COD order into Supabase:', insertErr.message);
         }
       }
 
-      // Automatically dispatch courier booking to Shipmates in the background!
+      // Automatically dispatch courier booking to Shipmates in the background
       let shipmentResult = null;
       try {
         shipmentResult = await bookShipmentWithShipmates(codOrder, { preferredCourier: 'J&T Express' });
@@ -174,6 +273,8 @@ export default async function handler(req, res) {
         isCod: true,
         orderReference,
         totalAmount,
+        discountAmount: verifiedDiscount,
+        promoCode: verifiedPromoCode,
         order: codOrder,
         trackingNumber: codOrder.tracking_number,
         courierName: codOrder.courier_name,
@@ -182,13 +283,17 @@ export default async function handler(req, res) {
       });
     }
 
-    // 7. Call Xendit API Server-to-Server for Online Payments
+    // 9. Call Xendit API Server-to-Server for Online Payments
     const xenditApiKey =
       process.env.XENDIT_SECRET_KEY ||
-      process.env.VITE_XENDIT_API_KEY ||
-      'xnd_development_G4K4iGkpjDrzT6EQIDzZShzp7oK77GiaEhAYWPCIC4e0ROvsmVSSi2tZZKScBK';
+      process.env.VITE_XENDIT_API_KEY;
 
-    const authHeader = Buffer.from(`${xenditApiKey}:`).toString('base64');
+    if (!xenditApiKey) {
+      console.error('[create-order-invoice] Missing XENDIT_SECRET_KEY in server environment.');
+      return res.status(500).json({ error: 'Payment gateway configuration error. Please contact store support.' });
+    }
+
+    const basicAuth = Buffer.from(`${xenditApiKey}:`).toString('base64');
 
     let paymentMethods = ['GCASH', 'PAYMAYA', 'CREDIT_CARD', 'SHOPEEPAY', 'GRABPAY'];
     if (paymentMethod === 'GCASH') {
@@ -203,27 +308,45 @@ export default async function handler(req, res) {
       req.headers.origin ||
       (req.headers.host ? `https://${req.headers.host}` : 'https://aura-women-clothing.vercel.app');
 
+    const discountNote = verifiedPromoCode ? ` (Promo ${verifiedPromoCode} applied: -₱${verifiedDiscount})` : '';
+
     const xenditPayload = {
       external_id: orderReference,
       amount: Math.round(totalAmount),
-      payer_email: customer.email || 'guest@aurawomen.com',
-      description: `Aura Women's Clothing - Order ${orderReference}`,
+      payer_email: cleanEmail || 'guest@aurawomen.com',
+      description: `Aura Women's Clothing - Order ${orderReference}${discountNote}`,
       customer: {
-        given_names: customer.fullName,
+        given_names: cleanCustomerName,
         mobile_number: cleanPhone,
-        email: customer.email || 'guest@aurawomen.com',
+        email: cleanEmail || 'guest@aurawomen.com',
       },
       customer_notification_preference: {
         invoice_created: ['email'],
         invoice_reminder: ['email'],
         invoice_paid: ['email'],
       },
-      items: verifiedItems.map((item) => ({
-        name: item.name,
-        quantity: item.quantity,
-        price: Math.round(item.price),
-        category: 'Apparel',
-      })),
+      items: [
+        ...verifiedItems.map((item) => ({
+          name: item.name,
+          quantity: item.quantity,
+          price: Math.round(
+            verifiedDiscount > 0
+              ? item.price * (1 - verifiedDiscount / verifiedSubtotal)
+              : item.price
+          ),
+          category: 'Apparel',
+        })),
+        ...(shippingFee > 0
+          ? [
+              {
+                name: 'Courier Delivery (J&T Express)',
+                quantity: 1,
+                price: shippingFee,
+                category: 'Shipping',
+              },
+            ]
+          : []),
+      ],
       payment_methods: paymentMethods,
       currency: 'PHP',
       success_redirect_url: `${currentOrigin}/order-confirmed?ref=${orderReference}`,
@@ -234,7 +357,7 @@ export default async function handler(req, res) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Basic ${authHeader}`,
+        Authorization: `Basic ${basicAuth}`,
       },
       body: JSON.stringify(xenditPayload),
     });
@@ -245,21 +368,23 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: xenditData.message || 'Failed to initialize payment gateway' });
     }
 
-    // 7. Store Unpaid Order in Supabase with PENDING Status
+    // 10. Store Unpaid Order in Supabase with PENDING Status
     const newOrder = {
       order_reference: orderReference,
-      customer_name: customer.fullName,
+      customer_name: cleanCustomerName,
       customer_phone: cleanPhone,
-      customer_email: customer.email || '',
-      shipping_address: shippingAddress,
+      customer_email: cleanEmail,
+      shipping_address: cleanShippingAddress,
       items: verifiedItems,
       subtotal: verifiedSubtotal,
+      discount_amount: verifiedDiscount,
+      promo_code: verifiedPromoCode,
       shipping_fee: shippingFee,
       total_amount: totalAmount,
       payment_method: paymentMethod,
       payment_status: 'PENDING',
       status: 'PENDING',
-      user_id: userId || null,
+      user_id: verifiedUserId,
       xendit_invoice_id: xenditData.id,
       xendit_invoice_url: xenditData.invoice_url,
       created_at: new Date().toISOString(),
@@ -268,6 +393,12 @@ export default async function handler(req, res) {
     if (supabase) {
       try {
         await supabase.from('orders').insert([newOrder]);
+        if (promoRecord?.id) {
+          await supabase
+            .from('promotions')
+            .update({ times_used: (promoRecord.times_used || 0) + 1 })
+            .eq('id', promoRecord.id);
+        }
       } catch (insertErr) {
         console.warn('Notice: Could not insert pending order into Supabase:', insertErr.message);
       }
@@ -279,6 +410,8 @@ export default async function handler(req, res) {
       invoiceId: xenditData.id,
       invoiceUrl: xenditData.invoice_url,
       totalAmount,
+      discountAmount: verifiedDiscount,
+      promoCode: verifiedPromoCode,
       order: newOrder,
     });
   } catch (error) {
@@ -286,3 +419,4 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: error.message || 'Internal Server Error' });
   }
 }
+

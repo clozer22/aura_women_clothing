@@ -24,9 +24,16 @@ import {
   FileText,
   Printer,
   UserCheck,
-  History
+  History,
+  Box,
+  Layers,
+  ShieldCheck,
+  ArrowRight,
+  Ban,
+  AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { supabase } from '../../lib/supabaseClient';
 
 const AdminOrdersTab = ({
   orders = [],
@@ -51,6 +58,28 @@ const AdminOrdersTab = ({
   const [showRawPayload, setShowRawPayload] = useState(false);
   const [selectedWaybillOrder, setSelectedWaybillOrder] = useState(null);
 
+  // J&T Express Custom Dispatch Setup Modal state
+  const [dispatchModalOrder, setDispatchModalOrder] = useState(null);
+  const [dispatchForm, setDispatchForm] = useState({
+    weightKg: '0.35',
+    pouchSize: 'small',
+    preferredCourier: 'J&T Express',
+    notes: 'Handle with care - apparel. Call before delivery.',
+  });
+  const [isDispatchingJnt, setIsDispatchingJnt] = useState(false);
+
+  // Bulk Thermal Waybill Printing Modal state
+  const [bulkWaybillOrders, setBulkWaybillOrders] = useState(null);
+
+  // Order Cancellation Modal state
+  const [cancellingOrder, setCancellingOrder] = useState(null);
+  const [cancelReason, setCancelReason] = useState('Customer requested cancellation');
+  const [cancelNotes, setCancelNotes] = useState('');
+  const [isSubmittingCancel, setIsSubmittingCancel] = useState(false);
+
+  // Single Order Accepting state
+  const [isAcceptingOrderId, setIsAcceptingOrderId] = useState(null);
+
   // TikTok Shop style pipeline filter categories
   const tabs = [
     { id: 'ALL', label: 'All', count: orders.length },
@@ -64,7 +93,7 @@ const AdminOrdersTab = ({
   ];
 
   const statusOptions = [
-    { value: 'PENDING', label: 'Pending Payment' },
+    { value: 'PENDING', label: 'Pending Payment / Acceptance' },
     { value: 'TO_SHIP', label: 'To Ship (Ready for Dispatch)' },
     { value: 'SHIPPED', label: 'Shipped (In Transit)' },
     { value: 'TO_DELIVER', label: 'To Deliver (With Courier)' },
@@ -81,11 +110,15 @@ const AdminOrdersTab = ({
       if (activeTab !== 'ALL') {
         const orderStatus = (order.status || 'PENDING').toUpperCase();
         const paymentStatus = (order.payment_status || 'PENDING').toUpperCase();
+        const isPaid = paymentStatus === 'PAID' || orderStatus === 'COMPLETED';
+        const isCod = (order.payment_method || '').toUpperCase() === 'COD';
 
         if (activeTab === 'TO_SHIP') {
+          // Include orders ready to be shipped: already TO_SHIP or PROCESSING, OR accepted/paid PENDING
           const isToShip =
-            (orderStatus === 'TO_SHIP' || orderStatus === 'PROCESSING' || orderStatus === 'PENDING') &&
-            paymentStatus === 'PAID';
+            orderStatus === 'TO_SHIP' ||
+            orderStatus === 'PROCESSING' ||
+            (orderStatus === 'PENDING' && (isPaid || isCod));
           if (!isToShip) return false;
         } else if (activeTab === 'SHIPPED') {
           if (orderStatus !== 'SHIPPED') return false;
@@ -200,9 +233,15 @@ const AdminOrdersTab = ({
     setBookingShipmateId(order.id);
     setShipmentFeedback(null);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token || '';
+
       const res = await fetch('/api/shipmates-book', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ orderReference: order.order_reference }),
       });
       const text = await res.text();
@@ -282,11 +321,17 @@ const AdminOrdersTab = ({
     let successCount = 0;
     let failCount = 0;
 
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token || '';
+
     for (const order of ordersToBook) {
       try {
         const res = await fetch('/api/shipmates-book', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
           body: JSON.stringify({ orderReference: order.order_reference }),
         });
         const text = await res.text();
@@ -324,6 +369,239 @@ const AdminOrdersTab = ({
     if (onRefresh) await onRefresh();
     setIsBulkBooking(false);
     setSelectedOrderIds([]);
+  };
+
+  // 1-Click Accept Order (moves PENDING to TO_SHIP)
+  const handleAcceptOrder = async (order) => {
+    if (!onUpdateOrderStatus) return;
+    setIsAcceptingOrderId(order.id);
+    const modifierInfo = {
+      name: currentAdmin?.name || currentAdmin?.email?.split('@')[0] || 'Administrator',
+      email: currentAdmin?.email || '',
+      role: currentAdmin?.role || 'Admin',
+      action: 'Order accepted for fulfillment (Moved to To Ship)',
+      timestamp: new Date().toISOString(),
+    };
+    try {
+      await onUpdateOrderStatus(order.id, 'TO_SHIP', modifierInfo);
+      setShipmentFeedback({
+        type: 'success',
+        orderRef: order.order_reference,
+        message: `Order accepted! Status transitioned to TO_SHIP. Ready for parcel packing & J&T dispatch.`,
+      });
+      if (selectedOrder && selectedOrder.id === order.id) {
+        setSelectedOrder((prev) => ({
+          ...prev,
+          status: 'TO_SHIP',
+          last_touched_by: modifierInfo,
+          audit_trail: [modifierInfo, ...(Array.isArray(prev.audit_trail) ? prev.audit_trail : [])],
+        }));
+      }
+      if (onRefresh) await onRefresh();
+    } catch (err) {
+      console.error('Accept order failed:', err);
+      setShipmentFeedback({
+        type: 'error',
+        orderRef: order.order_reference,
+        message: err.message || 'Failed to accept order',
+      });
+    } finally {
+      setIsAcceptingOrderId(null);
+    }
+  };
+
+  // Bulk Accept Orders
+  const handleBulkAcceptOrders = async () => {
+    const pendingOrders = filteredOrders.filter(
+      (o) => selectedOrderIds.includes(o.id) && (o.status || '').toUpperCase() === 'PENDING'
+    );
+    if (pendingOrders.length === 0) return;
+
+    let count = 0;
+    for (const ord of pendingOrders) {
+      const modifierInfo = {
+        name: currentAdmin?.name || currentAdmin?.email?.split('@')[0] || 'Administrator',
+        email: currentAdmin?.email || '',
+        role: currentAdmin?.role || 'Admin',
+        action: 'Bulk accepted order for fulfillment',
+        timestamp: new Date().toISOString(),
+      };
+      try {
+        await onUpdateOrderStatus(ord.id, 'TO_SHIP', modifierInfo);
+        count++;
+      } catch (e) {
+        console.warn('Bulk accept error:', e);
+      }
+    }
+
+    setShipmentFeedback({
+      type: 'success',
+      orderRef: 'BULK ACCEPT',
+      message: `Accepted ${count} orders for shipping.`,
+    });
+    setSelectedOrderIds([]);
+    if (onRefresh) await onRefresh();
+  };
+
+  // Open Dispatch Modal
+  const openDispatchModal = (order) => {
+    const totalQty = order.items?.reduce((s, it) => s + (it.quantity || 1), 0) || 1;
+    const estimatedWeight = Math.max(0.35, Math.round(totalQty * 0.35 * 100) / 100).toFixed(2);
+    const suggestedPouch = totalQty > 4 ? 'large' : totalQty > 2 ? 'medium' : 'small';
+
+    setDispatchForm({
+      weightKg: String(estimatedWeight),
+      pouchSize: suggestedPouch,
+      preferredCourier: order.courier_name || 'J&T Express',
+      notes: 'Handle with care - apparel. Call before delivery.',
+    });
+    setDispatchModalOrder(order);
+  };
+
+  // Confirm and Execute J&T Dispatch
+  const handleConfirmJntDispatch = async () => {
+    if (!dispatchModalOrder) return;
+    setIsDispatchingJnt(true);
+    setShipmentFeedback(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token || '';
+
+      const res = await fetch('/api/shipmates-book', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          orderReference: dispatchModalOrder.order_reference,
+          preferredCourier: dispatchForm.preferredCourier,
+          weightKg: parseFloat(dispatchForm.weightKg) || 0.35,
+          pouchSize: dispatchForm.pouchSize,
+          notes: dispatchForm.notes,
+          forceRebook: true,
+        }),
+      });
+
+      const text = await res.text();
+      let data = {};
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch (e) {
+        throw new Error(`Endpoint returned non-JSON (${res.status}): ${text.slice(0, 100) || 'Empty'}`);
+      }
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to dispatch shipment to J&T Express');
+      }
+
+      const modifierInfo = {
+        name: currentAdmin?.name || currentAdmin?.email?.split('@')[0] || 'Administrator',
+        email: currentAdmin?.email || '',
+        role: currentAdmin?.role || 'Admin',
+        action: `Dispatched to ${data.courierName} (AWB #${data.trackingNumber}, ${dispatchForm.pouchSize.toUpperCase()} Pouch, ${dispatchForm.weightKg}kg)`,
+        timestamp: new Date().toISOString(),
+      };
+
+      if (onUpdateOrderTracking) {
+        await onUpdateOrderTracking(dispatchModalOrder.id, data.trackingNumber, data.courierName, modifierInfo);
+      }
+      if (onUpdateOrderStatus && (dispatchModalOrder.status === 'PENDING' || dispatchModalOrder.status === 'PROCESSING')) {
+        await onUpdateOrderStatus(dispatchModalOrder.id, 'TO_SHIP', modifierInfo);
+      }
+
+      const updatedOrderObj = {
+        ...dispatchModalOrder,
+        tracking_number: data.trackingNumber,
+        courier_name: data.courierName,
+        waybill_url: data.waybillUrl,
+        shipment_status: 'BOOKED',
+        status: 'TO_SHIP',
+        last_touched_by: modifierInfo,
+      };
+
+      setShipmentFeedback({
+        type: 'success',
+        orderRef: dispatchModalOrder.order_reference,
+        message: `Successfully booked with ${data.courierName}! Tracking Number: ${data.trackingNumber}`,
+        waybillUrl: data.waybillUrl,
+        orderObj: updatedOrderObj,
+      });
+
+      if (selectedOrder && selectedOrder.id === dispatchModalOrder.id) {
+        setSelectedOrder(updatedOrderObj);
+      }
+
+      const targetOrderForWaybill = updatedOrderObj;
+      setDispatchModalOrder(null);
+      // Automatically open the thermal waybill for instant printing
+      setSelectedWaybillOrder(targetOrderForWaybill);
+
+      if (onRefresh) await onRefresh();
+    } catch (err) {
+      console.error('J&T Dispatch Error:', err);
+      setShipmentFeedback({
+        type: 'error',
+        orderRef: dispatchModalOrder.order_reference,
+        message: err.message || 'Courier dispatch failed',
+      });
+    } finally {
+      setIsDispatchingJnt(false);
+    }
+  };
+
+  // Open Bulk Thermal Waybill Modal
+  const handleBulkPrintWaybills = () => {
+    const ordersWithTracking = filteredOrders.filter(
+      (o) => selectedOrderIds.includes(o.id) && Boolean(o.tracking_number)
+    );
+    if (ordersWithTracking.length === 0) {
+      alert('None of the selected orders have tracking numbers assigned yet. Please dispatch to J&T first.');
+      return;
+    }
+    setBulkWaybillOrders(ordersWithTracking);
+  };
+
+  // Confirm Order Cancellation
+  const handleConfirmCancelOrder = async () => {
+    if (!cancellingOrder || !onUpdateOrderStatus) return;
+    setIsSubmittingCancel(true);
+    const reasonText = cancelNotes.trim() ? `${cancelReason} (${cancelNotes.trim()})` : cancelReason;
+    const modifierInfo = {
+      name: currentAdmin?.name || currentAdmin?.email?.split('@')[0] || 'Administrator',
+      email: currentAdmin?.email || '',
+      role: currentAdmin?.role || 'Admin',
+      action: `Order cancelled: ${reasonText}`,
+      timestamp: new Date().toISOString(),
+    };
+    try {
+      await onUpdateOrderStatus(cancellingOrder.id, 'CANCELLED', modifierInfo);
+      setShipmentFeedback({
+        type: 'success',
+        orderRef: cancellingOrder.order_reference,
+        message: `Order cancelled (${reasonText}). Inventory returned to shelf.`,
+      });
+      if (selectedOrder && selectedOrder.id === cancellingOrder.id) {
+        setSelectedOrder((prev) => ({
+          ...prev,
+          status: 'CANCELLED',
+          last_touched_by: modifierInfo,
+          audit_trail: [modifierInfo, ...(Array.isArray(prev.audit_trail) ? prev.audit_trail : [])],
+        }));
+      }
+      setCancellingOrder(null);
+      setCancelNotes('');
+      if (onRefresh) await onRefresh();
+    } catch (err) {
+      console.error('Cancel order error:', err);
+      setShipmentFeedback({
+        type: 'error',
+        orderRef: cancellingOrder.order_reference,
+        message: err.message || 'Failed to cancel order',
+      });
+    } finally {
+      setIsSubmittingCancel(false);
+    }
   };
 
   const toggleSelectAll = () => {
@@ -590,32 +868,70 @@ const AdminOrdersTab = ({
       </div>
 
       {/* Bulk Action Bar */}
-      {selectedOrderIds.length > 0 && (
-        <div className="bg-blue-50/70 p-3 border border-blue-200 rounded-xl flex items-center justify-between shadow-xs">
-          <div className="flex items-center gap-3">
-            <div className="bg-blue-600 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center shadow-xs">
-              {selectedOrderIds.length}
+      {selectedOrderIds.length > 0 && (() => {
+        const pendingSelected = filteredOrders.filter(
+          (o) => selectedOrderIds.includes(o.id) && (o.status || '').toUpperCase() === 'PENDING'
+        );
+        const trackingSelected = filteredOrders.filter(
+          (o) => selectedOrderIds.includes(o.id) && Boolean(o.tracking_number)
+        );
+
+        return (
+          <div className="bg-blue-50/80 p-3 sm:p-4 border border-blue-200 rounded-2xl flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shadow-xs">
+            <div className="flex items-center gap-3">
+              <div className="bg-blue-600 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center shadow-xs">
+                {selectedOrderIds.length}
+              </div>
+              <div>
+                <span className="text-sm font-bold text-blue-950 block">Orders Selected</span>
+                <span className="text-[11px] text-blue-700">
+                  {pendingSelected.length} pending acceptance • {trackingSelected.length} with tracking
+                </span>
+              </div>
             </div>
-            <span className="text-sm font-semibold text-blue-900">Orders Selected</span>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => setSelectedOrderIds([])}
+                className="px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 bg-white border border-slate-200/80 rounded-xl cursor-pointer transition-colors"
+              >
+                Clear
+              </button>
+
+              {pendingSelected.length > 0 && (
+                <button
+                  onClick={handleBulkAcceptOrders}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-all cursor-pointer"
+                  title="Move all selected pending orders to To Ship"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Accept ({pendingSelected.length})</span>
+                </button>
+              )}
+
+              {trackingSelected.length > 0 && (
+                <button
+                  onClick={handleBulkPrintWaybills}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
+                  title="Print official thermal waybills for all selected dispatched orders"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Print ({trackingSelected.length}) Waybills</span>
+                </button>
+              )}
+
+              <button
+                onClick={handleBulkBookShipmates}
+                disabled={isBulkBooking}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl shadow-xs shadow-blue-500/20 transition-all cursor-pointer disabled:opacity-50"
+              >
+                <Send className={`w-3.5 h-3.5 ${isBulkBooking ? 'animate-spin' : ''}`} />
+                <span>{isBulkBooking ? 'Processing...' : 'Bulk Book Riders'}</span>
+              </button>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setSelectedOrderIds([])}
-              className="px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 cursor-pointer transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleBulkBookShipmates}
-              disabled={isBulkBooking}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-xs shadow-blue-500/20 transition-all cursor-pointer disabled:opacity-50"
-            >
-              <Send className={`w-3.5 h-3.5 ${isBulkBooking ? 'animate-spin' : ''}`} />
-              <span>{isBulkBooking ? 'Processing...' : 'Bulk Book Rider'}</span>
-            </button>
-          </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Select All Row */}
       {filteredOrders.length > 0 && (
@@ -702,13 +1018,13 @@ const AdminOrdersTab = ({
                       {/* Shipmates Dispatch Status Tag */}
                       {hasTracking ? (
                         <span className="text-[10px] font-bold px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-full flex items-center gap-1">
-                          <Truck className="w-3 h-3" />
-                          <span>{order.courier_name || 'Shipmates'}: {order.tracking_number}</span>
+                          <Truck className="w-3 h-3 text-blue-600" />
+                          <span>{order.courier_name || 'J&T Express'}: {order.tracking_number}</span>
                         </span>
                       ) : (isPaid || isCod) ? (
                         <span className="text-[10px] font-bold px-2 py-0.5 bg-purple-50 text-purple-700 border border-purple-200 rounded-full flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          <span>Ready for Shipmates</span>
+                          <Clock className="w-3 h-3 text-purple-600" />
+                          <span>Ready for J&T Dispatch</span>
                         </span>
                       ) : null}
                     </div>
@@ -740,7 +1056,7 @@ const AdminOrdersTab = ({
                   </div>
                   </div>
 
-                  <div className="flex items-center justify-between lg:justify-end gap-5">
+                  <div className="flex flex-wrap items-center justify-between lg:justify-end gap-2.5 sm:gap-4">
                     <div className="text-right">
                       <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">Total Amount</span>
                       <span className="font-sans text-base font-bold text-slate-900">
@@ -748,20 +1064,44 @@ const AdminOrdersTab = ({
                       </span>
                     </div>
 
-                    {/* Shipmates 1-Click Action for Paid or COD Orders */}
-                    {(isPaid || isCod) && (
+                    {/* 1-Click Accept Order Action for PENDING orders */}
+                    {(order.status || '').toUpperCase() === 'PENDING' && (
                       <button
-                        onClick={() => handleBookShipmates(order)}
-                        disabled={isBookingThis}
-                        className={`px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 ${
-                          hasTracking
-                            ? 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
-                            : 'bg-blue-600 hover:bg-blue-700 text-white border-blue-600 shadow-xs shadow-blue-500/20'
-                        }`}
-                        title={hasTracking ? 'Re-sync Shipmates booking' : 'Dispatch courier request to Shipmates'}
+                        onClick={() => handleAcceptOrder(order)}
+                        disabled={isAcceptingOrderId === order.id}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs shadow-emerald-600/20 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                        title="Accept order and move to fulfillment (To Ship)"
                       >
-                        <Send className={`w-3 h-3 ${isBookingThis ? 'animate-spin' : ''}`} />
-                        <span>{isBookingThis ? 'Booking...' : hasTracking ? 'Re-test Shipmates' : 'Book with Shipmates'}</span>
+                        <CheckCircle2 className={`w-3.5 h-3.5 ${isAcceptingOrderId === order.id ? 'animate-spin' : ''}`} />
+                        <span>{isAcceptingOrderId === order.id ? 'Accepting...' : 'Accept Order'}</span>
+                      </button>
+                    )}
+
+                    {/* J&T Express Dispatch Setup Action */}
+                    {(isPaid || isCod || (order.status || '').toUpperCase() === 'TO_SHIP') && (
+                      <button
+                        onClick={() => openDispatchModal(order)}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all flex items-center gap-1.5 cursor-pointer ${
+                          hasTracking
+                            ? 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                            : 'bg-red-600 hover:bg-red-700 text-white border-red-600 shadow-xs shadow-red-600/20'
+                        }`}
+                        title={hasTracking ? 'Re-configure J&T dispatch specs' : 'Dispatch parcel to J&T Express with custom pouch & weight'}
+                      >
+                        <Truck className="w-3.5 h-3.5" />
+                        <span>{hasTracking ? 'Re-dispatch J&T' : 'Dispatch J&T'}</span>
+                      </button>
+                    )}
+
+                    {/* Quick Print Waybill Button if already dispatched */}
+                    {hasTracking && (
+                      <button
+                        onClick={() => setSelectedWaybillOrder(order)}
+                        className="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                        title="Print Official J&T Thermal Waybill (100x150mm)"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Print AWB</span>
                       </button>
                     )}
 
@@ -772,6 +1112,17 @@ const AdminOrdersTab = ({
                       <Eye className="w-3.5 h-3.5 text-slate-500" />
                       <span>Details</span>
                     </button>
+
+                    {/* Cancel Order Action */}
+                    {(order.status || '').toUpperCase() !== 'CANCELLED' && (order.status || '').toUpperCase() !== 'DELIVERED' && (
+                      <button
+                        onClick={() => setCancellingOrder(order)}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                        title="Cancel this order"
+                      >
+                        <Ban className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -1029,20 +1380,49 @@ const AdminOrdersTab = ({
 
                 {/* Dispatch Trigger in Modal */}
                 <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                  <button
-                    onClick={() => handleBookShipmates(selectedOrder)}
-                    disabled={bookingShipmateId === selectedOrder.id}
-                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                  >
-                    <Send className={`w-3.5 h-3.5 ${bookingShipmateId === selectedOrder.id ? 'animate-spin' : ''}`} />
-                    <span>
-                      {bookingShipmateId === selectedOrder.id
-                        ? 'Requesting Shipmates...'
-                        : selectedOrder.tracking_number
-                        ? 'Re-test Shipmates Dispatch'
-                        : 'Dispatch to Shipmates Now'}
-                    </span>
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* Accept Order if PENDING */}
+                    {(selectedOrder.status || '').toUpperCase() === 'PENDING' && (
+                      <button
+                        onClick={() => handleAcceptOrder(selectedOrder)}
+                        disabled={isAcceptingOrderId === selectedOrder.id}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      >
+                        <CheckCircle2 className={`w-3.5 h-3.5 ${isAcceptingOrderId === selectedOrder.id ? 'animate-spin' : ''}`} />
+                        <span>Accept Order</span>
+                      </button>
+                    )}
+
+                    <button
+                      onClick={() => openDispatchModal(selectedOrder)}
+                      className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold text-xs flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Truck className="w-3.5 h-3.5" />
+                      <span>{selectedOrder.tracking_number ? 'Re-configure J&T Dispatch' : 'Dispatch J&T Express'}</span>
+                    </button>
+
+                    {selectedOrder.tracking_number && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedWaybillOrder(selectedOrder)}
+                        className="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold rounded-lg text-xs flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                        <span>Print Waybill (AWB)</span>
+                      </button>
+                    )}
+
+                    {(selectedOrder.status || '').toUpperCase() !== 'CANCELLED' && (selectedOrder.status || '').toUpperCase() !== 'DELIVERED' && (
+                      <button
+                        type="button"
+                        onClick={() => setCancellingOrder(selectedOrder)}
+                        className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg font-semibold text-xs flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Ban className="w-3.5 h-3.5" />
+                        <span>Cancel Order</span>
+                      </button>
+                    )}
+                  </div>
 
                   {selectedOrder.shipment_payload && (
                     <button
@@ -1263,7 +1643,481 @@ const AdminOrdersTab = ({
         )}
       </AnimatePresence>
 
-      {/* Air Waybill (AWB) Printable Thermal Modal */}
+      {/* ========================================================================= */}
+      {/* MODAL 1: J&T EXPRESS DISPATCH SETUP & POUCH CUSTOMIZER */}
+      {/* ========================================================================= */}
+      <AnimatePresence>
+        {dispatchModalOrder && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="relative bg-white w-full max-w-xl rounded-3xl shadow-2xl overflow-hidden border border-slate-100 flex flex-col max-h-[92vh]"
+            >
+              {/* Modal Header */}
+              <div className="p-5 bg-gradient-to-r from-red-600 via-red-700 to-rose-800 text-white flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center">
+                    <Truck className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-red-200">
+                        J&T Express Courier Dispatch
+                      </span>
+                      <span className="text-[10px] bg-white/20 px-1.5 py-0.2 rounded font-mono">
+                        {dispatchModalOrder.order_reference}
+                      </span>
+                    </div>
+                    <h3 className="font-sans font-bold text-base text-white">
+                      Configure Parcel & Packaging
+                    </h3>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setDispatchModalOrder(null)}
+                  className="p-1.5 text-white/70 hover:text-white rounded-xl hover:bg-white/10 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-6 overflow-y-auto space-y-5 text-xs text-slate-700">
+                {/* Recipient & Destination Preview */}
+                <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-red-600" />
+                      <span>Delivery Consignee:</span>
+                    </span>
+                    <span className="text-[11px] font-semibold text-slate-500">
+                      {dispatchModalOrder.customer_phone || 'No Phone'}
+                    </span>
+                  </div>
+                  <p className="font-semibold text-slate-900 text-sm">
+                    {dispatchModalOrder.customer_name}
+                  </p>
+                  <p className="text-slate-600 leading-relaxed text-[11px]">
+                    {dispatchModalOrder.shipping_address
+                      ? `${dispatchModalOrder.shipping_address.street}, ${dispatchModalOrder.shipping_address.barangay || ''} ${dispatchModalOrder.shipping_address.city}, ${dispatchModalOrder.shipping_address.province || ''} ${dispatchModalOrder.shipping_address.postal_code || dispatchModalOrder.shipping_address.zip || ''}`
+                      : 'Standard Shipping Address on File'}
+                  </p>
+                </div>
+
+                {/* Packaging & Weight Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Pouch / Packaging Selector */}
+                  <div className="space-y-1.5">
+                    <label className="font-bold text-slate-800 flex items-center gap-1.5">
+                      <Box className="w-3.5 h-3.5 text-red-600" />
+                      <span>J&T Pouch / Box Size:</span>
+                    </label>
+                    <select
+                      value={dispatchForm.pouchSize}
+                      onChange={(e) => setDispatchForm({ ...dispatchForm, pouchSize: e.target.value })}
+                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium text-slate-800 focus:outline-none focus:border-red-500"
+                    >
+                      <option value="small">Small Pouch (Up to 1.0 kg - 17x30 cm)</option>
+                      <option value="medium">Medium Pouch (Up to 3.0 kg - 24x38 cm)</option>
+                      <option value="large">Large Pouch (Up to 5.0 kg - 30x45 cm)</option>
+                      <option value="box">Carton Box (Up to 10.0 kg - Bulk/Haul)</option>
+                    </select>
+                    <p className="text-[10px] text-slate-400">
+                      Standard Aura garment order fits in Small or Medium pouch.
+                    </p>
+                  </div>
+
+                  {/* Parcel Weight Input */}
+                  <div className="space-y-1.5">
+                    <label className="font-bold text-slate-800 flex items-center gap-1.5">
+                      <Layers className="w-3.5 h-3.5 text-red-600" />
+                      <span>Estimated Parcel Weight (KG):</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        step="0.05"
+                        min="0.1"
+                        max="20"
+                        value={dispatchForm.weightKg}
+                        onChange={(e) => setDispatchForm({ ...dispatchForm, weightKg: e.target.value })}
+                        className="w-full p-2.5 pr-10 bg-white border border-slate-200 rounded-xl font-medium text-slate-800 focus:outline-none focus:border-red-500 font-mono"
+                        placeholder="0.35"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">
+                        KG
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-400">
+                      Auto-calculated from {dispatchModalOrder.items?.reduce((s, it) => s + (it.quantity || 1), 0) || 1} items.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Courier Selection */}
+                <div className="space-y-1.5">
+                  <label className="font-bold text-slate-800 flex items-center gap-1.5">
+                    <Truck className="w-3.5 h-3.5 text-red-600" />
+                    <span>Courier Service Partner:</span>
+                  </label>
+                  <select
+                    value={dispatchForm.preferredCourier}
+                    onChange={(e) => setDispatchForm({ ...dispatchForm, preferredCourier: e.target.value })}
+                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium text-slate-800 focus:outline-none focus:border-red-500"
+                  >
+                    <option value="J&T Express">J&T Express Philippines (Standard Door-to-Door)</option>
+                    <option value="J&T Cargo">J&T Express Cargo (Heavyweight / Bulk shipments)</option>
+                    <option value="Standard Express">Shipmates Standard Express Partner</option>
+                  </select>
+                </div>
+
+                {/* Cash on Delivery (COD) Collection Notice */}
+                <div
+                  className={`p-3.5 rounded-2xl border flex items-center justify-between ${
+                    dispatchModalOrder.payment_method === 'COD'
+                      ? 'bg-amber-50/70 border-amber-300 text-amber-900'
+                      : 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
+                  }`}
+                >
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-1.5 font-bold">
+                      <DollarSign className="w-3.5 h-3.5" />
+                      <span>
+                        {dispatchModalOrder.payment_method === 'COD'
+                          ? 'COD Collection Required'
+                          : 'Prepaid Shipment (Xendit)'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] opacity-85">
+                      {dispatchModalOrder.payment_method === 'COD'
+                        ? 'J&T courier rider will collect cash from the customer upon delivery.'
+                        : 'Customer already paid online via Xendit (GCash/Card). Collect ₱0.00 from recipient.'}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className="text-[10px] uppercase font-bold opacity-75 block">COD Amount</span>
+                    <span className="text-base font-black font-mono">
+                      ₱{dispatchModalOrder.payment_method === 'COD'
+                        ? (Number(dispatchModalOrder.total_amount) || 0).toLocaleString()
+                        : '0.00'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Delivery Notes / Special Instructions */}
+                <div className="space-y-1.5">
+                  <label className="font-bold text-slate-800 block">
+                    Rider Remarks & Delivery Notes:
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={dispatchForm.notes}
+                    onChange={(e) => setDispatchForm({ ...dispatchForm, notes: e.target.value })}
+                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-red-500 resize-none"
+                    placeholder="e.g. Call recipient upon arrival, leave with receptionist if unavailable..."
+                  />
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setDispatchModalOrder(null)}
+                  className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-xl border border-slate-200 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmJntDispatch}
+                  disabled={isDispatchingJnt}
+                  className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl shadow-xs shadow-red-600/30 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <Send className={`w-3.5 h-3.5 ${isDispatchingJnt ? 'animate-spin' : ''}`} />
+                  <span>{isDispatchingJnt ? 'Booking with J&T...' : 'Confirm & Generate J&T Waybill'}</span>
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ========================================================================= */}
+      {/* MODAL 2: BULK THERMAL WAYBILL BATCH PRINTING */}
+      {/* ========================================================================= */}
+      <AnimatePresence>
+        {bulkWaybillOrders && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[94vh]"
+            >
+              {/* Header Bar */}
+              <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <Printer className="w-5 h-5 text-amber-400" />
+                  <div>
+                    <h3 className="font-bold text-sm">
+                      Batch Thermal Waybills ({bulkWaybillOrders.length} Parcels)
+                    </h3>
+                    <p className="text-[10px] text-slate-300">
+                      Standard 100mm x 150mm (A6) • J&T Express Roll Printer Format
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => window.print()}
+                    className="px-4 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>Print All ({bulkWaybillOrders.length}) Labels</span>
+                  </button>
+                  <button
+                    onClick={() => setBulkWaybillOrders(null)}
+                    className="p-1.5 text-slate-400 hover:text-white rounded-lg cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Multi-label Printable Thermal Container */}
+              <div className="p-6 overflow-y-auto bg-slate-100 flex-grow space-y-6 printable-thermal-sheet">
+                {bulkWaybillOrders.map((ord, idx) => {
+                  const isCod = (ord.payment_method || '').toUpperCase() === 'COD';
+                  const city = ord.shipping_address?.city || 'Metro Manila';
+                  const sortCode = city.toLowerCase().includes('makati') ? 'MNL-MAK-01'
+                    : city.toLowerCase().includes('quezon') ? 'MNL-QC-02'
+                    : city.toLowerCase().includes('cebu') ? 'CEB-HUB-01'
+                    : city.toLowerCase().includes('davao') ? 'DVO-HUB-01'
+                    : 'MNL-HUB-01';
+
+                  return (
+                    <div
+                      key={ord.id || idx}
+                      className="printable-thermal-label bg-white border-2 border-slate-900 p-5 rounded-none shadow-sm space-y-4 font-mono text-slate-900 print:border-none print:p-0 print:mb-0"
+                      style={{ pageBreakAfter: 'always' }}
+                    >
+                      {/* Carrier & Sort Code */}
+                      <div className="border-b-2 border-slate-900 pb-3 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="bg-red-600 text-white font-black text-xl px-2.5 py-0.5 tracking-tighter">
+                            J&T
+                          </div>
+                          <div>
+                            <span className="text-xl font-black tracking-tight block">EXPRESS</span>
+                            <span className="text-[9px] font-sans font-bold uppercase tracking-wider text-slate-500">
+                              Official Air Waybill (AWB)
+                            </span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-2xl font-black tracking-wider block bg-slate-900 text-white px-2 py-0.5">
+                            {sortCode}
+                          </span>
+                          <span className="text-[9px] font-bold block pt-0.5">STANDARD AIR</span>
+                        </div>
+                      </div>
+
+                      {/* Barcode & Tracking Code */}
+                      <div className="py-2 text-center border-b-2 border-slate-900 space-y-1">
+                        <div className="flex items-center justify-center gap-0.5 h-12 py-1">
+                          {[3, 1, 2, 4, 1, 3, 2, 1, 4, 2, 1, 3, 2, 4, 1, 2, 3, 1, 4, 2, 1, 3, 1, 2, 4, 2, 1, 3, 2, 1, 4, 1, 3, 2, 4, 1, 2, 3, 2, 1, 4].map((w, i) => (
+                            <div key={i} className="bg-slate-900 h-full" style={{ width: `${w}px` }} />
+                          ))}
+                        </div>
+                        <div className="font-bold text-sm tracking-widest uppercase">
+                          {ord.tracking_number || 'JT-UNASSIGNED'}
+                        </div>
+                      </div>
+
+                      {/* Shipper & Consignee Grid */}
+                      <div className="grid grid-cols-2 border-b-2 border-slate-900 text-[10px] divide-x-2 divide-slate-900">
+                        <div className="p-2 space-y-1">
+                          <span className="font-bold uppercase tracking-wider block text-[9px] text-slate-500">
+                            FROM (SHIPPER):
+                          </span>
+                          <p className="font-bold text-xs">Aura Atelier Dispatch Hub</p>
+                          <p>09171234567</p>
+                          <p className="text-slate-700 leading-tight">
+                            108 Atelier Blvd, Salcedo Village, Bel-Air, Makati City, Metro Manila 1209
+                          </p>
+                        </div>
+
+                        <div className="p-2 space-y-1 bg-amber-50/40">
+                          <span className="font-bold uppercase tracking-wider block text-[9px] text-slate-500">
+                            TO (CONSIGNEE):
+                          </span>
+                          <p className="font-bold text-xs">{ord.customer_name}</p>
+                          <p className="font-bold">{ord.customer_phone}</p>
+                          <p className="text-slate-800 leading-tight">
+                            {ord.shipping_address
+                              ? `${ord.shipping_address.street}, ${ord.shipping_address.barangay || ''} ${ord.shipping_address.city}, ${ord.shipping_address.province || ''} ${ord.shipping_address.postal_code || ord.shipping_address.zip || ''}`
+                              : 'Standard Delivery Address'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Parcel Details & Payment Terms */}
+                      <div className="text-[10px] space-y-2 pt-1 border-b-2 border-slate-900 pb-3">
+                        <div className="flex justify-between font-bold">
+                          <span>Order Ref: {ord.order_reference}</span>
+                          {isCod ? (
+                            <span className="bg-red-600 text-white px-2 py-0.5 text-[9px] font-sans font-black">
+                              COLLECT COD (₱{(Number(ord.total_amount) || 0).toLocaleString()})
+                            </span>
+                          ) : (
+                            <span className="bg-emerald-700 text-white px-2 py-0.5 text-[9px] font-sans font-bold">
+                              PREPAID (NON-COD)
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="bg-slate-50 p-2 border border-slate-300">
+                          <span className="block font-bold text-[9px] text-slate-500 mb-0.5">CONTENT SPECIFICATION:</span>
+                          <p className="truncate">
+                            {ord.items?.map(it => `${it.name} (${it.quantity || 1}x)`).join(', ') || 'Garments / Apparel'}
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2 text-center pt-1 font-bold">
+                          <div className="border border-slate-300 p-1">
+                            <span className="block text-[8px] text-slate-500 font-sans">WEIGHT</span>
+                            <span>0.35 KG</span>
+                          </div>
+                          <div className="border border-slate-300 p-1">
+                            <span className="block text-[8px] text-slate-500 font-sans">COURIER</span>
+                            <span>J&T EXPRESS</span>
+                          </div>
+                          <div className={`border p-1 ${isCod ? 'bg-red-600 text-white border-red-600' : 'bg-slate-100 text-slate-800 border-slate-300'}`}>
+                            <span className={`block text-[8px] font-sans ${isCod ? 'text-white' : 'text-slate-500'}`}>COLLECT COD</span>
+                            <span>₱{isCod ? (Number(ord.total_amount) || 0).toLocaleString() : '0.00'}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Signature Notice */}
+                      <div className="pt-1 flex items-center justify-between text-[9px] text-slate-500">
+                        <span>Date: {new Date(ord.created_at || Date.now()).toLocaleDateString()}</span>
+                        <span>Recipient Signature: __________________</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ========================================================================= */}
+      {/* MODAL 3: ORDER CANCELLATION WITH REASON */}
+      {/* ========================================================================= */}
+      <AnimatePresence>
+        {cancellingOrder && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white max-w-md w-full rounded-3xl shadow-2xl overflow-hidden border border-slate-100 text-xs"
+            >
+              <div className="p-5 bg-rose-600 text-white flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <Ban className="w-5 h-5 text-white" />
+                  <div>
+                    <h3 className="font-bold text-sm">Cancel Customer Order</h3>
+                    <p className="text-[11px] text-rose-100 font-mono">{cancellingOrder.order_reference}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setCancellingOrder(null)}
+                  className="p-1 text-white/70 hover:text-white cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl space-y-1">
+                  <div className="flex justify-between font-semibold text-slate-800">
+                    <span>Customer:</span>
+                    <span>{cancellingOrder.customer_name}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>Order Amount:</span>
+                    <span className="font-bold text-slate-900">₱{(Number(cancellingOrder.total_amount) || 0).toLocaleString()}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="font-bold text-slate-800 block">Select Cancellation Reason:</label>
+                  <select
+                    value={cancelReason}
+                    onChange={(e) => setCancelReason(e.target.value)}
+                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium text-slate-800 focus:outline-none focus:border-rose-500"
+                  >
+                    <option value="Customer requested cancellation">Customer requested cancellation</option>
+                    <option value="Item out of stock / defect identified">Item out of stock / defect identified</option>
+                    <option value="Suspected fraudulent order">Suspected fraudulent order</option>
+                    <option value="Invalid or unreachable delivery address">Invalid or unreachable delivery address</option>
+                    <option value="Customer unresponsive to verification call">Customer unresponsive to verification call</option>
+                    <option value="Duplicate order submitted">Duplicate order submitted</option>
+                    <option value="Other administrative reason">Other administrative reason</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="font-bold text-slate-800 block">Additional Notes (Optional):</label>
+                  <input
+                    type="text"
+                    value={cancelNotes}
+                    onChange={(e) => setCancelNotes(e.target.value)}
+                    placeholder="e.g. Buyer contacted atelier phone line"
+                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:border-rose-500"
+                  />
+                </div>
+
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2 text-amber-900 text-[11px]">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <p>
+                    Cancelling this order will release reserved stock back into inventory and update the fulfillment pipeline to CANCELLED. This change is permanently logged in the audit trail.
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setCancellingOrder(null)}
+                  className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 font-semibold rounded-xl border border-slate-200 transition-colors cursor-pointer"
+                >
+                  Keep Order
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmCancelOrder}
+                  disabled={isSubmittingCancel}
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Ban className={`w-3.5 h-3.5 ${isSubmittingCancel ? 'animate-spin' : ''}`} />
+                  <span>{isSubmittingCancel ? 'Cancelling...' : 'Confirm Cancellation'}</span>
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ========================================================================= */}
+      {/* MODAL 4: SINGLE AIR WAYBILL (AWB) PRINTABLE THERMAL MODAL */}
+      {/* ========================================================================= */}
       <AnimatePresence>
         {selectedWaybillOrder && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
@@ -1279,7 +2133,7 @@ const AdminOrdersTab = ({
                   <Truck className="w-5 h-5 text-amber-400" />
                   <div>
                     <h3 className="font-bold text-sm">Official Air Waybill (AWB)</h3>
-                    <p className="text-[10px] text-slate-300">Shipmates Logistics Partner • Standard Express</p>
+                    <p className="text-[10px] text-slate-300">J&T Express Philippines • Standard Door-to-Door</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1300,19 +2154,31 @@ const AdminOrdersTab = ({
               </div>
 
               {/* Printable Physical Thermal Label (4x6 / A6 Style) */}
-              <div className="p-6 overflow-y-auto bg-slate-100 flex-grow">
-                <div className="bg-white border-2 border-slate-900 p-5 rounded-none shadow-sm space-y-4 font-mono text-slate-900 print:border-none print:p-0">
+              <div className="p-6 overflow-y-auto bg-slate-100 flex-grow printable-thermal-sheet">
+                <div className="printable-thermal-label bg-white border-2 border-slate-900 p-5 rounded-none shadow-sm space-y-4 font-mono text-slate-900 print:border-none print:p-0">
                   {/* Carrier & Sort Code */}
                   <div className="border-b-2 border-slate-900 pb-3 flex items-center justify-between">
-                    <div>
-                      <span className="text-xl font-black tracking-tight block">J&T EXPRESS</span>
-                      <span className="text-[9px] font-sans font-bold uppercase tracking-wider text-slate-500">
-                        Shipmates Courier Network
-                      </span>
+                    <div className="flex items-center gap-2">
+                      <div className="bg-red-600 text-white font-black text-xl px-2.5 py-0.5 tracking-tighter">
+                        J&T
+                      </div>
+                      <div>
+                        <span className="text-xl font-black tracking-tight block">EXPRESS</span>
+                        <span className="text-[9px] font-sans font-bold uppercase tracking-wider text-slate-500">
+                          Official Air Waybill (AWB)
+                        </span>
+                      </div>
                     </div>
                     <div className="text-right">
                       <span className="text-2xl font-black tracking-wider block bg-slate-900 text-white px-2 py-0.5">
-                        MNL-01
+                        {(() => {
+                          const city = selectedWaybillOrder.shipping_address?.city || '';
+                          if (city.toLowerCase().includes('makati')) return 'MNL-MAK-01';
+                          if (city.toLowerCase().includes('quezon')) return 'MNL-QC-02';
+                          if (city.toLowerCase().includes('cebu')) return 'CEB-HUB-01';
+                          if (city.toLowerCase().includes('davao')) return 'DVO-HUB-01';
+                          return 'MNL-HUB-01';
+                        })()}
                       </span>
                       <span className="text-[9px] font-bold block pt-0.5">STANDARD AIR</span>
                     </div>
@@ -1320,14 +2186,14 @@ const AdminOrdersTab = ({
 
                   {/* Barcode & Tracking Code */}
                   <div className="py-2 text-center border-b-2 border-slate-900 space-y-1">
-                    {/* Simulated SVG Barcode */}
+                    {/* High-density Simulated Barcode */}
                     <div className="flex items-center justify-center gap-0.5 h-12 py-1">
-                      {[3, 1, 2, 4, 1, 3, 2, 1, 4, 2, 1, 3, 2, 4, 1, 2, 3, 1, 4, 2, 1, 3, 1, 2, 4, 2, 1, 3, 2, 1, 4, 1, 3, 2, 4, 1, 2, 3].map((w, i) => (
+                      {[3, 1, 2, 4, 1, 3, 2, 1, 4, 2, 1, 3, 2, 4, 1, 2, 3, 1, 4, 2, 1, 3, 1, 2, 4, 2, 1, 3, 2, 1, 4, 1, 3, 2, 4, 1, 2, 3, 2, 1, 4].map((w, i) => (
                         <div key={i} className="bg-slate-900 h-full" style={{ width: `${w}px` }} />
                       ))}
                     </div>
-                    <div className="font-bold text-sm tracking-widest">
-                      {selectedWaybillOrder.tracking_number || 'SM-TEST-000000'}
+                    <div className="font-bold text-sm tracking-widest uppercase">
+                      {selectedWaybillOrder.tracking_number || 'JT-UNASSIGNED'}
                     </div>
                   </div>
 
@@ -1337,10 +2203,10 @@ const AdminOrdersTab = ({
                       <span className="font-bold uppercase tracking-wider block text-[9px] text-slate-500">
                         FROM (SHIPPER):
                       </span>
-                      <p className="font-bold text-xs">Aura Atelier Dispatch</p>
+                      <p className="font-bold text-xs">Aura Atelier Dispatch Hub</p>
                       <p>09171234567</p>
                       <p className="text-slate-700 leading-tight">
-                        108 Atelier Blvd, Salcedo Village, Bel-Air, Makati City, Metro Manila
+                        108 Atelier Blvd, Salcedo Village, Bel-Air, Makati City, Metro Manila 1209
                       </p>
                     </div>
 
@@ -1349,10 +2215,10 @@ const AdminOrdersTab = ({
                         TO (CONSIGNEE):
                       </span>
                       <p className="font-bold text-xs">{selectedWaybillOrder.customer_name}</p>
-                      <p>{selectedWaybillOrder.customer_phone}</p>
+                      <p className="font-bold">{selectedWaybillOrder.customer_phone}</p>
                       <p className="text-slate-800 leading-tight">
                         {selectedWaybillOrder.shipping_address
-                          ? `${selectedWaybillOrder.shipping_address.street}, ${selectedWaybillOrder.shipping_address.barangay || ''} ${selectedWaybillOrder.shipping_address.city}, ${selectedWaybillOrder.shipping_address.province || ''}`
+                          ? `${selectedWaybillOrder.shipping_address.street}, ${selectedWaybillOrder.shipping_address.barangay || ''} ${selectedWaybillOrder.shipping_address.city}, ${selectedWaybillOrder.shipping_address.province || ''} ${selectedWaybillOrder.shipping_address.postal_code || selectedWaybillOrder.shipping_address.zip || ''}`
                           : 'Standard Delivery Address'}
                       </p>
                     </div>
@@ -1363,11 +2229,11 @@ const AdminOrdersTab = ({
                     <div className="flex justify-between font-bold">
                       <span>Order Ref: {selectedWaybillOrder.order_reference}</span>
                       {selectedWaybillOrder.payment_method === 'COD' ? (
-                        <span className="bg-amber-600 text-white px-2 py-0.5 text-[9px] font-sans font-black">
-                          CASH ON DELIVERY (₱{(Number(selectedWaybillOrder.total_amount) || 0).toLocaleString()})
+                        <span className="bg-red-600 text-white px-2 py-0.5 text-[9px] font-sans font-black">
+                          COLLECT COD (₱{(Number(selectedWaybillOrder.total_amount) || 0).toLocaleString()})
                         </span>
                       ) : (
-                        <span className="bg-emerald-600 text-white px-2 py-0.5 text-[9px] font-sans">
+                        <span className="bg-emerald-700 text-white px-2 py-0.5 text-[9px] font-sans font-bold">
                           PREPAID (NON-COD)
                         </span>
                       )}
@@ -1376,7 +2242,7 @@ const AdminOrdersTab = ({
                     <div className="bg-slate-50 p-2 border border-slate-300">
                       <span className="block font-bold text-[9px] text-slate-500 mb-0.5">CONTENT SPECIFICATION:</span>
                       <p className="truncate">
-                        {selectedWaybillOrder.items?.map(it => `${it.name} (${it.quantity || 1}x)`).join(', ') || 'Apparel / Garments'}
+                        {selectedWaybillOrder.items?.map(it => `${it.name} (${it.quantity || 1}x, ${typeof it.size === 'object' ? it.size?.name : (it.size || 'Std')})`).join(', ') || 'Garments / Apparel'}
                       </p>
                     </div>
 
@@ -1386,12 +2252,12 @@ const AdminOrdersTab = ({
                         <span>0.35 KG</span>
                       </div>
                       <div className="border border-slate-300 p-1">
-                        <span className="block text-[8px] text-slate-500 font-sans">PAYMENT</span>
-                        <span>XENDIT ONLINE</span>
+                        <span className="block text-[8px] text-slate-500 font-sans">COURIER</span>
+                        <span>J&T EXPRESS</span>
                       </div>
-                      <div className="border border-slate-300 p-1 bg-slate-900 text-white">
-                        <span className="block text-[8px] text-slate-300 font-sans">COLLECT COD</span>
-                        <span>₱0.00</span>
+                      <div className={`border p-1 ${selectedWaybillOrder.payment_method === 'COD' ? 'bg-red-600 text-white border-red-600' : 'bg-slate-100 text-slate-800 border-slate-300'}`}>
+                        <span className={`block text-[8px] font-sans ${selectedWaybillOrder.payment_method === 'COD' ? 'text-white' : 'text-slate-500'}`}>COLLECT COD</span>
+                        <span>₱{selectedWaybillOrder.payment_method === 'COD' ? (Number(selectedWaybillOrder.total_amount) || 0).toLocaleString() : '0.00'}</span>
                       </div>
                     </div>
                   </div>

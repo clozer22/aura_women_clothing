@@ -53,12 +53,13 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess, initialM
   // Handle Email Sign In
   const handleEmailSignIn = async (e) => {
     e.preventDefault();
-    if (!email || !password) {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    if (!cleanEmail || !password) {
       setErrorMsg('Please enter both email and password.');
       return;
     }
 
-    if (isAdminEmail(email)) {
+    if (isAdminEmail(cleanEmail)) {
       setErrorMsg('Admin accounts cannot sign in as customers. Please use a personal email or log in via the Admin Dashboard.');
       return;
     }
@@ -66,7 +67,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess, initialM
     setIsLoading(true);
     setErrorMsg('');
     try {
-      await signInWithEmail({ email, password });
+      await signInWithEmail({ email: cleanEmail, password });
       setSuccessMsg('Successfully signed in.');
       setTimeout(() => {
         if (onSuccess) onSuccess();
@@ -82,30 +83,37 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess, initialM
   // Handle Email Sign Up (triggers OTP)
   const handleEmailSignUp = async (e) => {
     e.preventDefault();
-    if (!fullName.trim()) {
+    const cleanName = (fullName || '').replace(/<[^>]*>?/gm, '').trim().slice(0, 80);
+    const cleanEmail = (email || '').trim().toLowerCase();
+
+    if (!cleanName) {
       setErrorMsg('Please enter your full name.');
       return;
     }
-    if (!email || !email.includes('@')) {
+    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
       setErrorMsg('Please provide a valid email address.');
       return;
     }
-    if (isAdminEmail(email)) {
+    if (isAdminEmail(cleanEmail)) {
       setErrorMsg('Admin domain emails cannot be registered as customer accounts. Please use a personal email (e.g. @gmail.com).');
       return;
     }
-    if (password.length < 6) {
-      setErrorMsg('Password must be at least 6 characters long.');
+    if (password.length < 8) {
+      setErrorMsg('Password must be at least 8 characters long.');
+      return;
+    }
+    if (!/[a-zA-Z]/.test(password) || !/\d/.test(password)) {
+      setErrorMsg('Password must contain both letters and at least one number.');
       return;
     }
 
     setIsLoading(true);
     setErrorMsg('');
     try {
-      await signUpWithEmail({ email, password, fullName });
+      await signUpWithEmail({ email: cleanEmail, password, fullName: cleanName });
       setMode('verify_otp');
       setResendCooldown(60);
-      setSuccessMsg(`Verification code sent to ${email}`);
+      setSuccessMsg(`Verification code sent to ${cleanEmail}`);
       setIsLoading(false);
     } catch (err) {
       console.error('Sign Up Error:', err);
@@ -117,15 +125,18 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess, initialM
   // Handle OTP Verification
   const handleVerifyOtp = async (e) => {
     e.preventDefault();
-    if (!otpCode.trim() || otpCode.trim().length < 6) {
+    const cleanOtp = (otpCode || '').replace(/\D/g, '').trim().slice(0, 6);
+    if (cleanOtp.length !== 6) {
       setErrorMsg('Please enter the full 6-digit verification code.');
       return;
     }
 
+    const cleanEmail = (email || '').trim().toLowerCase();
+
     setIsLoading(true);
     setErrorMsg('');
     try {
-      await verifyEmailOtp({ email, token: otpCode });
+      await verifyEmailOtp({ email: cleanEmail, token: cleanOtp });
       setSuccessMsg('Account verified and activated successfully!');
       setTimeout(() => {
         if (onSuccess) onSuccess();
@@ -383,14 +394,14 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess, initialM
 
               <div>
                 <label className="block text-[11px] uppercase font-bold tracking-wider text-[#705B56] mb-1.5">
-                  Create Password * (Minimum 6 characters)
+                  Create Password * (Minimum 8 characters, letters & numbers)
                 </label>
                 <div className="relative">
                   <Lock className="w-4 h-4 text-[#A38E88] absolute left-3.5 top-3.5" />
                   <input
                     type="password"
                     required
-                    minLength={6}
+                    minLength={8}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
