@@ -27,3 +27,12 @@ yarn-error.log*
 *.njsproj
 *.sln
 *.sw?
+# Aura store manual & temporary artifacts
+*.pdf
+scratch/
+
+# Skills and agent workflows (workspace local only, contains tokens & skills)
+.agents/
+
+# Supabase temp & local files
+supabase/.temp/

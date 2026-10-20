@@ -13,6 +13,7 @@ import AdminPortal from './components/AdminPortal';
 import SplashScreen from './components/SplashScreen';
 import { PRODUCTS } from './data/products';
 import { supabase } from './lib/supabaseClient';
+import { trackPageView, trackViewContent } from './lib/metaPixel';
 
 export default function App() {
   const getInitialView = () => {
@@ -194,6 +195,18 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // Report route / view changes to Meta Pixel
+  useEffect(() => {
+    trackPageView(currentView);
+  }, [currentView]);
+
+  const handleSelectProduct = (product) => {
+    setSelectedProduct(product);
+    if (product) {
+      trackViewContent(product);
+    }
+  };
+
   // Resolve active products list from database (filter out ARCHIVE)
   const allProducts = dbProducts;
   const activeProducts = allProducts.filter(p => p.statusBadge !== 'ARCHIVE');
@@ -287,7 +300,7 @@ export default function App() {
           <ProductCatalog
             products={activeProducts}
             isLoading={isLoading}
-            onSelectProduct={(product) => setSelectedProduct(product)}
+            onSelectProduct={handleSelectProduct}
             onViewFullCatalog={navigateToFullCatalog}
           />
 
@@ -301,7 +314,7 @@ export default function App() {
             products={activeProducts}
             isLoading={isLoading}
             onBackToHome={navigateToHome}
-            onSelectProduct={(product) => setSelectedProduct(product)}
+            onSelectProduct={handleSelectProduct}
             initialSearchQuery={catalogSearchQuery}
           />
         </div>

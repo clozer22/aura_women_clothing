@@ -1,17 +1,37 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Star, Sparkles, Check } from 'lucide-react';
 import sizeChartImg from '../images/size_chart.png';
+import { trackViewContent, trackInitiateCheckout, trackCustomEvent } from '../lib/metaPixel';
 
 const isVideoUrl = (url) => url && (url.startsWith('data:video/') || url.match(/\.(mp4|mov|webm)($|\?)/i));
 
 export default function QuickViewModal({ product, onClose }) {
   if (!product) return null;
 
+  // Track product view in Meta Pixel
+  useEffect(() => {
+    if (product) {
+      trackViewContent(product);
+    }
+  }, [product?.id]);
+
   // Safeguard array transformations for colors
   const colorsArray = Array.isArray(product.colors) ? product.colors : [];
   const [selectedColor, setSelectedColor] = useState(colorsArray[0]);
   const [showSizeChart, setShowSizeChart] = useState(false);
+
+  const handleBuyNow = () => {
+    trackInitiateCheckout([product], product.price);
+    trackCustomEvent('OutboundShopeeClick', {
+      content_name: product.name,
+      content_ids: [String(product.id || '')],
+      value: Number(product.price) || 0,
+      currency: 'PHP',
+      shopee_url: product.shopeeLink || 'https://shopee.ph',
+    });
+    window.open(product.shopeeLink || 'https://shopee.ph', '_blank', 'noopener,noreferrer');
+  };
 
   // Safeguard array transformations for sizes
   const renderSizes = () => {
@@ -173,7 +193,7 @@ export default function QuickViewModal({ product, onClose }) {
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                onClick={() => window.open(product.shopeeLink || 'https://shopee.ph', '_blank', 'noopener,noreferrer')}
+                onClick={handleBuyNow}
                 className="w-full py-4 px-6 font-brand  rounded-none text-xs font-semibold uppercase tracking-[0.2em] bg-[#ccc2c3] text-white transition-all duration-300 shadow-xl flex items-center justify-center gap-2 cursor-pointer"
               >
                 <span>Buy Here</span>
