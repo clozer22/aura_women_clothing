@@ -13,7 +13,7 @@ import AdminPortal from './components/AdminPortal';
 import SplashScreen from './components/SplashScreen';
 import { PRODUCTS } from './data/products';
 import { supabase } from './lib/supabaseClient';
-import { trackPageView, trackViewContent } from './lib/metaPixel';
+import { trackPageView } from './lib/metaPixel';
 
 export default function App() {
   const getInitialView = () => {
@@ -195,16 +195,18 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Report route / view changes to Meta Pixel
+  // Report subsequent route / view changes to Meta Pixel (initial landing PageView is fired by index.html)
+  const isFirstViewRender = React.useRef(true);
   useEffect(() => {
+    if (isFirstViewRender.current) {
+      isFirstViewRender.current = false;
+      return;
+    }
     trackPageView(currentView);
   }, [currentView]);
 
   const handleSelectProduct = (product) => {
     setSelectedProduct(product);
-    if (product) {
-      trackViewContent(product);
-    }
   };
 
   // Resolve active products list from database (filter out ARCHIVE)

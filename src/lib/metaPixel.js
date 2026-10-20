@@ -37,6 +37,17 @@ export function trackPageView(pageName) {
 }
 
 /**
+ * Normalizes price strings or numbers (e.g. '₱1,200', '1200', 1200) into a valid float
+ */
+function parseNumericPrice(val) {
+  if (typeof val === 'number' && !isNaN(val)) return val;
+  if (!val) return 0;
+  const cleaned = String(val).replace(/[^0-9.]/g, '');
+  const parsed = parseFloat(cleaned);
+  return isNaN(parsed) ? 0 : parsed;
+}
+
+/**
  * Fires 'ViewContent' when a client inspects a garment / product modal
  * @param {Object} product - { id, name, price, category }
  */
@@ -47,7 +58,7 @@ export function trackViewContent(product) {
     content_ids: [String(product.id || '')],
     content_type: 'product',
     content_category: product.category || 'Apparel',
-    value: Number(product.price) || 0,
+    value: parseNumericPrice(product.price),
     currency: 'PHP',
   });
 }
@@ -55,7 +66,7 @@ export function trackViewContent(product) {
 /**
  * Fires 'InitiateCheckout' when a customer clicks "Buy Here" / Shopee Redirect
  * @param {Array|Object} items - Product or list of products
- * @param {number} totalAmount - Total payable amount
+ * @param {number|string} totalAmount - Total payable amount
  */
 export function trackInitiateCheckout(items = [], totalAmount = 0) {
   const itemList = Array.isArray(items) ? items : [items];
@@ -63,17 +74,27 @@ export function trackInitiateCheckout(items = [], totalAmount = 0) {
   const contents = itemList.map((i) => ({
     id: String(i.id || i.productId || ''),
     quantity: Number(i.quantity) || 1,
-    item_price: Number(i.price) || 0,
+    item_price: parseNumericPrice(i.price),
   }));
 
-  fbqSafe('track', 'InitiateCheckout', {
+  const parsedTotal =
+    parseNumericPrice(totalAmount) ||
+    contents.reduce((sum, item) => sum + item.item_price * item.quantity, 0);
+
+  const payload = {
     content_ids: contentIds,
     contents,
     content_type: 'product',
     num_items: itemList.reduce((sum, i) => sum + (Number(i.quantity) || 1), 0),
-    value: Number(totalAmount) || 0,
+    value: parsedTotal,
     currency: 'PHP',
-  });
+  };
+
+  if (itemList.length === 1 && itemList[0]?.name) {
+    payload.content_name = itemList[0].name;
+  }
+
+  fbqSafe('track', 'InitiateCheckout', payload);
 }
 
 /**
