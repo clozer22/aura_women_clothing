@@ -501,7 +501,6 @@ function MainApp() {
     }
     trackPageView(currentView);
   }, [currentView]);
-  };
 
   // Resolve active products list from database (filter out ARCHIVE)
   const allProducts = dbProducts;
