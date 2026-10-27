@@ -485,6 +485,14 @@ export default function OrderHistory({ onBackToShop, onSelectOrder }) {
                           <span className="text-[10px] font-brand uppercase tracking-wider font-bold px-2.5 py-0.5 border bg-emerald-50 text-emerald-800 border-emerald-200">
                             PAID
                           </span>
+                        ) : order.payment_status === 'REFUND_PENDING' ? (
+                          <span className="text-[10px] font-brand uppercase tracking-wider font-bold px-2.5 py-0.5 border bg-amber-50 text-amber-900 border-amber-300">
+                            REFUND PENDING
+                          </span>
+                        ) : order.payment_status === 'CANCELLED' ? (
+                          <span className="text-[10px] font-brand uppercase tracking-wider font-bold px-2.5 py-0.5 border bg-neutral-100 text-neutral-600 border-neutral-300">
+                            VOIDED
+                          </span>
                         ) : (
                           <span className="text-[10px] font-brand uppercase tracking-wider font-bold px-2.5 py-0.5 border bg-amber-50 text-amber-800 border-amber-200">
                             PAYMENT PENDING

@@ -32,7 +32,8 @@ import {
   Ban,
   AlertCircle,
   Bookmark,
-  MoreVertical
+  MoreVertical,
+  User
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../../lib/supabaseClient';
@@ -136,9 +137,53 @@ const AdminOrdersTab = ({
   const [cancelReason, setCancelReason] = useState('Customer requested cancellation');
   const [cancelNotes, setCancelNotes] = useState('');
   const [isSubmittingCancel, setIsSubmittingCancel] = useState(false);
+  const [isRefundingOrderId, setIsRefundingOrderId] = useState(null);
 
   // Single Order Accepting state
   const [isAcceptingOrderId, setIsAcceptingOrderId] = useState(null);
+
+  // Mark an online paid cancelled order as Refunded (after refunding on Xendit)
+  const handleMarkAsRefunded = async (order) => {
+    if (!order || !onUpdateOrderStatus) return;
+    setIsRefundingOrderId(order.id);
+    const modifierInfo = {
+      name: currentAdmin?.name || currentAdmin?.email?.split('@')[0] || 'Administrator',
+      email: currentAdmin?.email || '',
+      role: currentAdmin?.role || 'Admin',
+      action: 'Tagged as Refunded (Xendit refund / payout verified)',
+      timestamp: new Date().toISOString(),
+    };
+    try {
+      await onUpdateOrderStatus(order.id, 'CANCELLED', modifierInfo, {
+        payment_status: 'REFUNDED',
+        refunded_at: new Date().toISOString(),
+      });
+      if (selectedOrder && selectedOrder.id === order.id) {
+        setSelectedOrder((prev) => ({
+          ...prev,
+          payment_status: 'REFUNDED',
+          refunded_at: new Date().toISOString(),
+          last_touched_by: modifierInfo,
+          audit_trail: [modifierInfo, ...(Array.isArray(prev.audit_trail) ? prev.audit_trail : [])],
+        }));
+      }
+      setShipmentFeedback({
+        type: 'success',
+        orderRef: order.order_reference,
+        message: `Order ${order.order_reference} tagged as Refunded.`,
+      });
+      if (onRefresh) await onRefresh();
+    } catch (err) {
+      console.error('Failed to mark as refunded:', err);
+      setShipmentFeedback({
+        type: 'error',
+        orderRef: order.order_reference,
+        message: err.message || 'Failed to update refund status',
+      });
+    } finally {
+      setIsRefundingOrderId(null);
+    }
+  };
 
   // Parse order note and color flag (supports JSON format and plain text fallback)
   const parseOrderNote = (adminNotes) => {
@@ -912,17 +957,30 @@ const AdminOrdersTab = ({
       action: `Order cancelled: ${reasonText}`,
       timestamp: new Date().toISOString(),
     };
+    const isPaid = (cancellingOrder.payment_status || '').toUpperCase() === 'PAID';
+    const isCod = (cancellingOrder.payment_method || '').toUpperCase() === 'COD';
+    const newPaymentStatus = isPaid ? 'REFUND_PENDING' : (isCod ? 'CANCELLED' : cancellingOrder.payment_status);
+
     try {
-      await onUpdateOrderStatus(cancellingOrder.id, 'CANCELLED', modifierInfo);
+      await onUpdateOrderStatus(cancellingOrder.id, 'CANCELLED', modifierInfo, {
+        payment_status: newPaymentStatus,
+        cancellation_reason: reasonText,
+        cancelled_at: new Date().toISOString(),
+        cancelled_by: 'ADMIN',
+      });
       setShipmentFeedback({
         type: 'success',
         orderRef: cancellingOrder.order_reference,
-        message: `Order cancelled (${reasonText}). Inventory returned to shelf.`,
+        message: `Order cancelled (${reasonText}). Inventory returned to shelf.${isPaid ? ' Refund required via Xendit.' : ''}`,
       });
       if (selectedOrder && selectedOrder.id === cancellingOrder.id) {
         setSelectedOrder((prev) => ({
           ...prev,
           status: 'CANCELLED',
+          payment_status: newPaymentStatus,
+          cancellation_reason: reasonText,
+          cancelled_by: 'ADMIN',
+          cancelled_at: new Date().toISOString(),
           last_touched_by: modifierInfo,
           audit_trail: [modifierInfo, ...(Array.isArray(prev.audit_trail) ? prev.audit_trail : [])],
         }));
@@ -1443,7 +1501,30 @@ const AdminOrdersTab = ({
                         </span>
                       )}
 
-                      {isCod ? (
+                      {/* Customer Cancelled Tag */}
+                      {(order.status || '').toUpperCase() === 'CANCELLED' && (
+                        <span className="text-[10px] uppercase font-bold px-2 py-0.5 bg-rose-100 text-rose-800 border border-rose-300 rounded-full flex items-center gap-1">
+                          <User className="w-3 h-3 text-rose-600" />
+                          <span>{order.cancelled_by === 'CUSTOMER' || (order.admin_notes || '').includes('[Customer Cancelled]') ? 'Cancelled by Client' : 'Cancelled by Staff'}</span>
+                        </span>
+                      )}
+
+                      {/* Payment Status Tag */}
+                      {order.payment_status === 'REFUND_PENDING' ? (
+                        <span className="text-[10px] uppercase font-black px-2 py-0.5 bg-amber-500 text-white rounded-full flex items-center gap-1 shadow-xs animate-pulse">
+                          <AlertTriangle className="w-3 h-3" />
+                          <span>REFUND REQUIRED</span>
+                        </span>
+                      ) : order.payment_status === 'REFUNDED' ? (
+                        <span className="text-[10px] uppercase font-bold px-2 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-full flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          <span>REFUNDED</span>
+                        </span>
+                      ) : order.payment_status === 'CANCELLED' ? (
+                        <span className="text-[10px] uppercase font-medium px-2 py-0.5 bg-slate-100 text-slate-600 border border-slate-300 rounded-full">
+                          VOIDED
+                        </span>
+                      ) : isCod ? (
                         <span className="text-[10px] uppercase font-bold px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-300 rounded-full">
                           COD (₱{(Number(order.total_amount) || 0).toLocaleString()})
                         </span>
@@ -1477,6 +1558,17 @@ const AdminOrdersTab = ({
                       {order.customer_phone ? ` (${order.customer_phone})` : ''}
                       {order.customer_email ? ` • ${order.customer_email}` : ''}
                     </p>
+
+                    {/* Cancellation Reason Callout if Cancelled */}
+                    {(order.status || '').toUpperCase() === 'CANCELLED' && (order.cancellation_reason || (order.admin_notes || '').includes('[Customer Cancelled]')) && (
+                      <div className="mt-1 flex items-center gap-1.5 text-xs text-rose-800 bg-rose-50 border border-rose-200/90 rounded-lg px-2.5 py-1">
+                        <Ban className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                        <span>
+                          <strong>Cancellation Reason:</strong>{' '}
+                          {order.cancellation_reason || 'Client requested cancellation while awaiting shipment.'}
+                        </span>
+                      </div>
+                    )}
 
                     {/* Last touched by indicator */}
                     {order.last_touched_by && (
@@ -1808,6 +1900,38 @@ const AdminOrdersTab = ({
                     )}
                   </div>
                 </div>
+
+                {/* Refund Required Alert Strip on Order Card */}
+                {order.payment_status === 'REFUND_PENDING' && (
+                  <div className="mt-3 p-3 bg-amber-50 border border-amber-300 rounded-xl flex flex-wrap items-center justify-between gap-2.5 text-xs">
+                    <div className="flex items-center gap-2 text-amber-950 font-medium">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 animate-pulse" />
+                      <span>
+                        Action Required: Refund <strong>₱{(Number(order.total_amount) || 0).toLocaleString()}</strong> to customer ({order.payment_method || 'Online'} via Xendit / GCash)
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <a
+                        href="https://dashboard.xendit.co/invoices"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-2.5 py-1.5 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded-lg text-[11px] font-semibold flex items-center gap-1 shadow-2xs"
+                      >
+                        <span>Xendit Dashboard</span>
+                        <ExternalLink className="w-3 h-3 text-slate-500" />
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => handleMarkAsRefunded(order)}
+                        disabled={isRefundingOrderId === order.id}
+                        className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 shadow-2xs disabled:opacity-50 cursor-pointer"
+                      >
+                        <Check className="w-3 h-3" />
+                        <span>{isRefundingOrderId === order.id ? 'Saving...' : 'Mark as Refunded'}</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -1868,6 +1992,10 @@ const AdminOrdersTab = ({
                       className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${
                         selectedOrder.payment_status === 'PAID'
                           ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : selectedOrder.payment_status === 'REFUND_PENDING'
+                          ? 'bg-amber-500 text-white border-amber-600 font-extrabold animate-pulse'
+                          : selectedOrder.payment_status === 'REFUNDED'
+                          ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
                           : 'bg-amber-50 text-amber-700 border-amber-200'
                       }`}
                     >
@@ -1880,6 +2008,97 @@ const AdminOrdersTab = ({
                   <p className="font-semibold text-slate-800">Method: {selectedOrder.payment_method || 'GCASH'}</p>
                 </div>
               </div>
+
+              {/* Dedicated Cancellation Summary Banner in Modal */}
+              {(selectedOrder.status || '').toUpperCase() === 'CANCELLED' && (
+                <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Ban className="w-4 h-4 text-rose-600" />
+                      <span className="font-bold text-rose-950 uppercase tracking-wide">
+                        Order Cancelled {selectedOrder.cancelled_by === 'CUSTOMER' ? 'by Customer' : 'by Admin'}
+                      </span>
+                    </div>
+                    {selectedOrder.cancelled_at && (
+                      <span className="text-[11px] text-rose-600">
+                        {formatDate(selectedOrder.cancelled_at)}
+                      </span>
+                    )}
+                  </div>
+                  {selectedOrder.cancellation_reason && (
+                    <p className="text-rose-800">
+                      <strong>Reason:</strong> {selectedOrder.cancellation_reason}
+                    </p>
+                  )}
+                  <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-rose-700">
+                    <span className="px-2 py-0.5 bg-white rounded border border-rose-200">
+                      ✓ Reserved stock released to inventory
+                    </span>
+                    {selectedOrder.courier_cancelled && (
+                      <span className="px-2 py-0.5 bg-white rounded border border-rose-200">
+                        ✓ J&T Express pickup booking voided
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Action Required: Payment Refund Banner in Modal */}
+              {(selectedOrder.payment_status === 'REFUND_PENDING' || (selectedOrder.payment_status === 'PAID' && (selectedOrder.status || '').toUpperCase() === 'CANCELLED')) && (
+                <div className="p-4 bg-amber-50 border-2 border-amber-400 rounded-xl text-xs space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-5 h-5 text-amber-600 animate-pulse" />
+                      <div>
+                        <h4 className="font-bold text-amber-950 text-sm">Action Required: Customer Payment Refund</h4>
+                        <p className="text-amber-800 text-[11px]">The customer cancelled this order while awaiting shipment. The collected amount must be returned to the buyer.</p>
+                      </div>
+                    </div>
+                    <span className="text-sm font-extrabold text-amber-950 bg-amber-200 px-2.5 py-1 rounded-lg">
+                      ₱{(Number(selectedOrder.total_amount) || 0).toLocaleString()}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-white/90 p-3 rounded-lg border border-amber-200 text-[11px]">
+                    <div>
+                      <span className="text-slate-500 block">Payment Method</span>
+                      <strong className="text-slate-900">{selectedOrder.payment_method || 'Online (Xendit)'}</strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block">Customer Phone / GCash</span>
+                      <strong className="text-slate-900">{selectedOrder.customer_phone || 'None provided'}</strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block">Invoice / Reference</span>
+                      <strong className="text-slate-900 truncate block" title={selectedOrder.xendit_invoice_id || selectedOrder.payment_id || selectedOrder.order_reference}>
+                        {selectedOrder.xendit_invoice_id || selectedOrder.payment_id || selectedOrder.order_reference}
+                      </strong>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                    <a
+                      href="https://dashboard.xendit.co/invoices"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 font-bold rounded-lg text-xs flex items-center gap-1.5 shadow-2xs"
+                    >
+                      <span>Open Xendit Dashboard</span>
+                      <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
+                    </a>
+
+                    <button
+                      type="button"
+                      onClick={() => handleMarkAsRefunded(selectedOrder)}
+                      disabled={isRefundingOrderId === selectedOrder.id}
+                      className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>{isRefundingOrderId === selectedOrder.id ? 'Updating Aura...' : 'Mark as Refunded in Aura'}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Shipmates Logistics & Dispatch Panel */}
               <div className="p-4 bg-blue-50/50 border border-blue-200/60 rounded-xl text-xs space-y-3">

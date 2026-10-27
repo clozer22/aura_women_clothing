@@ -16,7 +16,11 @@ import {
   ChevronRight,
   AlertCircle,
   ThumbsUp,
-  Tag
+  Tag,
+  XCircle,
+  X,
+  Ban,
+  RotateCcw
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
@@ -54,6 +58,57 @@ export default function OrderDetailPage({
 
   // Review draft state: { [productId]: { rating, comment, fit, hoverRating, isSubmitting, isEditing, error, success } }
   const [reviewForms, setReviewForms] = useState({});
+
+  // Customer Cancellation Modal states
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('Changed my mind');
+  const [cancelNotes, setCancelNotes] = useState('');
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState(null);
+  const [cancelSuccess, setCancelSuccess] = useState(false);
+
+  const isCancellable = ['PENDING', 'TO_SHIP', 'PROCESSING', 'UNPAID', 'AWAITING_SHIPMENT'].includes((order?.status || '').toUpperCase());
+
+  const handleCustomerCancelOrder = async () => {
+    setIsCancelling(true);
+    setCancelError(null);
+    try {
+      const fullReason = cancelNotes.trim() ? `${cancelReason} (${cancelNotes.trim()})` : cancelReason;
+      const res = await fetch('/api/cancel-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderReference: order.order_reference,
+          reason: fullReason,
+          customerEmail: user?.email || order.customer_email,
+          userId: user?.id || order.user_id,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to cancel order');
+      }
+
+      setCancelSuccess(true);
+      setOrder((prev) => ({
+        ...prev,
+        status: 'CANCELLED',
+        cancellation_reason: fullReason,
+        cancelled_by: 'CUSTOMER',
+        payment_status: data.paymentStatus || (prev.payment_status === 'PAID' ? 'REFUND_PENDING' : 'CANCELLED'),
+      }));
+
+      setTimeout(() => {
+        setCancelModalOpen(false);
+        setCancelSuccess(false);
+      }, 2000);
+    } catch (err) {
+      setCancelError(err.message || 'Unable to cancel order. Please contact support.');
+    } finally {
+      setIsCancelling(false);
+    }
+  };
 
   // 1. Fetch Order by Reference if not preloaded
   useEffect(() => {
@@ -396,12 +451,61 @@ export default function OrderDetailPage({
               <span className={`inline-flex items-center gap-1 px-3 py-1.5 border text-xs font-semibold uppercase tracking-wider ${
                 order.payment_status === 'PAID'
                   ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                  : order.payment_status === 'REFUND_PENDING'
+                  ? 'bg-amber-50 text-amber-800 border-amber-300 font-bold'
+                  : order.payment_status === 'CANCELLED'
+                  ? 'bg-neutral-100 text-neutral-600 border-neutral-300'
                   : 'bg-amber-50 text-amber-800 border-amber-200'
               }`}>
-                {order.payment_status === 'PAID' ? 'Paid' : 'Payment Pending'}
+                {order.payment_status === 'PAID'
+                  ? 'Paid'
+                  : order.payment_status === 'REFUND_PENDING'
+                  ? 'Refund Pending'
+                  : order.payment_status === 'CANCELLED'
+                  ? 'Voided'
+                  : 'Payment Pending'}
               </span>
             </div>
           </div>
+
+          {/* Cancellation Notice Banner (If Cancelled) */}
+          {(order.status || '').toUpperCase() === 'CANCELLED' && (
+            <div className="mt-6 p-4 sm:p-5 bg-rose-50/70 border border-rose-200 text-rose-950 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <XCircle className="w-5 h-5 text-rose-600 flex-shrink-0" />
+                  <span className="font-bold text-xs uppercase tracking-wider">
+                    Order Cancelled {order.cancelled_by === 'CUSTOMER' ? '(Requested by Client)' : ''}
+                  </span>
+                </div>
+                {order.cancelled_at && (
+                  <span className="text-[11px] font-mono text-rose-700">
+                    {formatDate(order.cancelled_at)}
+                  </span>
+                )}
+              </div>
+              {order.cancellation_reason && (
+                <p className="text-xs text-rose-800">
+                  Reason: <span className="font-semibold">{order.cancellation_reason}</span>
+                </p>
+              )}
+              {order.payment_status === 'REFUND_PENDING' ? (
+                <div className="mt-2.5 p-3 bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-1">
+                  <div className="flex items-center gap-1.5 font-bold">
+                    <RotateCcw className="w-3.5 h-3.5 text-amber-700" />
+                    <span>Refund Processing Notice</span>
+                  </div>
+                  <p className="leading-relaxed">
+                    Your online payment of <strong>₱{(Number(order.total_amount) || 0).toLocaleString()}</strong> is being refunded to your original payment method via Xendit / GCash. Please allow 1–3 business days for e-wallets or 5–10 banking days for credit cards.
+                  </p>
+                </div>
+              ) : (String(order.payment_method || '').toUpperCase() === 'COD') ? (
+                <p className="text-xs text-rose-700">
+                  Payment Method: <strong>Cash on Delivery (COD)</strong> — No payment was charged.
+                </p>
+              ) : null}
+            </div>
+          )}
 
           {/* Fulfillment & Courier Card */}
           <div className="mt-6 p-4 sm:p-5 bg-[#FAF5F2] border border-[#E8DCD7] flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -428,14 +532,16 @@ export default function OrderDetailPage({
                   </div>
                 ) : (
                   <p className="text-[11px] text-[#705B56] mt-0.5">
-                    Awaiting dispatch pickup at the Aura Atelier
+                    {(order.status || '').toUpperCase() === 'CANCELLED'
+                      ? 'Shipment cancelled'
+                      : 'Awaiting dispatch pickup at the Aura Atelier'}
                   </p>
                 )}
               </div>
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
-              {trackingNumber && (
+              {trackingNumber && (order.status || '').toUpperCase() !== 'CANCELLED' && (
                 <button
                   type="button"
                   onClick={() => setTrackingModalOpen(true)}
@@ -446,7 +552,7 @@ export default function OrderDetailPage({
                 </button>
               )}
 
-              {order.waybill_url && (
+              {order.waybill_url && (order.status || '').toUpperCase() !== 'CANCELLED' && (
                 <a
                   href={order.waybill_url}
                   target="_blank"
@@ -457,15 +563,28 @@ export default function OrderDetailPage({
                   <span>Official Waybill</span>
                 </a>
               )}
+
+              {/* Cancel Order Action (Available while awaiting shipment) */}
+              {isCancellable && (order.status || '').toUpperCase() !== 'CANCELLED' && (
+                <button
+                  type="button"
+                  onClick={() => setCancelModalOpen(true)}
+                  className="px-4 py-2.5 bg-white hover:bg-rose-50 text-rose-700 border border-rose-300 text-xs font-bold uppercase tracking-wider transition-colors inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                  <span>Cancel Order</span>
+                </button>
+              )}
             </div>
           </div>
 
-          {/* Stepper Delivery Visualization */}
-          <div className="mt-8 pt-6 border-t border-[#E8DCD7]">
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#705B56] mb-4">
-              Fulfillment Journey
-            </p>
-            <div className="grid grid-cols-4 gap-2 text-center text-xs">
+          {/* Stepper Delivery Visualization (Only if not cancelled) */}
+          {(order.status || '').toUpperCase() !== 'CANCELLED' && (
+            <div className="mt-8 pt-6 border-t border-[#E8DCD7]">
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#705B56] mb-4">
+                Fulfillment Journey
+              </p>
+              <div className="grid grid-cols-4 gap-2 text-center text-xs">
               <div className="flex flex-col items-center">
                 <div className="w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs mb-1.5 shadow-xs">
                   ✓
@@ -504,6 +623,7 @@ export default function OrderDetailPage({
               </div>
             </div>
           </div>
+          )}
         </div>
 
         {/* 2-Column: Recipient Details & Financial Breakdown */}
@@ -815,6 +935,153 @@ export default function OrderDetailPage({
           onClose={() => setTrackingModalOpen(false)}
         />
       )}
+
+      {/* Customer Cancel Order Confirmation Modal */}
+      <AnimatePresence>
+        {cancelModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() => !isCancelling && setCancelModalOpen(false)}
+            />
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="relative z-10 bg-white max-w-md w-full border border-[#E8DCD7] shadow-2xl p-6 sm:p-7 space-y-5 rounded-none"
+            >
+              {/* Modal Header */}
+              <div className="flex items-start justify-between pb-3 border-b border-[#E8DCD7]">
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-rose-600 block">
+                    Order Cancellation
+                  </span>
+                  <h3 className="font-brand text-xl font-bold text-[#2C1E1B]">
+                    Cancel This Order?
+                  </h3>
+                  <p className="text-xs text-[#705B56] mt-0.5">
+                    Order Ref: <span className="font-mono font-semibold text-[#2C1E1B]">{order.order_reference}</span>
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={isCancelling}
+                  onClick={() => setCancelModalOpen(false)}
+                  className="p-1.5 text-[#705B56] hover:text-[#2C1E1B] border border-[#E8DCD7] cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {cancelSuccess ? (
+                <div className="p-6 bg-emerald-50 border border-emerald-200 text-center space-y-2">
+                  <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto" />
+                  <p className="font-brand font-bold text-sm text-emerald-900">Order Successfully Cancelled</p>
+                  <p className="text-xs text-emerald-700">Your order status has been updated.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Payment / Refund Explanation Box */}
+                  <div className="p-3.5 bg-[#FAF5F2] border border-[#E8DCD7] text-xs text-[#2C1E1B] space-y-1.5">
+                    <div className="flex items-center gap-1.5 font-bold text-xs">
+                      <AlertCircle className="w-4 h-4 text-[#B86B60]" />
+                      <span>
+                        {order.payment_status === 'PAID'
+                          ? 'Online Payment Refund Notice'
+                          : 'Cash on Delivery Notice'}
+                      </span>
+                    </div>
+                    {order.payment_status === 'PAID' ? (
+                      <p className="text-xs text-[#705B56] leading-relaxed">
+                        Since this order was paid online ({order.payment_method || 'Online'}), our team will initiate a refund of <strong className="text-[#2C1E1B]">₱{(Number(order.total_amount) || 0).toLocaleString()}</strong> back to your original payment method via Xendit / GCash.
+                      </p>
+                    ) : (
+                      <p className="text-xs text-[#705B56] leading-relaxed">
+                        Since this is a Cash on Delivery order, no payment was collected and your balance remains <strong>₱0</strong>.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Reason Selection */}
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] uppercase tracking-wider font-bold text-[#705B56] block">
+                      Reason for cancellation *
+                    </label>
+                    <select
+                      value={cancelReason}
+                      onChange={(e) => setCancelReason(e.target.value)}
+                      className="w-full p-2.5 bg-white border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B] rounded-none cursor-pointer"
+                    >
+                      <option value="Changed my mind">Changed my mind</option>
+                      <option value="Need to change size or color">Need to change size or color</option>
+                      <option value="Need to modify shipping address">Need to modify shipping address</option>
+                      <option value="Ordered by mistake">Ordered by mistake</option>
+                      <option value="Delivery time is too long">Delivery time is too long</option>
+                      <option value="Found alternative product">Found alternative product</option>
+                      <option value="Other reason">Other reason</option>
+                    </select>
+                  </div>
+
+                  {/* Additional notes */}
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] uppercase tracking-wider font-bold text-[#705B56] block">
+                      Additional notes (optional)
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={cancelNotes}
+                      onChange={(e) => setCancelNotes(e.target.value)}
+                      placeholder="Briefly tell us why you are cancelling..."
+                      className="w-full p-2.5 bg-white border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B] rounded-none resize-none placeholder:text-slate-400"
+                    />
+                  </div>
+
+                  {/* Error feedback */}
+                  {cancelError && (
+                    <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold">
+                      {cancelError}
+                    </div>
+                  )}
+
+                  {/* Action Buttons */}
+                  <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[#E8DCD7]">
+                    <button
+                      type="button"
+                      disabled={isCancelling}
+                      onClick={() => setCancelModalOpen(false)}
+                      className="px-4 py-2.5 border border-[#E8DCD7] hover:bg-[#FAF5F2] text-[#705B56] text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer"
+                    >
+                      Keep Order
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isCancelling}
+                      onClick={handleCustomerCancelOrder}
+                      className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-xs"
+                    >
+                      {isCancelling ? (
+                        <>
+                          <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          <span>Cancelling...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Ban className="w-3.5 h-3.5" />
+                          <span>Confirm Cancellation</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
