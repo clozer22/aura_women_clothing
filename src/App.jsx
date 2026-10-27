@@ -492,6 +492,17 @@ function MainApp() {
     ]);
   };
 
+  // Report subsequent route / view changes to Meta Pixel (initial landing PageView is fired by index.html)
+  const isFirstViewRender = React.useRef(true);
+  useEffect(() => {
+    if (isFirstViewRender.current) {
+      isFirstViewRender.current = false;
+      return;
+    }
+    trackPageView(currentView);
+  }, [currentView]);
+  };
+
   // Resolve active products list from database (filter out ARCHIVE)
   const allProducts = dbProducts;
   const activeProducts = allProducts.filter((p) => p.statusBadge !== 'ARCHIVE');

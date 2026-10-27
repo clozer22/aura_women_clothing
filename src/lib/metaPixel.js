@@ -1,7 +1,7 @@
 /**
  * Meta Pixel (Facebook & Instagram Ads) Tracking Utility
  * Safely wraps window.fbq to report high-value e-commerce conversions,
- * page views, and user interactions back to Meta Events Manager.
+ * purchases, add to bag, page views, and user interactions back to Meta Events Manager.
  */
 
 export const META_PIXEL_ID =
@@ -37,6 +37,17 @@ export function trackPageView(pageName) {
 }
 
 /**
+ * Normalizes price strings or numbers (e.g. '₱1,200', '1200', 1200) into a valid float
+ */
+function parseNumericPrice(val) {
+  if (typeof val === 'number' && !isNaN(val)) return val;
+  if (!val) return 0;
+  const cleaned = String(val).replace(/[^0-9.]/g, '');
+  const parsed = parseFloat(cleaned);
+  return isNaN(parsed) ? 0 : parsed;
+}
+
+/**
  * Fires 'ViewContent' when a client inspects a garment / product modal
  * @param {Object} product - { id, name, price, category }
  */
@@ -47,7 +58,7 @@ export function trackViewContent(product) {
     content_ids: [String(product.id || '')],
     content_type: 'product',
     content_category: product.category || 'Apparel',
-    value: Number(product.price) || 0,
+    value: parseNumericPrice(product.price),
     currency: 'PHP',
   });
 }
@@ -58,7 +69,7 @@ export function trackViewContent(product) {
  */
 export function trackAddToCart(item) {
   if (!item) return;
-  const unitPrice = Number(item.price) || 0;
+  const unitPrice = parseNumericPrice(item.price);
   const qty = Number(item.quantity) || 1;
 
   fbqSafe('track', 'AddToCart', {
@@ -75,25 +86,36 @@ export function trackAddToCart(item) {
 
 /**
  * Fires 'InitiateCheckout' when customer enters checkout
- * @param {Array} items - List of items in checkout
- * @param {number} totalAmount - Total payable amount
+ * @param {Array|Object} items - Product or list of products
+ * @param {number|string} totalAmount - Total payable amount
  */
 export function trackInitiateCheckout(items = [], totalAmount = 0) {
-  const contentIds = items.map((i) => String(i.id || i.productId || ''));
-  const contents = items.map((i) => ({
+  const itemList = Array.isArray(items) ? items : [items];
+  const contentIds = itemList.map((i) => String(i.id || i.productId || ''));
+  const contents = itemList.map((i) => ({
     id: String(i.id || i.productId || ''),
     quantity: Number(i.quantity) || 1,
-    item_price: Number(i.price) || 0,
+    item_price: parseNumericPrice(i.price),
   }));
 
-  fbqSafe('track', 'InitiateCheckout', {
+  const parsedTotal =
+    parseNumericPrice(totalAmount) ||
+    contents.reduce((sum, item) => sum + item.item_price * item.quantity, 0);
+
+  const payload = {
     content_ids: contentIds,
     contents,
     content_type: 'product',
-    num_items: items.reduce((sum, i) => sum + (Number(i.quantity) || 1), 0),
-    value: Number(totalAmount) || 0,
+    num_items: itemList.reduce((sum, i) => sum + (Number(i.quantity) || 1), 0),
+    value: parsedTotal,
     currency: 'PHP',
-  });
+  };
+
+  if (itemList.length === 1 && itemList[0]?.name) {
+    payload.content_name = itemList[0].name;
+  }
+
+  fbqSafe('track', 'InitiateCheckout', payload);
 }
 
 /**
@@ -109,7 +131,7 @@ export function trackPurchase(order) {
     content_name: `Aura Order ${order.order_reference || ''}`,
     content_ids: contentIds,
     content_type: 'product',
-    value: Number(order.total_amount || order.totalAmount) || 0,
+    value: parseNumericPrice(order.total_amount || order.totalAmount),
     currency: 'PHP',
     num_items: orderItems.reduce((sum, i) => sum + (Number(i.quantity) || 1), 0) || 1,
     order_id: order.order_reference || String(order.id || ''),
@@ -119,7 +141,7 @@ export function trackPurchase(order) {
 
 /**
  * Fires 'Lead' when client submits contact inquiry or registers
- * @param {string} source - Source form (e.g. 'Contact Form', 'VIP Customer Registration')
+ * @param {string} source - Source form (e.g. 'Contact Form Inquiry', 'VIP Registration')
  * @param {Object} [details] - Optional extra metadata
  */
 export function trackLead(source = 'Website Inquiry', details = {}) {

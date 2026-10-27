@@ -10,6 +10,7 @@ const isVideoUrl = (url) => url && (url.startsWith('data:video/') || url.match(/
 export default function QuickViewModal({ product, onClose, onBuyNow, onOpenWishlist }) {
   if (!product) return null;
 
+  // Track product view in Meta Pixel
   useEffect(() => {
     if (product) {
       trackViewContent(product);

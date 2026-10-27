@@ -28,15 +28,12 @@ yarn-error.log*
 *.sln
 *.sw?
 
-# AI Agents config (contains secrets)
-.agents/mcp_config.json
-
-# Supabase temp artifacts
-supabase/.temp/
-
-# Generated manuals and PDF documents
+# Scratch and temporary artifacts
+scratch/
 *.pdf
 
-# Agent skills
-.agents/skills/ecommerce-security-and-logistics/
-.agents/skills/parallax-animation/
+# AI Agents secrets & workspace-specific config
+.agents/mcp_config.json
+
+# Supabase temp & local files
+supabase/.temp/

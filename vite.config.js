@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
+import pkg from './package.json'
 
 // Polyfill WebSocket in Node.js < 22 for Supabase JS client in local API middleware
 if (typeof globalThis.WebSocket === 'undefined') {
@@ -99,6 +100,9 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react(), localApiPlugin()],
+    define: {
+      __APP_VERSION__: JSON.stringify(pkg.version),
+    },
     server: {
       port: 3000,
       open: true,

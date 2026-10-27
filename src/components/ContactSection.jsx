@@ -30,6 +30,10 @@ export default function ContactSection() {
       setIsSending(true);
       setTimeout(() => {
         setIsSending(false);
+        trackLead('Contact Form Inquiry', {
+          contact_name: formData.name,
+          contact_email: formData.email,
+        });
         setSubmitted(true);
         setFormData({ name: '', email: '', message: '' });
         setTimeout(() => {
@@ -62,9 +66,13 @@ export default function ContactSection() {
       const result = await response.json();
       if (result.success) {
         try {
-          trackLead('Contact Form Inquiry', { email: formData.email, name: formData.name });
+          trackLead('Contact Form Inquiry', {
+            contact_name: formData.name,
+            contact_email: formData.email,
+            name: formData.name,
+            email: formData.email,
+          });
         } catch (e) {}
-
         setSubmitted(true);
         setFormData({ name: '', email: '', message: '' });
         setTimeout(() => {

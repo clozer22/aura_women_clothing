@@ -14,8 +14,8 @@ This document details how to configure your Supabase project, initialize the dat
 In the root directory of this project, you will find a file named `.env`. It is already populated with your unique project credentials:
 
 ```env
-VITE_SUPABASE_URL=https://<your-project-ref>.supabase.co
-VITE_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY_HERE
+VITE_SUPABASE_URL=https://pcmlleeuxbymomjxhwlv.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBjbWxsZWV1eGJ5bW9tanhod2x2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgzNzA2NzgsImV4cCI6MjEwMzk0NjY3OH0.WZCqgnt_7l88U-Yl_rAvhmXQLSKy70hT1Wjq8rf_qC0
 ```
 
 These parameters will load automatically into Vite during your development and build tasks.
@@ -23,7 +23,7 @@ These parameters will load automatically into Vite during your development and b
 ---
 
 ## Step 2: Initialize Database Tables (Schema & Seeds)
-To create the necessary tables (`products`, `storefront_config`, `admin_profiles`) and seed them with default garments:
+To create the necessary tables (`products`, `storefront_config`, `admin_profiles`, `user_profiles`, `orders`, `wishlists`) and seed them with default garments:
 
 1. Log in to your [Supabase Console](https://supabase.com/dashboard).
 2. Open your project **`pcmlleeuxbymomjxhwlv`**.

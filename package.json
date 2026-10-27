@@ -1,12 +1,16 @@
 {
   "name": "aura-womens-clothing",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.3.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "version:patch": "npm version patch",
+    "version:minor": "npm version minor",
+    "version:major": "npm version major",
+    "push:staging": "npm version patch && git push origin staging --follow-tags"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.8",
