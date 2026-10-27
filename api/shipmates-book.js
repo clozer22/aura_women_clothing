@@ -1,5 +1,5 @@
-import { getSupabaseServerClient } from './lib/supabaseServer.js';
-import { bookShipmentWithShipmates } from './lib/shipmates.js';
+import { getSupabaseServerClient } from './_lib/supabaseServer.js';
+import { bookShipmentWithShipmates } from './_lib/shipmates.js';
 
 export default async function handler(req, res) {
   // CORS Headers

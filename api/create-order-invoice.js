@@ -1,7 +1,7 @@
-import { getSupabaseServerClient } from './lib/supabaseServer.js';
+import { getSupabaseServerClient } from './_lib/supabaseServer.js';
 import { PRODUCTS } from '../src/data/products.js';
 import { calculateShippingFee } from '../src/lib/shippingCalculator.js';
-import { ensureServerEnv } from './lib/envHelper.js';
+import { ensureServerEnv } from './_lib/envHelper.js';
 
 
 // Input sanitization against XSS and CSV/formula injection

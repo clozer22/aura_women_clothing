@@ -1,6 +1,6 @@
-import { getSupabaseServerClient } from './lib/supabaseServer.js';
-import { createJtOrder } from './lib/jtExpress.js';
-import { ensureServerEnv } from './lib/envHelper.js';
+import { getSupabaseServerClient } from './_lib/supabaseServer.js';
+import { createJtOrder } from './_lib/jtExpress.js';
+import { ensureServerEnv } from './_lib/envHelper.js';
 
 export default async function handler(req, res) {
   // CORS Preflight & Headers
