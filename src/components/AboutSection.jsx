@@ -1,15 +1,37 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
+import ShopTheLook from './ShopTheLook';
 
-export default function AboutSection({ config }) {
+export default function AboutSection({
+  config,
+  products = [],
+  onSelectProduct,
+  onNavigateFullCatalog,
+  devMode = false,
+}) {
   const safeConfig = config || {};
-  const mediaUrl = safeConfig.aboutMediaUrl || null;
+  const mediaUrl = safeConfig.aboutMediaUrl || 'https://pcmlleeuxbymomjxhwlv.supabase.co/storage/v1/object/public/storefront/about_media_1788531122753.png';
   const mediaType = safeConfig.aboutMediaType || 'image';
   const isVideoUrl = mediaUrl && (
     mediaType === 'video' ||
     mediaUrl.startsWith('data:video/') ||
     (typeof mediaUrl === 'string' && !!mediaUrl.match(/\.(mp4|webm|mov|ogg)($|\?)/i))
   );
+
+  // If the about media is an image, render the interactive ShopTheLook lookbook
+  if (!isVideoUrl) {
+    return (
+      <section id="about" className="w-full bg-white select-none">
+        <ShopTheLook
+          bannerImage={mediaUrl}
+          catalogProducts={products}
+          onSelectProduct={onSelectProduct}
+          onNavigateFullCatalog={onNavigateFullCatalog}
+          devMode={devMode}
+        />
+      </section>
+    );
+  }
 
   const [loaded, setLoaded] = useState(false);
   const mediaRef = useRef(null);

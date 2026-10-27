@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Package,
   Search,
@@ -30,10 +30,16 @@ import {
   ShieldCheck,
   ArrowRight,
   Ban,
-  AlertCircle
+  AlertCircle,
+  Bookmark,
+  MoreVertical
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../../lib/supabaseClient';
+import TrackingModal from '../TrackingModal';
+import AddNoteModal, { FLAG_OPTIONS } from './AddNoteModal';
+import A6ThermalPrintModal from './A6ThermalPrintModal';
+import BarcodeSvg from '../common/BarcodeSvg';
 
 const AdminOrdersTab = ({
   orders = [],
@@ -45,7 +51,53 @@ const AdminOrdersTab = ({
   initialFilterTab = 'ALL',
   currentAdmin = null,
 }) => {
-  const [activeTab, setActiveTab] = useState(initialFilterTab || 'ALL');
+  const getInitialActiveOrderTab = () => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const urlTab = params.get('orderTab');
+      if (urlTab) return urlTab;
+      const savedTab = sessionStorage.getItem('aura_admin_order_tab');
+      if (savedTab) return savedTab;
+    } catch {}
+    return initialFilterTab || 'ALL';
+  };
+
+  const getInitialToShipSubTab = () => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const urlSub = params.get('pipelineStage');
+      if (urlSub === 'AWAITING_SHIPMENT' || urlSub === 'AWAITING_COLLECTION') return urlSub;
+      const savedSub = sessionStorage.getItem('aura_admin_toship_subtab');
+      if (savedSub === 'AWAITING_SHIPMENT' || savedSub === 'AWAITING_COLLECTION') return savedSub;
+    } catch {}
+    return 'AWAITING_SHIPMENT';
+  };
+
+  const [activeTab, setActiveTab] = useState(getInitialActiveOrderTab);
+  const [toShipSubTab, setToShipSubTab] = useState(getInitialToShipSubTab);
+
+  // Sync orderTab and pipelineStage with URL query parameters and sessionStorage
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('aura_admin_order_tab', activeTab);
+      const url = new URL(window.location.href);
+      if (url.searchParams.get('orderTab') !== activeTab) {
+        url.searchParams.set('orderTab', activeTab);
+        window.history.replaceState({}, '', url.toString());
+      }
+    } catch (e) {}
+  }, [activeTab]);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('aura_admin_toship_subtab', toShipSubTab);
+      const url = new URL(window.location.href);
+      if (url.searchParams.get('pipelineStage') !== toShipSubTab) {
+        url.searchParams.set('pipelineStage', toShipSubTab);
+        window.history.replaceState({}, '', url.toString());
+      }
+    } catch (e) {}
+  }, [toShipSubTab]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(null);
@@ -57,6 +109,14 @@ const AdminOrdersTab = ({
   const [shipmentFeedback, setShipmentFeedback] = useState(null);
   const [showRawPayload, setShowRawPayload] = useState(false);
   const [selectedWaybillOrder, setSelectedWaybillOrder] = useState(null);
+  const [adminTrackingOrder, setAdminTrackingOrder] = useState(null);
+
+  // TikTok Seller Center Fulfillment: Action Dropdown, Note & Flag Modal, 2-Page A6 Print Modal
+  const [activeDropdownOrderId, setActiveDropdownOrderId] = useState(null);
+  const [isArrangingShipmentId, setIsArrangingShipmentId] = useState(null);
+  const [noteModalOrder, setNoteModalOrder] = useState(null);
+  const [isSavingNote, setIsSavingNote] = useState(false);
+  const [a6PrintOrder, setA6PrintOrder] = useState(null);
 
   // J&T Express Custom Dispatch Setup Modal state
   const [dispatchModalOrder, setDispatchModalOrder] = useState(null);
@@ -80,21 +140,103 @@ const AdminOrdersTab = ({
   // Single Order Accepting state
   const [isAcceptingOrderId, setIsAcceptingOrderId] = useState(null);
 
-  // TikTok Shop style pipeline filter categories
+  // Parse order note and color flag (supports JSON format and plain text fallback)
+  const parseOrderNote = (adminNotes) => {
+    if (!adminNotes) return { flag: 'none', note: '' };
+    if (typeof adminNotes === 'object') {
+      return { flag: adminNotes.flag || 'none', note: adminNotes.note || '' };
+    }
+    try {
+      const parsed = JSON.parse(adminNotes);
+      if (parsed && typeof parsed === 'object') {
+        return { flag: parsed.flag || 'none', note: parsed.note || '' };
+      }
+    } catch (e) {}
+    return { flag: 'none', note: String(adminNotes) };
+  };
+
+  // Determine TikTok Seller Center fulfillment stage
+  const getFulfillmentStage = (order) => {
+    const s = (order.status || 'PENDING').toUpperCase();
+    if (s === 'AWAITING_COLLECTION') return 'AWAITING_COLLECTION';
+    if (s === 'SHIPPED') return 'SHIPPED';
+    if (s === 'TO_DELIVER') return 'TO_DELIVER';
+    if (s === 'DELIVERED' || s === 'COMPLETED') return 'DELIVERED';
+    if (s === 'CANCELLED') return 'CANCELLED';
+    if (s === 'RETURNED' || s === 'REFUNDED') return 'RETURNED';
+    if (s === 'FAILED_TO_DELIVER') return 'FAILED_TO_DELIVER';
+
+    // In To Ship pipeline: if already arranged for collection
+    if (order.shipment_status === 'COLLECTION_ARRANGED' || order.arranged_for_collection === true) {
+      return 'AWAITING_COLLECTION';
+    }
+    return 'AWAITING_SHIPMENT';
+  };
+
+  // Helper to check if an order belongs in To Ship pipeline
+  const isToShipOrder = (order) => {
+    const orderStatus = (order.status || 'PENDING').toUpperCase();
+    const paymentStatus = (order.payment_status || 'PENDING').toUpperCase();
+    const isPaid = paymentStatus === 'PAID' || orderStatus === 'COMPLETED';
+    const isCod = (order.payment_method || '').toUpperCase() === 'COD';
+
+    return (
+      orderStatus === 'TO_SHIP' ||
+      orderStatus === 'PROCESSING' ||
+      orderStatus === 'AWAITING_SHIPMENT' ||
+      orderStatus === 'AWAITING_COLLECTION' ||
+      (orderStatus === 'PENDING' && (isPaid || isCod))
+    );
+  };
+
+  // Dynamic counts for Awaiting Shipment & Awaiting Collection
+  const { awaitingShipmentCount, awaitingCollectionCount, toShipTotalCount } = useMemo(() => {
+    let awaitingShipment = 0;
+    let awaitingCollection = 0;
+
+    orders.forEach((o) => {
+      if (isToShipOrder(o)) {
+        const stage = getFulfillmentStage(o);
+        if (stage === 'AWAITING_COLLECTION') {
+          awaitingCollection += 1;
+        } else {
+          awaitingShipment += 1;
+        }
+      }
+    });
+
+    return {
+      awaitingShipmentCount: awaitingShipment,
+      awaitingCollectionCount: awaitingCollection,
+      toShipTotalCount: awaitingShipment + awaitingCollection,
+    };
+  }, [orders]);
+
+  // TikTok Shop style pipeline filter categories matching user specification:
+  // All | To ship | Shipped | Completed | Pending | Canceled | Failed delivery
   const tabs = [
     { id: 'ALL', label: 'All', count: orders.length },
-    { id: 'TO_SHIP', label: 'To Ship', count: orderCounts.toShip || 0 },
+    { id: 'TO_SHIP', label: 'To ship', count: toShipTotalCount },
     { id: 'SHIPPED', label: 'Shipped', count: orderCounts.shipped || 0 },
-    { id: 'TO_DELIVER', label: 'To Deliver', count: orderCounts.toDeliver || 0 },
-    { id: 'DELIVERED', label: 'Delivered', count: orderCounts.delivered || 0 },
-    { id: 'CANCELLED', label: 'Cancelled', count: orderCounts.cancelled || 0 },
-    { id: 'RETURNED', label: 'Returned', count: orderCounts.returned || 0 },
-    { id: 'FAILED_TO_DELIVER', label: 'Failed Delivery', count: orderCounts.failedToDeliver || 0 },
+    { id: 'COMPLETED', label: 'Completed', count: orderCounts.delivered || 0 },
+    {
+      id: 'PENDING',
+      label: 'Pending',
+      count: orders.filter((o) => {
+        const s = (o.status || '').toUpperCase();
+        const p = (o.payment_status || '').toUpperCase();
+        const isCod = (o.payment_method || '').toUpperCase() === 'COD';
+        return s === 'PENDING' && p !== 'PAID' && !isCod;
+      }).length,
+    },
+    { id: 'CANCELLED', label: 'Canceled', count: orderCounts.cancelled || 0 },
+    { id: 'FAILED_TO_DELIVER', label: 'Failed delivery', count: orderCounts.failedToDeliver || 0 },
   ];
 
   const statusOptions = [
     { value: 'PENDING', label: 'Pending Payment / Acceptance' },
     { value: 'TO_SHIP', label: 'To Ship (Ready for Dispatch)' },
+    { value: 'AWAITING_COLLECTION', label: 'Awaiting Collection (Packed)' },
     { value: 'SHIPPED', label: 'Shipped (In Transit)' },
     { value: 'TO_DELIVER', label: 'To Deliver (With Courier)' },
     { value: 'DELIVERED', label: 'Delivered' },
@@ -103,29 +245,33 @@ const AdminOrdersTab = ({
     { value: 'FAILED_TO_DELIVER', label: 'Delivery Failed' },
   ];
 
-  // Filter orders by active pipeline tab and search
+  // Filter orders by active pipeline tab, sub-tab, and search
   const filteredOrders = useMemo(() => {
     return orders.filter((order) => {
       // 1. Tab filtering
       if (activeTab !== 'ALL') {
         const orderStatus = (order.status || 'PENDING').toUpperCase();
-        const paymentStatus = (order.payment_status || 'PENDING').toUpperCase();
-        const isPaid = paymentStatus === 'PAID' || orderStatus === 'COMPLETED';
-        const isCod = (order.payment_method || '').toUpperCase() === 'COD';
 
         if (activeTab === 'TO_SHIP') {
-          // Include orders ready to be shipped: already TO_SHIP or PROCESSING, OR accepted/paid PENDING
-          const isToShip =
-            orderStatus === 'TO_SHIP' ||
-            orderStatus === 'PROCESSING' ||
-            (orderStatus === 'PENDING' && (isPaid || isCod));
-          if (!isToShip) return false;
+          if (!isToShipOrder(order)) return false;
+
+          const stage = getFulfillmentStage(order);
+          if (toShipSubTab === 'AWAITING_SHIPMENT') {
+            if (stage !== 'AWAITING_SHIPMENT') return false;
+          } else if (toShipSubTab === 'AWAITING_COLLECTION') {
+            if (stage !== 'AWAITING_COLLECTION') return false;
+          }
         } else if (activeTab === 'SHIPPED') {
           if (orderStatus !== 'SHIPPED') return false;
         } else if (activeTab === 'TO_DELIVER') {
           if (orderStatus !== 'TO_DELIVER') return false;
-        } else if (activeTab === 'DELIVERED') {
+        } else if (activeTab === 'COMPLETED') {
           if (orderStatus !== 'DELIVERED' && orderStatus !== 'COMPLETED') return false;
+        } else if (activeTab === 'PENDING') {
+          const paymentStatus = (order.payment_status || 'PENDING').toUpperCase();
+          const isPaid = paymentStatus === 'PAID';
+          const isCod = (order.payment_method || '').toUpperCase() === 'COD';
+          if (orderStatus !== 'PENDING' || isPaid || isCod) return false;
         } else if (activeTab === 'CANCELLED') {
           if (orderStatus !== 'CANCELLED') return false;
         } else if (activeTab === 'RETURNED') {
@@ -148,7 +294,7 @@ const AdminOrdersTab = ({
 
       return true;
     });
-  }, [orders, activeTab, searchQuery]);
+  }, [orders, activeTab, toShipSubTab, searchQuery]);
 
   const formatTimeAgo = (dateStr) => {
     if (!dateStr) return '';
@@ -166,6 +312,175 @@ const AdminOrdersTab = ({
       return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     } catch {
       return '';
+    }
+  };
+
+  // TikTok Seller Center "Arrange Shipment" flow:
+  // - Moves status to AWAITING_COLLECTION
+  // - Generates J&T Express tracking number if unassigned
+  // - Opens A6 2-page print modal
+  const handleArrangeShipment = async (order, options = { printAfter: true }) => {
+    setIsArrangingShipmentId(order.id);
+    setActiveDropdownOrderId(null);
+    try {
+      let finalOrder = { ...order };
+
+      // 1. If tracking number not yet assigned, call J&T Express dispatch API
+      if (!order.tracking_number) {
+        try {
+          const res = await fetch(`/api/jt-dispatch?ref=${order.order_reference}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              orderReference: order.order_reference,
+              status: 'AWAITING_COLLECTION',
+            }),
+          });
+          const data = await res.json();
+          if (data && data.trackingNumber) {
+            finalOrder = {
+              ...finalOrder,
+              tracking_number: data.trackingNumber,
+              courier_name: data.courierName || 'J&T Express',
+              waybill_url: data.waybillUrl,
+              shipment_status: 'BOOKED',
+            };
+          }
+        } catch (dispatchErr) {
+          console.warn('[Arrange Shipment] J&T Dispatch API note:', dispatchErr.message);
+        }
+      }
+
+      // 2. Transition status to AWAITING_COLLECTION
+      const modifierInfo = {
+        name: currentAdmin?.name || currentAdmin?.email?.split('@')[0] || 'Administrator',
+        email: currentAdmin?.email || '',
+        role: currentAdmin?.role || 'Admin',
+        action: `Arranged shipment (Moved to Awaiting Collection)`,
+        timestamp: new Date().toISOString(),
+      };
+
+      if (onUpdateOrderStatus) {
+        await onUpdateOrderStatus(order.id, 'AWAITING_COLLECTION', modifierInfo, {
+          shipment_status: 'BOOKED',
+          tracking_number: finalOrder.tracking_number,
+          courier_name: finalOrder.courier_name || 'J&T Express',
+          waybill_url: finalOrder.waybill_url,
+        });
+      }
+
+      const readyOrder = {
+        ...finalOrder,
+        status: 'AWAITING_COLLECTION',
+        shipment_status: 'BOOKED',
+      };
+
+      setShipmentFeedback({
+        type: 'success',
+        orderRef: order.order_reference,
+        message: `Shipment arranged! Order moved to Awaiting Collection.`,
+        orderObj: readyOrder,
+      });
+
+      // 3. Automatically open 2-page A6 print modal
+      if (options.printAfter) {
+        setA6PrintOrder(readyOrder);
+      }
+
+      if (onRefresh) await onRefresh();
+    } catch (err) {
+      console.error('Arrange shipment error:', err);
+      alert(`Could not arrange shipment: ${err.message}`);
+    } finally {
+      setIsArrangingShipmentId(null);
+    }
+  };
+
+  // TikTok Seller Center "Add Note" flow:
+  // - Saves flag (Red = moved to collection but not packed yet, etc.) and note text
+  // - Triggers Arrange Shipment (transitions status to AWAITING_COLLECTION)
+  // - Opens A6 2-page print modal with Waybill and Order List
+  const handleSaveNoteAndArrange = async ({ flag, note }) => {
+    if (!noteModalOrder) return;
+    setIsSavingNote(true);
+    try {
+      const notePayload = JSON.stringify({
+        flag,
+        note: note.trim(),
+        updatedAt: new Date().toISOString(),
+      });
+
+      let finalOrder = {
+        ...noteModalOrder,
+        admin_notes: notePayload,
+      };
+
+      // Ensure J&T tracking number is present
+      if (!finalOrder.tracking_number) {
+        try {
+          const res = await fetch(`/api/jt-dispatch?ref=${noteModalOrder.order_reference}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              orderReference: noteModalOrder.order_reference,
+              status: 'AWAITING_COLLECTION',
+            }),
+          });
+          const data = await res.json();
+          if (data && data.trackingNumber) {
+            finalOrder.tracking_number = data.trackingNumber;
+            finalOrder.courier_name = data.courierName || 'J&T Express';
+            finalOrder.waybill_url = data.waybillUrl;
+            finalOrder.shipment_status = 'BOOKED';
+          }
+        } catch (e) {
+          console.warn('[Add Note] Dispatch note:', e.message);
+        }
+      }
+
+      const flagLabel = flag !== 'none' ? `${flag.toUpperCase()} flag` : 'No flag';
+      const modifierInfo = {
+        name: currentAdmin?.name || currentAdmin?.email?.split('@')[0] || 'Administrator',
+        email: currentAdmin?.email || '',
+        role: currentAdmin?.role || 'Admin',
+        action: `Added note (${flagLabel}): "${note.trim()}" & arranged shipment`,
+        timestamp: new Date().toISOString(),
+      };
+
+      // Update in Supabase: status to AWAITING_COLLECTION, note, and tracking
+      if (onUpdateOrderStatus) {
+        await onUpdateOrderStatus(noteModalOrder.id, 'AWAITING_COLLECTION', modifierInfo, {
+          admin_notes: notePayload,
+          shipment_status: 'BOOKED',
+          tracking_number: finalOrder.tracking_number,
+          courier_name: finalOrder.courier_name || 'J&T Express',
+          waybill_url: finalOrder.waybill_url,
+        });
+      }
+
+      const readyOrder = {
+        ...finalOrder,
+        status: 'AWAITING_COLLECTION',
+        admin_notes: notePayload,
+      };
+
+      setShipmentFeedback({
+        type: 'success',
+        orderRef: noteModalOrder.order_reference,
+        message: `Note saved with ${flagLabel}! Moved to Awaiting Collection.`,
+        orderObj: readyOrder,
+      });
+
+      setNoteModalOrder(null);
+      // Automatically open 2-page A6 print modal
+      setA6PrintOrder(readyOrder);
+
+      if (onRefresh) await onRefresh();
+    } catch (err) {
+      console.error('Save note error:', err);
+      alert(`Failed to save note: ${err.message}`);
+    } finally {
+      setIsSavingNote(false);
     }
   };
 
@@ -467,7 +782,8 @@ const AdminOrdersTab = ({
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token || '';
 
-      const res = await fetch('/api/shipmates-book', {
+      // Direct J&T Express Open API Booking
+      let res = await fetch('/api/jt-dispatch', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -475,13 +791,30 @@ const AdminOrdersTab = ({
         },
         body: JSON.stringify({
           orderReference: dispatchModalOrder.order_reference,
-          preferredCourier: dispatchForm.preferredCourier,
-          weightKg: parseFloat(dispatchForm.weightKg) || 0.35,
-          pouchSize: dispatchForm.pouchSize,
+          weightKg: parseFloat(dispatchForm.weightKg) || 0.5,
           notes: dispatchForm.notes,
-          forceRebook: true,
+          status: 'AWAITING_COLLECTION',
         }),
       });
+
+      // Fallback to Shipmates if direct J&T fails
+      if (!res.ok) {
+        res = await fetch('/api/shipmates-book', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            orderReference: dispatchModalOrder.order_reference,
+            preferredCourier: dispatchForm.preferredCourier,
+            weightKg: parseFloat(dispatchForm.weightKg) || 0.5,
+            pouchSize: dispatchForm.pouchSize,
+            notes: dispatchForm.notes,
+            forceRebook: true,
+          }),
+        });
+      }
 
       const text = await res.text();
       let data = {};
@@ -506,8 +839,13 @@ const AdminOrdersTab = ({
       if (onUpdateOrderTracking) {
         await onUpdateOrderTracking(dispatchModalOrder.id, data.trackingNumber, data.courierName, modifierInfo);
       }
-      if (onUpdateOrderStatus && (dispatchModalOrder.status === 'PENDING' || dispatchModalOrder.status === 'PROCESSING')) {
-        await onUpdateOrderStatus(dispatchModalOrder.id, 'TO_SHIP', modifierInfo);
+      if (onUpdateOrderStatus) {
+        await onUpdateOrderStatus(dispatchModalOrder.id, 'AWAITING_COLLECTION', modifierInfo, {
+          tracking_number: data.trackingNumber,
+          courier_name: data.courierName,
+          waybill_url: data.waybillUrl,
+          shipment_status: 'BOOKED',
+        });
       }
 
       const updatedOrderObj = {
@@ -516,7 +854,7 @@ const AdminOrdersTab = ({
         courier_name: data.courierName,
         waybill_url: data.waybillUrl,
         shipment_status: 'BOOKED',
-        status: 'TO_SHIP',
+        status: 'AWAITING_COLLECTION',
         last_touched_by: modifierInfo,
       };
 
@@ -639,6 +977,10 @@ const AdminOrdersTab = ({
         return 'bg-emerald-50 text-emerald-700 border-emerald-200';
       case 'SHIPPED':
         return 'bg-blue-50 text-blue-700 border-blue-200';
+      case 'AWAITING_COLLECTION':
+        return 'bg-teal-50 text-teal-700 border-teal-200';
+      case 'AWAITING_SHIPMENT':
+        return 'bg-amber-50 text-amber-700 border-amber-200';
       case 'TO_DELIVER':
         return 'bg-teal-50 text-teal-700 border-teal-200';
       case 'TO_SHIP':
@@ -841,6 +1183,67 @@ const AdminOrdersTab = ({
         })}
       </div>
 
+      {/* TikTok Seller Center Fulfillment Pipeline Sub-Tabs (Shown when 'TO_SHIP' is active) */}
+      {activeTab === 'TO_SHIP' && (
+        <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-50 border border-slate-200/80 rounded-2xl">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1.5 text-xs text-slate-500 font-semibold mr-1">
+              <Filter className="w-3.5 h-3.5 text-slate-400" />
+              <span>Pipeline Stage:</span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setToShipSubTab('AWAITING_SHIPMENT')}
+              className={`px-3.5 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-2 border ${
+                toShipSubTab === 'AWAITING_SHIPMENT'
+                  ? 'bg-teal-600 text-white border-teal-600 shadow-xs shadow-teal-600/20'
+                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+              }`}
+            >
+              <span>Awaiting shipment</span>
+              <span
+                className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
+                  toShipSubTab === 'AWAITING_SHIPMENT' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                {awaitingShipmentCount}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setToShipSubTab('AWAITING_COLLECTION')}
+              className={`px-3.5 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-2 border ${
+                toShipSubTab === 'AWAITING_COLLECTION'
+                  ? 'bg-teal-600 text-white border-teal-600 shadow-xs shadow-teal-600/20'
+                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+              }`}
+            >
+              <span>Awaiting collection</span>
+              <span
+                className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
+                  toShipSubTab === 'AWAITING_COLLECTION' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                {awaitingCollectionCount}
+              </span>
+            </button>
+
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-white border border-slate-200 text-slate-600 rounded-xl text-[11px] font-medium">
+              <Truck className="w-3 h-3 text-red-600" />
+              <span>Courier: <strong>J&T Express</strong></span>
+            </div>
+          </div>
+
+          <div className="text-[11px] font-medium text-slate-500">
+            {toShipSubTab === 'AWAITING_SHIPMENT'
+              ? 'Orders awaiting packing & arrangement'
+              : 'Orders packed & ready for courier collection'}
+          </div>
+        </div>
+      )}
+
       {/* Search & Counter Info */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 border border-slate-200/80 rounded-2xl shadow-xs">
         <div className="relative flex-grow max-w-md">
@@ -972,6 +1375,9 @@ const AdminOrdersTab = ({
             const isEditingThisTracking = editingTrackingId === order.id;
             const isBookingThis = bookingShipmateId === order.id;
             const hasTracking = Boolean(order.tracking_number);
+            const parsedNote = parseOrderNote(order.admin_notes);
+            const fulfillmentStage = getFulfillmentStage(order);
+            const isInToShip = isToShipOrder(order);
 
             return (
               <div
@@ -993,6 +1399,50 @@ const AdminOrdersTab = ({
                         {order.order_reference}
                       </span>
 
+                      {/* Flag Indicator Badge if set */}
+                      {parsedNote.flag !== 'none' && (() => {
+                        const flagMeta = FLAG_OPTIONS.find((f) => f.id === parsedNote.flag);
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => setNoteModalOrder(order)}
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-bold cursor-pointer transition-all ${
+                              flagMeta?.bgColor || 'bg-slate-100'
+                            } ${flagMeta?.borderColor || 'border-slate-300'} text-slate-800 hover:shadow-xs`}
+                            title={parsedNote.note ? `Note: "${parsedNote.note}" (Click to edit)` : 'Click to edit note'}
+                          >
+                            <Bookmark className={`w-3 h-3 ${flagMeta?.iconColor || 'text-slate-500'}`} />
+                            <span>{flagMeta?.label || 'Flag'}</span>
+                            {parsedNote.note && (
+                              <span className="font-normal truncate max-w-[140px] text-slate-600">
+                                "{parsedNote.note}"
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })()}
+
+                      {/* Fulfillment Stage / Status Badge */}
+                      {isInToShip ? (
+                        <span
+                          className={`text-[10px] uppercase font-black px-2.5 py-0.5 rounded-full border ${
+                            fulfillmentStage === 'AWAITING_COLLECTION'
+                              ? 'bg-teal-50 text-teal-800 border-teal-300'
+                              : 'bg-amber-50 text-amber-800 border-amber-300'
+                          }`}
+                        >
+                          {fulfillmentStage === 'AWAITING_COLLECTION' ? 'Awaiting collection' : 'Awaiting shipment'}
+                        </span>
+                      ) : (
+                        <span
+                          className={`text-[10px] uppercase font-bold px-2.5 py-0.5 rounded-full border ${getStatusBadgeClass(
+                            order.status
+                          )}`}
+                        >
+                          {order.status || 'PENDING'}
+                        </span>
+                      )}
+
                       {isCod ? (
                         <span className="text-[10px] uppercase font-bold px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-300 rounded-full">
                           COD (₱{(Number(order.total_amount) || 0).toLocaleString()})
@@ -1007,15 +1457,7 @@ const AdminOrdersTab = ({
                         </span>
                       )}
 
-                      <span
-                        className={`text-[10px] uppercase font-bold px-2.5 py-0.5 rounded-full border ${getStatusBadgeClass(
-                          order.status
-                        )}`}
-                      >
-                        {order.status || 'PENDING'}
-                      </span>
-
-                      {/* Shipmates Dispatch Status Tag */}
+                      {/* Courier Dispatch Status Tag */}
                       {hasTracking ? (
                         <span className="text-[10px] font-bold px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-full flex items-center gap-1">
                           <Truck className="w-3 h-3 text-blue-600" />
@@ -1064,45 +1506,154 @@ const AdminOrdersTab = ({
                       </span>
                     </div>
 
-                    {/* 1-Click Accept Order Action for PENDING orders */}
-                    {(order.status || '').toUpperCase() === 'PENDING' && (
-                      <button
-                        onClick={() => handleAcceptOrder(order)}
-                        disabled={isAcceptingOrderId === order.id}
-                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs shadow-emerald-600/20 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                        title="Accept order and move to fulfillment (To Ship)"
-                      >
-                        <CheckCircle2 className={`w-3.5 h-3.5 ${isAcceptingOrderId === order.id ? 'animate-spin' : ''}`} />
-                        <span>{isAcceptingOrderId === order.id ? 'Accepting...' : 'Accept Order'}</span>
-                      </button>
-                    )}
+                    {/* TikTok Seller Center Arrange Shipment / Print Documents Button */}
+                    {isInToShip ? (
+                      <div className="relative inline-flex items-center">
+                        {fulfillmentStage === 'AWAITING_SHIPMENT' ? (
+                          <div className="inline-flex rounded-xl shadow-xs overflow-visible">
+                            <button
+                              onClick={() => handleArrangeShipment(order, { printAfter: true })}
+                              disabled={isArrangingShipmentId === order.id}
+                              className="px-3.5 py-1.5 bg-teal-600 hover:bg-teal-700 active:bg-teal-800 text-white font-bold text-xs rounded-l-xl transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                              title="Arrange shipment and open 2-page A6 waybill & order list"
+                            >
+                              {isArrangingShipmentId === order.id ? (
+                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Package className="w-3.5 h-3.5" />
+                              )}
+                              <span>{isArrangingShipmentId === order.id ? 'Arranging...' : 'Arrange shipment'}</span>
+                            </button>
 
-                    {/* J&T Express Dispatch Setup Action */}
-                    {(isPaid || isCod || (order.status || '').toUpperCase() === 'TO_SHIP') && (
-                      <button
-                        onClick={() => openDispatchModal(order)}
-                        className={`px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all flex items-center gap-1.5 cursor-pointer ${
-                          hasTracking
-                            ? 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
-                            : 'bg-red-600 hover:bg-red-700 text-white border-red-600 shadow-xs shadow-red-600/20'
-                        }`}
-                        title={hasTracking ? 'Re-configure J&T dispatch specs' : 'Dispatch parcel to J&T Express with custom pouch & weight'}
-                      >
-                        <Truck className="w-3.5 h-3.5" />
-                        <span>{hasTracking ? 'Re-dispatch J&T' : 'Dispatch J&T'}</span>
-                      </button>
-                    )}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveDropdownOrderId((prev) => (prev === order.id ? null : order.id));
+                              }}
+                              className="px-2 py-1.5 bg-teal-700 hover:bg-teal-800 active:bg-teal-900 text-white rounded-r-xl border-l border-teal-500 transition-all cursor-pointer flex items-center justify-center"
+                              title="More options"
+                            >
+                              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${activeDropdownOrderId === order.id ? 'rotate-180' : ''}`} />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="inline-flex rounded-xl shadow-xs overflow-visible">
+                            <button
+                              onClick={() => setA6PrintOrder(order)}
+                              className="px-3.5 py-1.5 bg-teal-600 hover:bg-teal-700 active:bg-teal-800 text-white font-bold text-xs rounded-l-xl transition-all cursor-pointer flex items-center gap-1.5"
+                              title="Print 2-page A6 official waybill and packing list"
+                            >
+                              <Printer className="w-3.5 h-3.5" />
+                              <span>Print documents</span>
+                            </button>
 
-                    {/* Quick Print Waybill Button if already dispatched */}
-                    {hasTracking && (
-                      <button
-                        onClick={() => setSelectedWaybillOrder(order)}
-                        className="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
-                        title="Print Official J&T Thermal Waybill (100x150mm)"
-                      >
-                        <Printer className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">Print AWB</span>
-                      </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveDropdownOrderId((prev) => (prev === order.id ? null : order.id));
+                              }}
+                              className="px-2 py-1.5 bg-teal-700 hover:bg-teal-800 active:bg-teal-900 text-white rounded-r-xl border-l border-teal-500 transition-all cursor-pointer flex items-center justify-center"
+                              title="More options"
+                            >
+                              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${activeDropdownOrderId === order.id ? 'rotate-180' : ''}`} />
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Dropdown Menu */}
+                        <AnimatePresence>
+                          {activeDropdownOrderId === order.id && (
+                            <motion.div
+                              initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                              animate={{ opacity: 1, scale: 1, y: 0 }}
+                              exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                              className="absolute right-0 top-full mt-1.5 w-52 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-40 text-xs font-medium text-slate-700 divide-y divide-slate-100"
+                            >
+                              {fulfillmentStage === 'AWAITING_SHIPMENT' && (
+                                <div className="py-1">
+                                  <button
+                                    onClick={() => handleArrangeShipment(order, { printAfter: true })}
+                                    className="w-full text-left px-3.5 py-2 hover:bg-slate-50 flex items-center gap-2 text-teal-700 font-semibold cursor-pointer"
+                                  >
+                                    <Printer className="w-3.5 h-3.5 text-teal-600" />
+                                    <span>Arrange shipment + print</span>
+                                  </button>
+                                  <button
+                                    onClick={() => handleArrangeShipment(order, { printAfter: false })}
+                                    className="w-full text-left px-3.5 py-2 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
+                                  >
+                                    <Package className="w-3.5 h-3.5 text-slate-500" />
+                                    <span>Arrange shipment only</span>
+                                  </button>
+                                </div>
+                              )}
+
+                              <div className="py-1">
+                                <button
+                                  onClick={() => {
+                                    setActiveDropdownOrderId(null);
+                                    setA6PrintOrder(order);
+                                  }}
+                                  className="w-full text-left px-3.5 py-2 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
+                                >
+                                  <Printer className="w-3.5 h-3.5 text-slate-500" />
+                                  <span>Print documents (A6)</span>
+                                </button>
+
+                                <button
+                                  onClick={() => {
+                                    setActiveDropdownOrderId(null);
+                                    setNoteModalOrder(order);
+                                  }}
+                                  className="w-full text-left px-3.5 py-2 hover:bg-slate-50 flex items-center gap-2 cursor-pointer font-medium"
+                                >
+                                  <Bookmark className="w-3.5 h-3.5 text-amber-500" />
+                                  <span>{parsedNote.flag !== 'none' || parsedNote.note ? 'Edit note & flag' : 'Add note'}</span>
+                                </button>
+                              </div>
+
+                              <div className="py-1">
+                                {order.customer_phone && (
+                                  <a
+                                    href={`tel:${order.customer_phone}`}
+                                    className="w-full text-left px-3.5 py-2 hover:bg-slate-50 flex items-center gap-2 cursor-pointer block text-slate-700"
+                                  >
+                                    <UserCheck className="w-3.5 h-3.5 text-blue-500" />
+                                    <span>Contact customer</span>
+                                  </a>
+                                )}
+
+                                {(order.status || '').toUpperCase() !== 'CANCELLED' && (
+                                  <button
+                                    onClick={() => {
+                                      setActiveDropdownOrderId(null);
+                                      setCancellingOrder(order);
+                                    }}
+                                    className="w-full text-left px-3.5 py-2 hover:bg-rose-50 text-rose-600 flex items-center gap-2 cursor-pointer"
+                                  >
+                                    <Ban className="w-3.5 h-3.5 text-rose-500" />
+                                    <span>Cancel order</span>
+                                  </button>
+                                )}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    ) : (
+                      /* Actions for Shipped, Delivered, etc. */
+                      hasTracking && (
+                        <button
+                          onClick={() => setA6PrintOrder(order)}
+                          className="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                          title="Print 2-page A6 Waybill & Packing List"
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                          <span>Print AWB</span>
+                        </button>
+                      )
                     )}
 
                     <button
@@ -1114,7 +1665,7 @@ const AdminOrdersTab = ({
                     </button>
 
                     {/* Cancel Order Action */}
-                    {(order.status || '').toUpperCase() !== 'CANCELLED' && (order.status || '').toUpperCase() !== 'DELIVERED' && (
+                    {!isInToShip && (order.status || '').toUpperCase() !== 'CANCELLED' && (order.status || '').toUpperCase() !== 'DELIVERED' && (
                       <button
                         onClick={() => setCancellingOrder(order)}
                         className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
@@ -1405,10 +1956,22 @@ const AdminOrdersTab = ({
                       <button
                         type="button"
                         onClick={() => setSelectedWaybillOrder(selectedOrder)}
-                        className="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold rounded-lg text-xs flex items-center gap-1.5 cursor-pointer"
+                        className="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold rounded-lg text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
                       >
                         <Printer className="w-3.5 h-3.5" />
                         <span>Print Waybill (AWB)</span>
+                      </button>
+                    )}
+
+                    {selectedOrder.tracking_number && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminTrackingOrder(selectedOrder)}
+                        className="px-3 py-1.5 bg-[#DA291C] hover:bg-[#b01e14] text-white font-bold rounded-lg text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
+                        title="Live J&T Express Checkpoint Trajectory"
+                      >
+                        <Truck className="w-3.5 h-3.5" />
+                        <span>Track J&T Package</span>
                       </button>
                     )}
 
@@ -1927,10 +2490,14 @@ const AdminOrdersTab = ({
 
                       {/* Barcode & Tracking Code */}
                       <div className="py-2 text-center border-b-2 border-slate-900 space-y-1">
-                        <div className="flex items-center justify-center gap-0.5 h-12 py-1">
-                          {[3, 1, 2, 4, 1, 3, 2, 1, 4, 2, 1, 3, 2, 4, 1, 2, 3, 1, 4, 2, 1, 3, 1, 2, 4, 2, 1, 3, 2, 1, 4, 1, 3, 2, 4, 1, 2, 3, 2, 1, 4].map((w, i) => (
-                            <div key={i} className="bg-slate-900 h-full" style={{ width: `${w}px` }} />
-                          ))}
+                        <div className="flex items-center justify-center min-h-[46px] py-1">
+                          <BarcodeSvg
+                            value={ord.tracking_number || 'JT-UNASSIGNED'}
+                            format="CODE128"
+                            width={1.8}
+                            height={44}
+                            className="mx-auto"
+                          />
                         </div>
                         <div className="font-bold text-sm tracking-widest uppercase">
                           {ord.tracking_number || 'JT-UNASSIGNED'}
@@ -2186,11 +2753,14 @@ const AdminOrdersTab = ({
 
                   {/* Barcode & Tracking Code */}
                   <div className="py-2 text-center border-b-2 border-slate-900 space-y-1">
-                    {/* High-density Simulated Barcode */}
-                    <div className="flex items-center justify-center gap-0.5 h-12 py-1">
-                      {[3, 1, 2, 4, 1, 3, 2, 1, 4, 2, 1, 3, 2, 4, 1, 2, 3, 1, 4, 2, 1, 3, 1, 2, 4, 2, 1, 3, 2, 1, 4, 1, 3, 2, 4, 1, 2, 3, 2, 1, 4].map((w, i) => (
-                        <div key={i} className="bg-slate-900 h-full" style={{ width: `${w}px` }} />
-                      ))}
+                    <div className="flex items-center justify-center min-h-[46px] py-1">
+                      <BarcodeSvg
+                        value={selectedWaybillOrder.tracking_number || 'JT-UNASSIGNED'}
+                        format="CODE128"
+                        width={1.8}
+                        height={44}
+                        className="mx-auto"
+                      />
                     </div>
                     <div className="font-bold text-sm tracking-widest uppercase">
                       {selectedWaybillOrder.tracking_number || 'JT-UNASSIGNED'}
@@ -2273,6 +2843,31 @@ const AdminOrdersTab = ({
           </div>
         )}
       </AnimatePresence>
+
+      {/* TikTok Seller Center Add Note & Color Flags Modal */}
+      <AddNoteModal
+        isOpen={Boolean(noteModalOrder)}
+        onClose={() => setNoteModalOrder(null)}
+        order={noteModalOrder}
+        onSaveAndArrange={handleSaveNoteAndArrange}
+        isSubmitting={isSavingNote}
+      />
+
+      {/* TikTok Seller Center 2-Page A6 Thermal Waybill & Packing List Modal */}
+      <A6ThermalPrintModal
+        isOpen={Boolean(a6PrintOrder)}
+        onClose={() => setA6PrintOrder(null)}
+        order={a6PrintOrder}
+      />
+
+      {/* J&T Express Live Tracking Modal for Admin */}
+      <TrackingModal
+        isOpen={Boolean(adminTrackingOrder)}
+        onClose={() => setAdminTrackingOrder(null)}
+        trackingNumber={adminTrackingOrder?.tracking_number}
+        orderReference={adminTrackingOrder?.order_reference}
+        initialOrder={adminTrackingOrder}
+      />
     </div>
   );
 };

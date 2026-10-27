@@ -115,13 +115,14 @@ const AdminProductModal = memo(({
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               {/* Price */}
               <div className="space-y-1">
                 <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Price (₱)</label>
                 <input
                   type="number"
                   required
+                  min="1"
                   value={newProduct.price}
                   onChange={(e) => setNewProduct(prev => ({ ...prev, price: e.target.value }))}
                   className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B]"
@@ -130,42 +131,46 @@ const AdminProductModal = memo(({
 
               {/* Quantity */}
               <div className="space-y-1">
-                <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Quantity</label>
+                <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Stock Quantity</label>
                 <input
                   type="number"
                   required
+                  min="0"
                   value={newProduct.qty}
                   onChange={(e) => setNewProduct(prev => ({ ...prev, qty: e.target.value }))}
                   className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B]"
                 />
               </div>
-
-              {/* Solds */}
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Solds</label>
-                <input
-                  type="number"
-                  required
-                  value={newProduct.solds}
-                  onChange={(e) => setNewProduct(prev => ({ ...prev, solds: e.target.value }))}
-                  className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B]"
-                />
-              </div>
             </div>
 
-            {/* Ratings */}
-            <div className="space-y-1">
-              <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Rating (e.g. 4.9)</label>
-              <input
-                type="number"
-                step="0.1"
-                min="1"
-                max="5"
-                required
-                value={newProduct.rating}
-                onChange={(e) => setNewProduct(prev => ({ ...prev, rating: e.target.value }))}
-                className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B]"
-              />
+            {/* Dynamic Solds & Rating Info Display */}
+            <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-slate-600 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  Total Solds (Dynamic):
+                </span>
+                <span className="font-bold font-mono text-slate-800 bg-white px-2.5 py-0.5 rounded-md border border-slate-200">
+                  {newProduct.solds || 0} sold
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-400">
+                Solds are automatically incremented in real-time as verified customer orders are placed.
+              </p>
+
+              <div className="flex items-center justify-between text-xs pt-1.5 border-t border-slate-200/60">
+                <span className="font-semibold text-slate-600 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-amber-400" />
+                  Customer Rating (Dynamic):
+                </span>
+                <span className="font-bold font-mono text-slate-800 bg-white px-2.5 py-0.5 rounded-md border border-slate-200 flex items-center gap-1">
+                  ★ {newProduct.rating ? Number(newProduct.rating).toFixed(1) : '5.0'}
+                  <span className="text-[10px] text-slate-400 font-normal">({newProduct.reviewsCount || 0} reviews)</span>
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-400">
+                Rating is automatically calculated from genuine customer reviews and star feedback on completed orders.
+              </p>
             </div>
 
             {/* Sizes Range Input */}

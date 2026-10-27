@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
@@ -11,6 +11,8 @@ import {
   Banknote,
   Loader2,
   CheckCircle2,
+  AlertCircle,
+  KeyRound,
 } from 'lucide-react';
 import {
   getRegions,
@@ -23,14 +25,20 @@ import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import { removeItemsFromWishlist } from '../lib/wishlistManager';
 import { trackInitiateCheckout } from '../lib/metaPixel';
+import { calculateShippingFee, FREE_SHIPPING_THRESHOLD } from '../lib/shippingCalculator';
+import { getCachedProducts } from '../lib/productCache';
+import { PRODUCTS } from '../data/products';
+import CustomerAuthModal from './CustomerAuthModal';
 
 export default function CheckoutPage({
   checkoutItems = [],
   onBackToShop,
   onOrderCompleted,
 }) {
-  const { user, profile } = useAuth();
+  const { user, profile, isEmailVerified, sendVerificationOtp } = useAuth();
   const [currentStep, setCurrentStep] = useState(1); // 1: Shipping, 2: Review, 3: Payment
+  const [showOtpModal, setShowOtpModal] = useState(false);
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -76,6 +84,63 @@ export default function CheckoutPage({
   const [appliedPromo, setAppliedPromo] = useState(null);
   const [promoError, setPromoError] = useState('');
   const [isApplyingPromo, setIsApplyingPromo] = useState(false);
+
+  // Real-time sold out item validation in checkout
+  const soldOutItems = useMemo(() => {
+    const liveProducts = getCachedProducts();
+    return checkoutItems.filter((item) => {
+      const match =
+        (Array.isArray(liveProducts) ? liveProducts.find((p) => String(p.id) === String(item.id)) : null) ||
+        PRODUCTS.find((p) => String(p.id) === String(item.id)) ||
+        item;
+      const badge = (match?.statusBadge || item?.statusBadge || '').toUpperCase();
+      const qty =
+        match?.qty !== undefined && match?.qty !== null
+          ? Number(match.qty)
+          : item?.qty !== undefined && item?.qty !== null
+          ? Number(item.qty)
+          : null;
+      return badge === 'SOLD OUT' || badge === 'ARCHIVE' || (qty !== null && qty <= 0);
+    });
+  }, [checkoutItems]);
+
+  const hasSoldOutItems = soldOutItems.length > 0;
+  const isItemSoldOut = (item) => soldOutItems.some((s) => String(s.id) === String(item.id));
+
+  // Manage selected items within checkout (defaults to all in-stock items)
+  const [selectedItemIds, setSelectedItemIds] = useState(() => {
+    return checkoutItems
+      .filter((item) => {
+        const liveProducts = getCachedProducts();
+        const match =
+          (Array.isArray(liveProducts) ? liveProducts.find((p) => String(p.id) === String(item.id)) : null) ||
+          PRODUCTS.find((p) => String(p.id) === String(item.id)) ||
+          item;
+        const badge = (match?.statusBadge || item?.statusBadge || '').toUpperCase();
+        const qty =
+          match?.qty !== undefined && match?.qty !== null
+            ? Number(match.qty)
+            : item?.qty !== undefined && item?.qty !== null
+            ? Number(item.qty)
+            : null;
+        const isSoldOut = badge === 'SOLD OUT' || badge === 'ARCHIVE' || (qty !== null && qty <= 0);
+        return !isSoldOut;
+      })
+      .map((item) => item.wishlistId || item.id);
+  });
+
+  const toggleItemSelection = (itemId) => {
+    setSelectedItemIds((prev) =>
+      prev.includes(itemId) ? prev.filter((id) => id !== itemId) : [...prev, itemId]
+    );
+  };
+
+  const selectedCheckoutItems = useMemo(() => {
+    return checkoutItems.filter((item) => {
+      const id = item.wishlistId || item.id;
+      return selectedItemIds.includes(id) && !isItemSoldOut(item);
+    });
+  }, [checkoutItems, selectedItemIds, soldOutItems]);
 
   // Load saved profile / address from localStorage on mount & report InitiateCheckout to Meta Pixel
   useEffect(() => {
@@ -227,8 +292,8 @@ export default function CheckoutPage({
     }));
   };
 
-  // Calculations
-  const subtotal = checkoutItems.reduce(
+  // Calculations based on selected available items
+  const subtotal = selectedCheckoutItems.reduce(
     (sum, item) => sum + (Number(item.price) || 0) * (item.quantity || 1),
     0
   );
@@ -239,8 +304,16 @@ export default function CheckoutPage({
         : appliedPromo.discount_value)
     : 0;
     
-  const shippingFee = checkoutItems.length > 0 ? 150 : 0;
-  const totalAmount = Math.max(0, subtotal - discountAmount + shippingFee);
+  const netSubtotal = Math.max(0, subtotal - discountAmount);
+  const shippingDetails = calculateShippingFee({
+    regionCode: formData.regionCode,
+    regionName: formData.regionName,
+    provinceName: formData.provinceName,
+    subtotal: netSubtotal,
+    itemCount: selectedCheckoutItems.length,
+  });
+  const shippingFee = selectedCheckoutItems.length > 0 ? shippingDetails.fee : 0;
+  const totalAmount = netSubtotal + shippingFee;
   const isCodEligible = totalAmount <= 1000;
 
   const handleApplyPromo = async () => {
@@ -307,6 +380,16 @@ export default function CheckoutPage({
 
   const handleContinueToReview = (e) => {
     e.preventDefault();
+    if (selectedCheckoutItems.length === 0) {
+      setPaymentError('Please select at least one available item to checkout.');
+      return;
+    }
+    // Strict Anti-Bogus Email Verification Gate
+    if (!isEmailVerified) {
+      setPaymentError('Email verification required: Please verify your account email with the 6-digit code before proceeding.');
+      setShowOtpModal(true);
+      return;
+    }
     if (validateShippingForm()) {
       if (formData.saveAddress) {
         try {
@@ -320,6 +403,16 @@ export default function CheckoutPage({
 
   // Complete Order via Secure Serverless Payment API
   const handleCompleteOrder = async () => {
+    if (selectedCheckoutItems.length === 0) {
+      setPaymentError('Please select at least one available item to complete your order.');
+      return;
+    }
+    // Strict Anti-Bogus Email Verification Gate
+    if (!isEmailVerified) {
+      setPaymentError('Email verification required: Please verify your account email before placing your order.');
+      setShowOtpModal(true);
+      return;
+    }
     setIsProcessingOrder(true);
     setPaymentError(null);
 
@@ -347,7 +440,7 @@ export default function CheckoutPage({
           zipCode: (formData.zipCode || '').trim(),
           country: 'Philippines',
         },
-        items: checkoutItems.map((item) => ({
+        items: selectedCheckoutItems.map((item) => ({
           id: item.id,
           size: item.size || 'Standard',
           color: item.color || 'Standard',
@@ -367,7 +460,7 @@ export default function CheckoutPage({
 
       // Clear checked-out items from active cart and Supabase database
       try {
-        await removeItemsFromWishlist(checkoutItems);
+        await removeItemsFromWishlist(selectedCheckoutItems);
       } catch (e) {}
 
       // 3. Redirect to verified Xendit payment interface if online invoice provided
@@ -483,6 +576,21 @@ export default function CheckoutPage({
           </div>
         </div>
 
+        {/* Sold Out Informative Banner */}
+        {hasSoldOutItems && (
+          <div className="mb-6 p-4 bg-[#FAF5F2] border border-[#E8DCD7] text-[#705B56] flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-[#B86B60] flex-shrink-0 mt-0.5" />
+            <div className="flex-1 text-xs">
+              <p className="font-bold uppercase tracking-wider text-[#2C1E1B] mb-1">
+                {soldOutItems.length} Sold Out Item(s) Kept in Bag
+              </p>
+              <p className="leading-relaxed">
+                Sold-out items are excluded from this checkout and will remain safely saved in your shopping bag until restocked.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* 2-Column Checkout Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           {/* Main Form Left Column */}
@@ -497,6 +605,43 @@ export default function CheckoutPage({
                 <h2 className="font-brand text-sm uppercase tracking-[0.25em] font-bold text-[#2C1E1B] mb-6 pb-3 border-b border-[#E8DCD7]">
                   Shipping Address
                 </h2>
+
+                {/* Pre-Checkout Email Verification Security Banner */}
+                {!isEmailVerified && (
+                  <div className="mb-6 p-4 bg-amber-50/90 border border-amber-300 text-amber-900 rounded-none flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+                    <div className="flex items-start gap-3">
+                      <ShieldCheck className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-amber-950">
+                          Account Verification Required
+                        </h4>
+                        <p className="text-[11px] text-amber-800 mt-0.5 leading-relaxed">
+                          To protect against bogus transactions and ensure your J&T Express delivery updates reach you, please verify{' '}
+                          <strong className="underline">{user?.email || formData.email}</strong> with a 6-digit OTP code before proceeding.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={isSendingOtp}
+                      onClick={async () => {
+                        setIsSendingOtp(true);
+                        try {
+                          await sendVerificationOtp(user?.email || formData.email);
+                        } catch (err) {
+                          console.warn('Send OTP warning:', err);
+                        } finally {
+                          setIsSendingOtp(false);
+                          setShowOtpModal(true);
+                        }
+                      }}
+                      className="px-4 py-2 bg-[#2C1E1B] hover:bg-[#B86B60] text-white text-[11px] uppercase tracking-wider font-bold whitespace-nowrap cursor-pointer transition-all flex items-center gap-1.5 disabled:opacity-75"
+                    >
+                      <KeyRound className="w-3.5 h-3.5" />
+                      <span>{isSendingOtp ? 'Sending Code...' : 'Verify Email'}</span>
+                    </button>
+                  </div>
+                )}
 
                 <form onSubmit={handleContinueToReview} className="space-y-4">
                   {/* Full Name */}
@@ -549,9 +694,22 @@ export default function CheckoutPage({
                     <div>
                       <label className="block text-[11px] uppercase font-bold tracking-wider text-[#705B56] mb-1.5 flex items-center justify-between">
                         <span>Account Email *</span>
-                        <span className="text-[10px] text-emerald-700 font-semibold flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3" /> Verified
-                        </span>
+                        {isEmailVerified ? (
+                          <span className="text-[10px] text-emerald-700 font-semibold flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3" /> Verified
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              sendVerificationOtp(user?.email || formData.email).catch(() => {});
+                              setShowOtpModal(true);
+                            }}
+                            className="text-[10px] text-amber-700 hover:text-amber-900 font-bold flex items-center gap-1 underline cursor-pointer"
+                          >
+                            <AlertCircle className="w-3 h-3 text-amber-600" /> Verify with OTP
+                          </button>
+                        )}
                       </label>
                       <input
                         type="email"
@@ -742,9 +900,14 @@ export default function CheckoutPage({
                   <div className="pt-6">
                     <button
                       type="submit"
-                      className="w-full bg-[#2C1E1B] hover:bg-[#B86B60] text-white py-4 px-6 text-xs uppercase font-bold tracking-[0.2em] shadow-md transition-all rounded-none cursor-pointer"
+                      disabled={selectedCheckoutItems.length === 0}
+                      className="w-full bg-[#2C1E1B] hover:bg-[#B86B60] text-white py-4 px-6 text-xs uppercase font-bold tracking-[0.2em] shadow-md transition-all rounded-none cursor-pointer disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed"
                     >
-                      Continue to Order Review
+                      {selectedCheckoutItems.length === 0
+                        ? 'Select Items to Continue'
+                        : !isEmailVerified
+                        ? 'Verify Email to Continue'
+                        : 'Continue to Order Review'}
                     </button>
                   </div>
                 </form>
@@ -798,35 +961,65 @@ export default function CheckoutPage({
                 {/* Items Summary Table */}
                 <div className="space-y-3">
                   <h3 className="text-xs font-brand uppercase tracking-wider font-bold text-[#705B56]">
-                    Items in this Order ({checkoutItems.length})
+                    Items in this Order ({selectedCheckoutItems.length} selected of {checkoutItems.length})
                   </h3>
                   <div className="divide-y divide-[#E8DCD7]">
-                    {checkoutItems.map((item) => (
-                      <div key={item.id} className="py-3 flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-3">
-                          <img
-                            src={item.image}
-                            alt={item.name}
-                            loading="lazy"
-                            decoding="async"
-                            className="w-12 h-14 object-cover bg-[#FAF5F2]"
-                          />
-                          <div>
-                            <p className="font-semibold text-[#2C1E1B]">{item.name}</p>
-                            <p className="text-[11px] text-[#B86B60]">
-                              {typeof item.size === 'object' ? item.size?.name : (item.size || 'Standard')}
-                              {item.color && (typeof item.color === 'object' ? item.color?.name : item.color) !== 'Standard'
-                                ? ` / ${typeof item.color === 'object' ? item.color?.name : item.color}`
-                                : ''}{' '}
-                              • Qty: {item.quantity || 1}
-                            </p>
+                    {checkoutItems.map((item) => {
+                      const itemIsSoldOut = isItemSoldOut(item);
+                      const isSelected = !itemIsSoldOut && selectedItemIds.includes(item.wishlistId || item.id);
+                      return (
+                        <div key={item.wishlistId || item.id} className={`py-3 flex items-center justify-between text-xs ${itemIsSoldOut ? 'opacity-70' : !isSelected ? 'opacity-60' : ''}`}>
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              disabled={itemIsSoldOut}
+                              onChange={() => toggleItemSelection(item.wishlistId || item.id)}
+                              className="w-4 h-4 rounded-none accent-[#2C1E1B] disabled:cursor-not-allowed disabled:opacity-30 cursor-pointer"
+                              title={itemIsSoldOut ? 'Sold out — kept in bag' : 'Select for checkout'}
+                            />
+                            <div className="relative flex-shrink-0">
+                              <img
+                                src={item.image}
+                                alt={item.name}
+                                loading="lazy"
+                                decoding="async"
+                                className="w-12 h-14 object-cover bg-[#FAF5F2]"
+                              />
+                              {itemIsSoldOut && (
+                                <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                                  <span className="bg-rose-600 text-white text-[8px] font-bold px-1 py-0.5 uppercase tracking-wider">
+                                    Sold Out
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                            <div>
+                              <p className="font-semibold text-[#2C1E1B]">{item.name}</p>
+                              <p className="text-[11px] text-[#B86B60]">
+                                {typeof item.size === 'object' ? item.size?.name : (item.size || 'Standard')}
+                                {item.color && (typeof item.color === 'object' ? item.color?.name : item.color) !== 'Standard'
+                                  ? ` / ${typeof item.color === 'object' ? item.color?.name : item.color}`
+                                  : ''}{' '}
+                                • Qty: {item.quantity || 1}
+                              </p>
+                              {itemIsSoldOut ? (
+                                <span className="inline-block mt-0.5 text-[10px] font-semibold text-[#B86B60] uppercase tracking-wider">
+                                  Sold Out — Kept in bag until restock
+                                </span>
+                              ) : !isSelected ? (
+                                <span className="inline-block mt-0.5 text-[10px] text-[#A38E88] uppercase tracking-wider">
+                                  Deselected — Excluded from checkout
+                                </span>
+                              ) : null}
+                            </div>
                           </div>
+                          <span className={`font-bold ${itemIsSoldOut || !isSelected ? 'line-through text-slate-400' : 'text-[#2C1E1B]'}`}>
+                            ₱{((Number(item.price) || 0) * (item.quantity || 1)).toLocaleString()}
+                          </span>
                         </div>
-                        <span className="font-bold text-[#2C1E1B]">
-                          ₱{((Number(item.price) || 0) * (item.quantity || 1)).toLocaleString()}
-                        </span>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -841,10 +1034,14 @@ export default function CheckoutPage({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setCurrentStep(3)}
-                    className="flex-1 bg-[#2C1E1B] hover:bg-[#B86B60] text-white py-4 px-6 text-xs uppercase font-bold tracking-[0.2em] shadow-md transition-all rounded-none"
+                    onClick={() => {
+                      if (selectedCheckoutItems.length === 0) return;
+                      setCurrentStep(3);
+                    }}
+                    disabled={selectedCheckoutItems.length === 0}
+                    className="flex-1 bg-[#2C1E1B] hover:bg-[#B86B60] text-white py-4 px-6 text-xs uppercase font-bold tracking-[0.2em] shadow-md transition-all rounded-none disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed"
                   >
-                    Continue to Payment
+                    {selectedCheckoutItems.length === 0 ? 'Select Items to Continue' : 'Continue to Payment'}
                   </button>
                 </div>
               </motion.div>
@@ -1036,14 +1233,16 @@ export default function CheckoutPage({
                   <button
                     type="button"
                     onClick={handleCompleteOrder}
-                    disabled={isProcessingOrder}
-                    className="flex-1 bg-emerald-800 hover:bg-emerald-900 text-white py-4 px-6 text-xs uppercase font-bold tracking-[0.2em] shadow-lg transition-all rounded-none flex items-center justify-center gap-2 disabled:opacity-75"
+                    disabled={isProcessingOrder || selectedCheckoutItems.length === 0}
+                    className="flex-1 bg-emerald-800 hover:bg-emerald-900 text-white py-4 px-6 text-xs uppercase font-bold tracking-[0.2em] shadow-lg transition-all rounded-none flex items-center justify-center gap-2 disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed"
                   >
                     {isProcessingOrder ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
                         <span>Processing Order...</span>
                       </>
+                    ) : selectedCheckoutItems.length === 0 ? (
+                      <span>Select Items to Complete Order</span>
                     ) : (
                       <>
                         <CheckCircle2 className="w-4 h-4" />
@@ -1060,37 +1259,71 @@ export default function CheckoutPage({
           <div className="lg:col-span-5 space-y-6">
             <div className="bg-white border border-[#E8DCD7] p-6 sm:p-8 shadow-sm space-y-6">
               <h3 className="font-brand text-xs uppercase tracking-[0.25em] font-bold text-[#2C1E1B] pb-3 border-b border-[#E8DCD7]">
-                Order Summary ({checkoutItems.length})
+                Order Summary ({selectedCheckoutItems.length} selected of {checkoutItems.length})
               </h3>
 
               {/* Items List */}
               <div className="space-y-4 divide-y divide-[#E8DCD7]">
-                {checkoutItems.map((item) => (
-                  <div key={item.id} className="pt-4 first:pt-0 flex gap-3">
-                    <img
-                      src={item.image}
-                      alt={item.name}
-                      loading="lazy"
-                      decoding="async"
-                      className="w-16 h-20 object-cover bg-[#FAF5F2] flex-shrink-0"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="font-brand text-xs font-bold text-[#2C1E1B] truncate">
-                        {item.name}
-                      </p>
-                      <p className="text-[11px] font-brand tracking-wider uppercase text-[#B86B60]">
-                        {typeof item.size === 'object' ? item.size?.name : (item.size || 'Standard')}
-                        {item.color && (typeof item.color === 'object' ? item.color?.name : item.color) !== 'Standard'
-                          ? ` / ${typeof item.color === 'object' ? item.color?.name : item.color}`
-                          : ''}
-                      </p>
-                      <p className="text-[11px] text-[#705B56]">Qty: {item.quantity || 1}</p>
-                      <p className="font-hero text-xs font-bold text-[#2C1E1B] mt-1">
-                        ₱{((Number(item.price) || 0) * (item.quantity || 1)).toLocaleString()}
-                      </p>
+                {checkoutItems.map((item) => {
+                  const itemIsSoldOut = isItemSoldOut(item);
+                  const isSelected = !itemIsSoldOut && selectedItemIds.includes(item.wishlistId || item.id);
+                  return (
+                    <div key={item.wishlistId || item.id} className={`pt-4 first:pt-0 flex gap-3 ${itemIsSoldOut ? 'opacity-70' : !isSelected ? 'opacity-50' : ''}`}>
+                      {/* Checkbox */}
+                      <div className="flex items-center pt-2 self-start flex-shrink-0">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          disabled={itemIsSoldOut}
+                          onChange={() => toggleItemSelection(item.wishlistId || item.id)}
+                          className="w-4 h-4 rounded-none accent-[#2C1E1B] disabled:cursor-not-allowed disabled:opacity-30 cursor-pointer"
+                          title={itemIsSoldOut ? 'Sold out — kept in bag' : 'Select for checkout'}
+                        />
+                      </div>
+                      <div className="relative flex-shrink-0">
+                        <img
+                          src={item.image}
+                          alt={item.name}
+                          loading="lazy"
+                          decoding="async"
+                          className="w-16 h-20 object-cover bg-[#FAF5F2]"
+                        />
+                        {itemIsSoldOut && (
+                          <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                            <span className="bg-rose-600 text-white text-[8px] font-bold px-1 py-0.5 uppercase tracking-wider">
+                              Sold Out
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-brand text-xs font-bold text-[#2C1E1B] truncate">
+                          {item.name}
+                        </p>
+                        <p className="text-[11px] font-brand tracking-wider uppercase text-[#B86B60]">
+                          {typeof item.size === 'object' ? item.size?.name : (item.size || 'Standard')}
+                          {item.color && (typeof item.color === 'object' ? item.color?.name : item.color) !== 'Standard'
+                            ? ` / ${typeof item.color === 'object' ? item.color?.name : item.color}`
+                            : ''}
+                        </p>
+                        <p className="text-[11px] text-[#705B56]">Qty: {item.quantity || 1}</p>
+                        {itemIsSoldOut ? (
+                          <p className="text-[10px] font-semibold text-[#B86B60] uppercase tracking-wider mt-1">
+                            Sold Out • Kept in bag
+                          </p>
+                        ) : !isSelected ? (
+                          <p className="text-[10px] text-[#A38E88] uppercase tracking-wider mt-1">
+                            Deselected
+                          </p>
+                        ) : (
+                          <p className="font-hero text-xs font-bold text-[#2C1E1B] mt-1">
+                            ₱{((Number(item.price) || 0) * (item.quantity || 1)).toLocaleString()}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Promo Code Input */}
@@ -1147,10 +1380,37 @@ export default function CheckoutPage({
                     <span>-₱{discountAmount.toLocaleString()}</span>
                   </div>
                 )}
-                <div className="flex justify-between text-[#705B56]">
-                  <span>Nationwide Shipping</span>
-                  <span className="font-semibold text-[#2C1E1B]">₱{shippingFee.toLocaleString()}</span>
+                <div className="flex justify-between items-start text-[#705B56]">
+                  <div>
+                    <span className="block font-medium text-[#2C1E1B]">
+                      {shippingDetails.courier}
+                    </span>
+                    <span className="text-[10px] text-[#A38E88] block">
+                      {shippingDetails.zone} • Est: {shippingDetails.eta}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    {shippingDetails.isFree ? (
+                      <div>
+                        <span className="line-through text-[#A38E88] text-[10px] mr-1.5">
+                          ₱{shippingDetails.originalFee}
+                        </span>
+                        <span className="font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 border border-emerald-200 text-[10px] uppercase tracking-wider">
+                          FREE
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="font-semibold text-[#2C1E1B]">₱{shippingFee.toLocaleString()}</span>
+                    )}
+                  </div>
                 </div>
+
+                {!shippingDetails.isFree && shippingDetails.amountNeededForFreeShipping > 0 && (
+                  <div className="p-2 bg-[#FAF5F2] border border-dashed border-[#E8DCD7] text-[10px] text-[#705B56] flex items-center justify-between">
+                    <span>Add ₱{shippingDetails.amountNeededForFreeShipping.toLocaleString()} more to unlock</span>
+                    <strong className="text-[#B86B60] uppercase tracking-wider font-bold">FREE SHIPPING</strong>
+                  </div>
+                )}
                 <div className="border-t border-[#E8DCD7] pt-3 flex justify-between text-sm font-bold text-[#2C1E1B]">
                   <span className="uppercase tracking-wider">Total Amount</span>
                   <span className="font-hero text-base">₱{totalAmount.toLocaleString()}</span>
@@ -1171,6 +1431,18 @@ export default function CheckoutPage({
           </div>
         </div>
       </div>
+
+      {/* 6-Digit Email OTP Verification Modal for Pre-Checkout */}
+      <CustomerAuthModal
+        isOpen={showOtpModal}
+        onClose={() => setShowOtpModal(false)}
+        initialMode="verify_otp"
+        initialEmail={user?.email || formData.email}
+        onSuccess={() => {
+          setShowOtpModal(false);
+          setPaymentError(null);
+        }}
+      />
     </div>
   );
 }

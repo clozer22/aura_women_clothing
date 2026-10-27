@@ -5,7 +5,6 @@ import Hero from './components/Hero';
 import MarqueeTicker from './components/MarqueeTicker';
 import AboutSection from './components/AboutSection';
 import ProductCatalog from './components/ProductCatalog';
-import QuickViewModal from './components/QuickViewModal';
 import ContactSection from './components/ContactSection';
 import Footer from './components/Footer';
 import SplashScreen from './components/SplashScreen';
@@ -20,6 +19,7 @@ import PageSkeleton from './components/common/PageSkeleton';
 import { recordSiteVisit } from './lib/visitorTracking';
 import CookieConsentBanner from './components/CookieConsentBanner';
 import LegalModal from './components/LegalModal';
+import CustomerLiveChat from './components/CustomerLiveChat';
 import { trackPageView, trackViewContent, trackInitiateCheckout } from './lib/metaPixel';
 
 // Code-split route-level components for optimized INP and instant initial paint
@@ -29,6 +29,8 @@ const CheckoutPage = React.lazy(() => import('./components/CheckoutPage'));
 const OrderConfirmed = React.lazy(() => import('./components/OrderConfirmed'));
 const OrderHistory = React.lazy(() => import('./components/OrderHistory'));
 const CustomerProfilePage = React.lazy(() => import('./components/CustomerProfilePage'));
+const OrderDetailPage = React.lazy(() => import('./components/OrderDetailPage'));
+const ProductDetailPage = React.lazy(() => import('./components/ProductDetailPage'));
 import {
   getCachedProducts,
   isProductsCacheFresh,
@@ -49,8 +51,10 @@ function MainApp() {
     const path = window.location.pathname;
     if (path === ADMIN_ROUTE) return 'admin';
     if (path === '/full-catalog') return 'full-catalog';
+    if (path === '/product') return 'product';
     if (path === '/checkout') return 'checkout';
     if (path === '/orders') return 'orders';
+    if (path === '/order-details') return 'order-details';
     if (path === '/order-confirmed') return 'order-confirmed';
     if (path === '/profile') return 'profile';
     return 'home';
@@ -74,12 +78,28 @@ function MainApp() {
 
   const [currentView, setCurrentView] = useState(getInitialView());
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [selectedProductId, setSelectedProductId] = useState(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('id') || null;
+    } catch {
+      return null;
+    }
+  });
   const [toastMessage, setToastMessage] = useState(null);
   const [catalogSearchQuery, setCatalogSearchQuery] = useState('');
   const [wishlistDrawerOpen, setWishlistDrawerOpen] = useState(false);
   const [checkoutItems, setCheckoutItems] = useState([]);
   const [pendingCheckoutItems, setPendingCheckoutItems] = useState(null);
   const [completedOrder, setCompletedOrder] = useState(getInitialOrder());
+  const [selectedOrderRef, setSelectedOrderRef] = useState(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('ref') || null;
+    } catch {
+      return null;
+    }
+  });
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [legalModalState, setLegalModalState] = useState({ isOpen: false, tab: 'privacy' });
 
@@ -215,13 +235,59 @@ function MainApp() {
     if (currentView === 'home') {
       fetchProducts();
       fetchStorefrontConfig();
-    } else if (currentView === 'full-catalog') {
-      fetchProducts(); // Full catalog needs garment products only; skip hero/storefront config
+    } else if (currentView === 'full-catalog' || currentView === 'product') {
+      fetchProducts(); // Full catalog & product page need garment products
     } else if (currentView === 'checkout') {
       fetchProducts(); // Checkout needs garment products for item totals
     }
     // If currentView is 'admin', 'orders', or 'order-confirmed', skip storefront fetching entirely!
   }, [currentView]);
+
+  // Real-time synchronization for products across all concurrent customers/users
+  useEffect(() => {
+    const channel = supabase
+      .channel('storefront:products:realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'products' },
+        (payload) => {
+          if (payload.eventType === 'UPDATE' && payload.new) {
+            setDbProducts((prev) => {
+              const updated = prev.map((item) =>
+                item.id === payload.new.id ? { ...item, ...payload.new } : item
+              );
+              saveCachedProducts(updated);
+              return updated;
+            });
+            // Instantly sync modal if customer is currently inspecting this product
+            setSelectedProduct((current) =>
+              current && current.id === payload.new.id ? { ...current, ...payload.new } : current
+            );
+          } else if (payload.eventType === 'INSERT' && payload.new) {
+            setDbProducts((prev) => {
+              if (prev.some((p) => p.id === payload.new.id)) return prev;
+              const updated = [payload.new, ...prev];
+              saveCachedProducts(updated);
+              return updated;
+            });
+          } else if (payload.eventType === 'DELETE' && payload.old) {
+            setDbProducts((prev) => {
+              const updated = prev.filter((item) => item.id !== payload.old.id);
+              saveCachedProducts(updated);
+              return updated;
+            });
+            setSelectedProduct((current) =>
+              current && current.id === payload.old.id ? null : current
+            );
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   // Track product modal views
   useEffect(() => {
@@ -242,10 +308,24 @@ function MainApp() {
         setCurrentView('home');
       } else if (path === '/full-catalog') {
         setCurrentView('full-catalog');
+      } else if (path === '/product') {
+        const params = new URLSearchParams(window.location.search);
+        const id = params.get('id');
+        if (id) {
+          setSelectedProductId(id);
+          const found = dbProducts.find((p) => String(p.id) === String(id));
+          if (found) setSelectedProduct(found);
+        }
+        setCurrentView('product');
       } else if (path === '/checkout') {
         setCurrentView('checkout');
       } else if (path === '/orders') {
         setCurrentView('orders');
+      } else if (path === '/order-details') {
+        const params = new URLSearchParams(window.location.search);
+        const ref = params.get('ref');
+        if (ref) setSelectedOrderRef(ref);
+        setCurrentView('order-details');
       } else if (path === '/order-confirmed') {
         const params = new URLSearchParams(window.location.search);
         const ref = params.get('ref');
@@ -287,6 +367,24 @@ function MainApp() {
     setCatalogSearchQuery('');
     setCurrentView('full-catalog');
     window.history.pushState(null, '', '/full-catalog');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const navigateToProduct = (productOrId) => {
+    const prod = typeof productOrId === 'object' && productOrId !== null ? productOrId : null;
+    const id = prod?.id || (typeof productOrId === 'string' ? productOrId : null);
+    if (prod) {
+      setSelectedProduct(prod);
+    }
+    if (id) {
+      setSelectedProductId(id);
+    }
+    setCurrentView('product');
+    window.history.pushState(
+      null,
+      '',
+      id ? `/product?id=${encodeURIComponent(id)}` : '/product'
+    );
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -347,6 +445,23 @@ function MainApp() {
   const navigateToOrders = () => {
     setCurrentView('orders');
     window.history.pushState(null, '', '/orders');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const navigateToOrderDetails = (orderOrRef) => {
+    const ref = typeof orderOrRef === 'string' ? orderOrRef : orderOrRef?.order_reference;
+    if (typeof orderOrRef === 'object' && orderOrRef !== null) {
+      setCompletedOrder(orderOrRef);
+    }
+    if (ref) {
+      setSelectedOrderRef(ref);
+    }
+    setCurrentView('order-details');
+    window.history.pushState(
+      null,
+      '',
+      ref ? `/order-details?ref=${encodeURIComponent(ref)}` : '/order-details'
+    );
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -464,6 +579,20 @@ function MainApp() {
       <React.Suspense fallback={<PageSkeleton label="Loading Order History..." />}>
         <OrderHistory
           onBackToShop={navigateToHome}
+          onSelectOrder={navigateToOrderDetails}
+        />
+      </React.Suspense>
+    );
+  }
+
+  // Render full-screen dedicated Order Details & Customer Ratings/Feedback View
+  if (currentView === 'order-details') {
+    return (
+      <React.Suspense fallback={<PageSkeleton label="Retrieving Order Details & Reviews..." />}>
+        <OrderDetailPage
+          orderRef={selectedOrderRef}
+          order={completedOrder}
+          onBack={navigateToOrders}
         />
       </React.Suspense>
     );
@@ -547,7 +676,12 @@ function MainApp() {
                 {heroConfig.aboutTitle || 'About Aura'}
               </h2>
             </div>
-            <AboutSection config={heroConfig} />
+            <AboutSection
+              config={heroConfig}
+              products={activeProducts}
+              onSelectProduct={navigateToProduct}
+              onNavigateFullCatalog={navigateToFullCatalog}
+            />
             <div className="w-full flex flex-col items-center justify-center py-5 px-3 bg-white pb-16">
               <div className='max-w-2xl'>
                 <p className="text-xs sm:text-sm text-[#705B56] font-sans text-center leading-relaxed">
@@ -559,7 +693,7 @@ function MainApp() {
             <ProductCatalog
               products={activeProducts}
               isLoading={isLoading}
-              onSelectProduct={(product) => setSelectedProduct(product)}
+              onSelectProduct={navigateToProduct}
               onViewFullCatalog={navigateToFullCatalog}
             />
 
@@ -575,8 +709,30 @@ function MainApp() {
               products={activeProducts}
               isLoading={isLoading}
               onBackToHome={navigateToHome}
-              onSelectProduct={(product) => setSelectedProduct(product)}
+              onSelectProduct={navigateToProduct}
               initialSearchQuery={catalogSearchQuery}
+            />
+          </React.Suspense>
+        )}
+
+        {/* Dedicated Product Detail Page View (Full Page, with Reviews & Feedback) */}
+        {currentView === 'product' && (
+          <React.Suspense fallback={<PageSkeleton label="Opening Atelier Garment..." />}>
+            <ProductDetailPage
+              product={selectedProduct}
+              productId={selectedProductId}
+              allProducts={activeProducts}
+              onBack={() => {
+                if (window.history.length > 1) {
+                  window.history.back();
+                } else {
+                  navigateToFullCatalog();
+                }
+              }}
+              onBuyNow={handleBuyNow}
+              onOpenWishlist={() => setWishlistDrawerOpen(true)}
+              onSelectProduct={navigateToProduct}
+              onNavigateOrders={navigateToOrders}
             />
           </React.Suspense>
         )}
@@ -584,16 +740,6 @@ function MainApp() {
 
       {/* Footer */}
       <Footer onNavigateAdmin={navigateToAdmin} onOpenLegal={handleOpenLegal} />
-
-      {/* Quick View Modal */}
-      {selectedProduct && (
-        <QuickViewModal
-          product={selectedProduct}
-          onClose={() => setSelectedProduct(null)}
-          onBuyNow={handleBuyNow}
-          onOpenWishlist={() => setWishlistDrawerOpen(true)}
-        />
-      )}
 
       {/* Right Slide-out Wishlist Navigation Drawer */}
       <WishlistDrawer
@@ -631,6 +777,9 @@ function MainApp() {
         initialTab={legalModalState.tab}
         onClose={() => setLegalModalState(prev => ({ ...prev, isOpen: false }))}
       />
+
+      {/* Omnichannel Customer Service Realtime Live Chat Widget */}
+      <CustomerLiveChat />
 
     </div>
   );

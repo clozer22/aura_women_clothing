@@ -25,7 +25,8 @@ import {
   RefreshCw,
   Trash2,
   UserCheck,
-  UserX
+  UserX,
+  MessageSquare
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../../lib/supabaseClient';
@@ -34,6 +35,7 @@ export const ALL_AVAILABLE_PAGES = [
   { id: 'dashboard', label: 'Dashboard Overview', desc: 'KPI metrics, revenue stats, visitor trends', icon: LayoutDashboard },
   { id: 'products', label: 'Manage Products', desc: 'Product inventory, pricing, sizing, stock levels', icon: ShoppingBag },
   { id: 'orders', label: 'Manage Orders', desc: 'Order fulfillment, courier dispatch, tracking', icon: Package },
+  { id: 'messages', label: 'Live Chat Support', desc: 'Customer inquiries, tickets & auto-replies', icon: MessageSquare },
   { id: 'reviews', label: 'Customer Reviews', desc: 'Customer ratings, moderation, feedback', icon: Star },
   { id: 'customize', label: 'Store Customizer', desc: 'Visual theme, hero banners, site branding', icon: Sliders },
   { id: 'profile', label: 'Owner Profile', desc: 'Atelier profile info and bio settings', icon: User },

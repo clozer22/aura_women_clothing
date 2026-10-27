@@ -81,7 +81,11 @@ export default function QuickViewModal({ product, onClose, onBuyNow, onOpenWishl
       </>
     );
   };
+  const isSoldOut = (product?.statusBadge || '').toUpperCase() === 'SOLD OUT' || (product?.qty !== undefined && product?.qty !== null && Number(product?.qty) <= 0);
+  const remainingStock = product?.qty !== undefined && product?.qty !== null ? Number(product.qty) : null;
+
   const handleToggleWishlist = () => {
+    if (!product) return;
     addToWishlist(product, selectedSize, 'Standard');
     setIsWishlisted(true);
     if (onOpenWishlist) {
@@ -90,6 +94,7 @@ export default function QuickViewModal({ product, onClose, onBuyNow, onOpenWishl
   };
 
   const handleBuyNow = () => {
+    if (isSoldOut) return;
     if (onBuyNow) {
       onBuyNow({
         id: product.id,
@@ -213,18 +218,43 @@ export default function QuickViewModal({ product, onClose, onBuyNow, onOpenWishl
 
             </div>
 
+            {/* Stock Level Real-Time Indicator */}
+            <div className="mb-4">
+              {isSoldOut ? (
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-50 border border-red-200 text-red-700 text-[11px] font-bold uppercase tracking-wider">
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                  Sold Out
+                </div>
+              ) : remainingStock !== null && remainingStock <= 10 ? (
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#FAF0EC] border border-[#B86B60]/40 text-[#B86B60] text-[11px] font-bold uppercase tracking-wider">
+                  <span className="w-2 h-2 rounded-full bg-[#B86B60] animate-pulse" />
+                  Only {remainingStock} left in stock
+                </div>
+              ) : (
+                <div className="inline-flex items-center gap-1.5 text-[#705B56] text-[11px] tracking-wider">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
+                  In Stock {remainingStock !== null ? `(${remainingStock} units)` : ''}
+                </div>
+              )}
+            </div>
+
             {/* Action Buttons: Buy Now on top, Add to Wishlist below */}
-            <div className="pt-4 border-t border-[#E8DCD7] flex-shrink-0 space-y-2.5">
+            <div className="pt-3 border-t border-[#E8DCD7] flex-shrink-0 space-y-2.5">
               {/* Buy Now Button (Top) */}
               <motion.button
-                whileHover={{ scale: 1.01 }}
-                whileTap={{ scale: 0.99 }}
+                whileHover={!isSoldOut ? { scale: 1.01 } : {}}
+                whileTap={!isSoldOut ? { scale: 0.99 } : {}}
                 type="button"
+                disabled={isSoldOut}
                 onClick={handleBuyNow}
-                className="w-full py-4 px-6 font-brand rounded-none text-xs font-bold uppercase tracking-[0.2em] bg-[#2C1E1B] hover:bg-[#B86B60] text-white transition-all duration-300 shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                className={`w-full py-4 px-6 font-brand rounded-none text-xs font-bold uppercase tracking-[0.2em] transition-all duration-300 shadow-md flex items-center justify-center gap-2 ${
+                  isSoldOut
+                    ? 'bg-[#E8DCD7] text-[#9E8E89] cursor-not-allowed shadow-none'
+                    : 'bg-[#2C1E1B] hover:bg-[#B86B60] text-white cursor-pointer'
+                }`}
               >
-                <span>Buy Now</span>
-                <ArrowRight className="w-4 h-4" />
+                <span>{isSoldOut ? 'Sold Out' : 'Buy Now'}</span>
+                {!isSoldOut && <ArrowRight className="w-4 h-4" />}
               </motion.button>
 
               {/* Add to Wishlist Button (Below Buy Now) */}
@@ -234,11 +264,19 @@ export default function QuickViewModal({ product, onClose, onBuyNow, onOpenWishl
                 className={`w-full py-3.5 px-6 rounded-none text-xs font-semibold uppercase tracking-[0.18em] transition-all flex items-center justify-center gap-2 border cursor-pointer ${
                   isWishlisted
                     ? 'bg-[#FAF0EC] border-[#B86B60] text-[#B86B60]'
+                    : isSoldOut
+                    ? 'bg-[#FAF5F2] border-[#E8DCD7] text-[#705B56] hover:border-[#2C1E1B] hover:text-[#2C1E1B]'
                     : 'bg-white border-[#2C1E1B] text-[#2C1E1B] hover:border-[#B86B60] hover:text-[#B86B60]'
                 }`}
               >
                 <Heart className={`w-4 h-4 ${isWishlisted ? 'fill-[#B86B60] text-[#B86B60]' : ''}`} />
-                <span>{isWishlisted ? 'Wishlisted' : 'Add to Wishlist'}</span>
+                <span>
+                  {isWishlisted
+                    ? 'In Your Bag'
+                    : isSoldOut
+                    ? 'Save to Bag (Sold Out)'
+                    : 'Add to Bag'}
+                </span>
               </button>
             </div>
 

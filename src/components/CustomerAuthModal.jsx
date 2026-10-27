@@ -4,7 +4,13 @@ import { X, Mail, Lock, User, ArrowRight, ShieldCheck, KeyRound, Loader2, CheckC
 import { useAuth, isAdminEmail } from '../context/AuthContext';
 import { trackLead } from '../lib/metaPixel';
 
-export default function CustomerAuthModal({ isOpen, onClose, onSuccess, initialMode = 'signin' }) {
+export default function CustomerAuthModal({
+  isOpen,
+  onClose,
+  onSuccess,
+  initialMode = 'signin',
+  initialEmail = '',
+}) {
   const { signInWithGoogle, signUpWithEmail, verifyEmailOtp, resendEmailOtp, signInWithEmail } = useAuth();
 
   const [mode, setMode] = useState(initialMode); // 'signin' | 'signup' | 'verify_otp'
@@ -18,14 +24,17 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess, initialM
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
-  // Sync initialMode when modal opens
+  // Sync initialMode and initialEmail when modal opens
   useEffect(() => {
     if (isOpen) {
       setMode(initialMode);
+      if (initialEmail) {
+        setEmail(initialEmail);
+      }
       setErrorMsg('');
       setSuccessMsg('');
     }
-  }, [isOpen, initialMode]);
+  }, [isOpen, initialMode, initialEmail]);
 
   // Resend cooldown timer
   useEffect(() => {
@@ -76,6 +85,21 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess, initialM
       }, 700);
     } catch (err) {
       console.error('Sign In Error:', err);
+      const msg = err.message || '';
+      // If user signed up but has not verified their email, gracefully transition to OTP verification
+      if (
+        msg.toLowerCase().includes('not confirmed') ||
+        msg.toLowerCase().includes('email not confirmed')
+      ) {
+        try {
+          await resendEmailOtp(cleanEmail);
+          setResendCooldown(60);
+        } catch (e) {}
+        setMode('verify_otp');
+        setSuccessMsg(`Your account is not verified yet. We just sent a 6-digit verification code to ${cleanEmail}.`);
+        setIsLoading(false);
+        return;
+      }
       setErrorMsg(err.message || 'Invalid email or password.');
       setIsLoading(false);
     }

@@ -1,6 +1,6 @@
 import { getSupabaseServerClient } from './lib/supabaseServer.js';
 import { PRODUCTS } from '../src/data/products.js';
-import { bookShipmentWithShipmates } from './lib/shipmates.js';
+import { calculateShippingFee } from '../src/lib/shippingCalculator.js';
 import { ensureServerEnv } from './lib/envHelper.js';
 
 
@@ -82,21 +82,53 @@ export default async function handler(req, res) {
     // 2. Initialize Supabase Server-Side Client
     const supabase = getSupabaseServerClient();
 
-    // 3. Authenticate User Identity via Bearer Token (Prevent spoofing `userId`)
-    let verifiedUserId = null;
+    // 3. Strict Customer Authentication & Email Verification (Anti-Bogus Protection)
     const authHeader = req.headers.authorization || req.headers.Authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.substring(7).trim();
-      if (token && supabase) {
-        try {
-          const { data: userData, error: authErr } = await supabase.auth.getUser(token);
-          if (authErr || !userData?.user) {
-            return res.status(401).json({ error: 'Your session has expired or is invalid. Please sign in again.' });
-          }
-          verifiedUserId = userData.user.id;
-        } catch (e) {
-          return res.status(401).json({ error: 'Authentication verification failed.' });
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({
+        error: 'Authentication required: You must be signed in with a verified account to place an order.',
+      });
+    }
+
+    const token = authHeader.substring(7).trim();
+    if (!token) {
+      return res.status(401).json({ error: 'Invalid authentication bearer token.' });
+    }
+
+    let verifiedUserId = null;
+    let authUser = null;
+
+    if (supabase) {
+      try {
+        const { data: userData, error: authErr } = await supabase.auth.getUser(token);
+        if (authErr || !userData?.user) {
+          return res.status(401).json({ error: 'Your session has expired or is invalid. Please sign in again.' });
         }
+        authUser = userData.user;
+        verifiedUserId = authUser.id;
+
+        // Verify that the user's email is confirmed or verified via Google OAuth
+        const isGoogle =
+          authUser.app_metadata?.provider === 'google' ||
+          authUser.raw_app_meta_data?.provider === 'google' ||
+          (Array.isArray(authUser.app_metadata?.providers) && authUser.app_metadata.providers.includes('google'));
+        const isEmailVerified = Boolean(authUser.email_confirmed_at || authUser.confirmed_at || isGoogle);
+
+        if (!isEmailVerified) {
+          return res.status(403).json({
+            error: 'Email verification required: Please verify your email with the 6-digit OTP code before checking out.',
+          });
+        }
+
+        // Anti-spoofing check: ensure order recipient email matches the authenticated account
+        const authEmail = (authUser.email || '').toLowerCase().trim();
+        if (authEmail && cleanEmail && cleanEmail !== authEmail) {
+          return res.status(400).json({
+            error: 'Security mismatch: The order email must match your verified account email address.',
+          });
+        }
+      } catch (e) {
+        return res.status(401).json({ error: 'Authentication verification failed.' });
       }
     }
 
@@ -114,7 +146,7 @@ export default async function handler(req, res) {
       try {
         const { data: dbProducts, error: dbErr } = await supabase
           .from('products')
-          .select('id, name, price, statusBadge, image')
+          .select('id, name, price, statusBadge, image, qty')
           .in('id', productIds);
 
         if (!dbErr && dbProducts && dbProducts.length > 0) {
@@ -137,12 +169,17 @@ export default async function handler(req, res) {
       if (!match) {
         return res.status(400).json({ error: `Garment with ID "${item.id}" is no longer available in the catalog.` });
       }
-      if (match.statusBadge === 'SOLD OUT' || match.statusBadge === 'ARCHIVE') {
+      if (match.statusBadge === 'SOLD OUT' || match.statusBadge === 'ARCHIVE' || (match.qty !== undefined && match.qty !== null && Number(match.qty) <= 0)) {
         return res.status(400).json({ error: `Garment "${match.name}" is currently sold out.` });
       }
 
       // Enforce bounds: min 1, max 20 per item
       const qty = Math.min(20, Math.max(1, parseInt(item.quantity, 10) || 1));
+      if (match.qty !== undefined && match.qty !== null && Number(match.qty) < qty) {
+        return res.status(400).json({
+          error: `Sorry, "${match.name}" only has ${match.qty} item(s) left in stock.`,
+        });
+      }
       const unitPrice = Number(match.price) || 0;
       verifiedSubtotal += unitPrice * qty;
 
@@ -205,8 +242,15 @@ export default async function handler(req, res) {
       }
     }
 
-    const shippingFee = verifiedItems.length > 0 ? 150 : 0;
-    const totalAmount = Math.max(0, verifiedSubtotal - verifiedDiscount + shippingFee);
+    const netSubtotal = Math.max(0, verifiedSubtotal - verifiedDiscount);
+    const shippingCalc = calculateShippingFee({
+      regionName: cleanShippingAddress.region,
+      provinceName: cleanShippingAddress.province,
+      subtotal: netSubtotal,
+      itemCount: verifiedItems.length,
+    });
+    const shippingFee = shippingCalc.fee;
+    const totalAmount = netSubtotal + shippingFee;
 
     // 7. Generate Cryptographically Non-Guessable Order Reference
     const orderReference = `AC-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
@@ -237,12 +281,19 @@ export default async function handler(req, res) {
         payment_status: 'PENDING', // Payment collected upon physical delivery
         status: 'TO_SHIP',
         user_id: verifiedUserId,
+        inventory_deducted: true,
         created_at: new Date().toISOString(),
       };
 
       if (supabase) {
         try {
           await supabase.from('orders').insert([codOrder]);
+          // Atomically deduct product stock in Supabase database
+          try {
+            await supabase.rpc('deduct_product_inventory', { p_items: verifiedItems });
+          } catch (deductErr) {
+            console.warn('Notice: Could not deduct inventory via RPC:', deductErr.message);
+          }
           if (promoRecord?.id) {
             await supabase
               .from('promotions')
@@ -254,19 +305,14 @@ export default async function handler(req, res) {
         }
       }
 
-      // Automatically dispatch courier booking to Shipmates in the background
-      let shipmentResult = null;
-      try {
-        shipmentResult = await bookShipmentWithShipmates(codOrder, { preferredCourier: 'J&T Express' });
-        if (shipmentResult) {
-          codOrder.tracking_number = shipmentResult.trackingNumber;
-          codOrder.courier_name = shipmentResult.courierName;
-          codOrder.waybill_url = shipmentResult.waybillUrl;
-          codOrder.shipment_status = 'BOOKED';
-        }
-      } catch (shipErr) {
-        console.warn('[COD Shipmates Dispatch] Background booking warning:', shipErr.message);
-      }
+      // Order is placed in Awaiting Shipment (TO_SHIP) stage.
+      // Courier booking to J&T Express is deliberately deferred until the store admin
+      // arranges shipment (moving order to Awaiting Collection) in the seller dashboard.
+      codOrder.status = 'TO_SHIP';
+      codOrder.shipment_status = 'PENDING';
+      codOrder.courier_name = 'J&T Express';
+      codOrder.tracking_number = null;
+      codOrder.waybill_url = null;
 
       return res.status(200).json({
         success: true,
@@ -276,17 +322,15 @@ export default async function handler(req, res) {
         discountAmount: verifiedDiscount,
         promoCode: verifiedPromoCode,
         order: codOrder,
-        trackingNumber: codOrder.tracking_number,
-        courierName: codOrder.courier_name,
-        waybillUrl: codOrder.waybill_url,
+        trackingNumber: null,
+        courierName: 'J&T Express',
+        waybillUrl: null,
         redirectUrl: `/order-confirmed?ref=${orderReference}`,
       });
     }
 
     // 9. Call Xendit API Server-to-Server for Online Payments
-    const xenditApiKey =
-      process.env.XENDIT_SECRET_KEY ||
-      process.env.VITE_XENDIT_API_KEY;
+    const xenditApiKey = process.env.XENDIT_SECRET_KEY;
 
     if (!xenditApiKey) {
       console.error('[create-order-invoice] Missing XENDIT_SECRET_KEY in server environment.');
@@ -387,12 +431,19 @@ export default async function handler(req, res) {
       user_id: verifiedUserId,
       xendit_invoice_id: xenditData.id,
       xendit_invoice_url: xenditData.invoice_url,
+      inventory_deducted: true,
       created_at: new Date().toISOString(),
     };
 
     if (supabase) {
       try {
         await supabase.from('orders').insert([newOrder]);
+        // Atomically deduct product stock in Supabase database
+        try {
+          await supabase.rpc('deduct_product_inventory', { p_items: verifiedItems });
+        } catch (deductErr) {
+          console.warn('Notice: Could not deduct inventory via RPC (Online):', deductErr.message);
+        }
         if (promoRecord?.id) {
           await supabase
             .from('promotions')

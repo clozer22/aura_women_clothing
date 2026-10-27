@@ -455,7 +455,7 @@ export default function FullCatalogView({ products, isLoading, onBackToHome, onS
             Array(15).fill(0).map((_, idx) => <SkeletonCard key={idx} />)
           ) : (
             paginatedProducts.map((product) => {
-              const isSoldOut = product.statusBadge === 'SOLD OUT';
+              const isSoldOut = (product.statusBadge || '').toUpperCase() === 'SOLD OUT' || (product.qty !== undefined && product.qty !== null && Number(product.qty) <= 0);
 
               return (
                 <div

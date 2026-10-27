@@ -17,7 +17,10 @@ function localApiPlugin() {
           url === '/api/xendit-webhook' ||
           url === '/api/verify-payment' ||
           url === '/api/shipmates-book' ||
-          url === '/api/admin-manage-staff'
+          url === '/api/admin-manage-staff' ||
+          url === '/api/jt-dispatch' ||
+          url === '/api/jt-track' ||
+          url === '/api/jt-webhook'
         ) {
           // Keep process.env in sync with .env during local development
           const freshEnv = loadEnv(server.config.mode || 'development', process.cwd(), '');
@@ -63,6 +66,15 @@ function localApiPlugin() {
                 await mod.default(req, res);
               } else if (url === '/api/admin-manage-staff') {
                 const mod = await server.ssrLoadModule('./api/admin-manage-staff.js');
+                await mod.default(req, res);
+              } else if (url === '/api/jt-dispatch') {
+                const mod = await server.ssrLoadModule('./api/jt-dispatch.js');
+                await mod.default(req, res);
+              } else if (url === '/api/jt-track') {
+                const mod = await server.ssrLoadModule('./api/jt-track.js');
+                await mod.default(req, res);
+              } else if (url === '/api/jt-webhook') {
+                const mod = await server.ssrLoadModule('./api/jt-webhook.js');
                 await mod.default(req, res);
               }
             } catch (err) {

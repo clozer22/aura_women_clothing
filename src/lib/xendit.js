@@ -31,6 +31,10 @@ export async function createSecureOrderInvoice({
     }
   } catch (e) {}
 
+  if (!authToken) {
+    throw new Error('Authentication required: Please sign in with your verified customer account to complete your order.');
+  }
+
   const payload = {
     customer,
     shippingAddress,

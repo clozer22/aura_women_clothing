@@ -107,7 +107,7 @@ function ProductCatalog({ products, isLoading, onSelectProduct, onViewFullCatalo
               <>
                 <AnimatePresence>
                   {filteredProducts.slice(0, 6).map((product) => {
-                    const isSoldOut = product.statusBadge === 'SOLD OUT';
+                    const isSoldOut = (product.statusBadge || '').toUpperCase() === 'SOLD OUT' || (product.qty !== undefined && product.qty !== null && Number(product.qty) <= 0);
                     return (
                       <motion.div
                         layout

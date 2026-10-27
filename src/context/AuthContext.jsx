@@ -19,6 +19,27 @@ export const getAdminRole = (email) => {
   return 'Admin';
 };
 
+// Determines if customer account is verified (Google OAuth or confirmed via Email OTP)
+export const isUserEmailVerified = (user) => {
+  if (!user) return false;
+  // Google OAuth users are inherently verified by Google's trusted identity provider
+  const provider =
+    user.app_metadata?.provider ||
+    user.raw_app_meta_data?.provider ||
+    user.app_metadata?.providers?.[0];
+  if (provider === 'google') return true;
+
+  // Supabase GoTrue confirmation timestamps
+  if (user.email_confirmed_at || user.confirmed_at) return true;
+
+  // Check linked identities for Google provider
+  if (Array.isArray(user.identities) && user.identities.some((i) => i.provider === 'google')) {
+    return true;
+  }
+
+  return false;
+};
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
@@ -88,6 +109,9 @@ export function AuthProvider({ children }) {
         setUser(null);
         setWishlistUser(null);
         setProfile(null);
+        try {
+          supabase.auth.signOut();
+        } catch (e) {}
       } else {
         setUser(currentUser);
         setWishlistUser(currentUser);
@@ -108,6 +132,9 @@ export function AuthProvider({ children }) {
         setUser(null);
         setWishlistUser(null);
         setProfile(null);
+        try {
+          await supabase.auth.signOut();
+        } catch (e) {}
       } else {
         setUser(currentUser);
         setWishlistUser(currentUser);
@@ -221,6 +248,17 @@ export function AuthProvider({ children }) {
     if (error) throw error;
   };
 
+  // Explicitly send verification OTP to logged-in user or specified email
+  const sendVerificationOtp = async (targetEmail) => {
+    const cleanEmail = (targetEmail || user?.email || '').trim().toLowerCase();
+    if (!cleanEmail) throw new Error('No valid email address found to send verification code.');
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email: cleanEmail,
+    });
+    if (error) throw error;
+  };
+
   // Direct Sign In with Email & Password
   const signInWithEmail = async ({ email, password }) => {
     const cleanEmail = (email || '').trim().toLowerCase();
@@ -313,6 +351,8 @@ export function AuthProvider({ children }) {
     user && profile && profile.has_set_password === false && !promptDismissed
   );
 
+  const isEmailVerified = isUserEmailVerified(user);
+
   return (
     <AuthContext.Provider
       value={{
@@ -320,6 +360,9 @@ export function AuthProvider({ children }) {
         profile,
         role: profile?.role || 'customer',
         loading,
+        isEmailVerified,
+        isUserEmailVerified,
+        sendVerificationOtp,
         signInWithGoogle,
         signUpWithEmail,
         verifyEmailOtp,

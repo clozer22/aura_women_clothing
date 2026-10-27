@@ -14,6 +14,7 @@ import {
 import { removeItemsFromWishlist, clearWishlist } from '../lib/wishlistManager';
 import { supabase } from '../lib/supabaseClient';
 import { trackPurchase } from '../lib/metaPixel';
+import TrackingModal from './TrackingModal';
 
 export default function OrderConfirmed({ order, onContinueShopping, onViewOrders }) {
   const [copied, setCopied] = useState(false);
@@ -30,6 +31,36 @@ export default function OrderConfirmed({ order, onContinueShopping, onViewOrders
 
   const [liveOrder, setLiveOrder] = useState(activeOrder);
   const [isVerifying, setIsVerifying] = useState(true);
+  const [isTrackingModalOpen, setIsTrackingModalOpen] = useState(false);
+
+  // Real-time Supabase Subscription for Instant Order Status Updates
+  useEffect(() => {
+    if (!activeOrder?.order_reference) return;
+
+    const channel = supabase
+      .channel(`order_confirmed_${activeOrder.order_reference}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'orders',
+          filter: `order_reference=eq.${activeOrder.order_reference}`,
+        },
+        (payload) => {
+          console.log('[OrderConfirmed] Live order update received:', payload.new);
+          setLiveOrder((prev) => ({ ...prev, ...payload.new }));
+          if (payload.new?.payment_status === 'PAID' || payload.new?.payment_method === 'COD') {
+            setIsVerifying(false);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeOrder?.order_reference]);
 
   // Verify real-time order status from Supabase database
   useEffect(() => {
@@ -286,18 +317,34 @@ export default function OrderConfirmed({ order, onContinueShopping, onViewOrders
         <div className="bg-[#2C1E1B] text-white p-4 text-left grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
           <div className="flex items-start gap-2.5">
             <Truck className="w-5 h-5 text-[#B86B60] flex-shrink-0 mt-0.5" />
-            <div>
+            <div className="flex-1">
               <p className="font-bold uppercase tracking-wider text-[10px] text-[#E8DCD7]">
-                {liveOrder?.courier_name || 'Courier Dispatch'}
+                {liveOrder?.courier_name || 'J&T Express Courier Dispatch'}
               </p>
               {liveOrder?.tracking_number ? (
-                <div className="space-y-0.5">
+                <div className="space-y-1 mt-0.5">
                   <p className="text-[11px] text-white font-medium">
                     Tracking #: <span className="font-mono text-amber-300 font-semibold">{liveOrder.tracking_number}</span>
                   </p>
-                  <p className="text-[10px] text-white/70">
-                    Booked with courier • Est. 2–4 business days
-                  </p>
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      onClick={() => setIsTrackingModalOpen(true)}
+                      className="px-2.5 py-1 bg-[#DA291C] hover:bg-[#b01e14] text-white text-[10px] font-brand uppercase tracking-wider font-bold transition-colors cursor-pointer flex items-center gap-1 shadow-sm"
+                    >
+                      <Truck className="w-3 h-3" />
+                      <span>Track J&T Package</span>
+                    </button>
+                    {liveOrder?.waybill_url && (
+                      <a
+                        href={liveOrder.waybill_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white text-[10px] uppercase font-bold tracking-wider transition-colors"
+                      >
+                        Waybill
+                      </a>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <p className="text-[11px] text-white/90 font-medium">
@@ -337,6 +384,15 @@ export default function OrderConfirmed({ order, onContinueShopping, onViewOrders
             View My Orders
           </button>
         </div>
+
+        {/* J&T Real-Time Tracking Modal */}
+        <TrackingModal
+          isOpen={isTrackingModalOpen}
+          onClose={() => setIsTrackingModalOpen(false)}
+          trackingNumber={liveOrder?.tracking_number}
+          orderReference={activeOrder.order_reference}
+          initialOrder={liveOrder}
+        />
       </motion.div>
     </div>
   );

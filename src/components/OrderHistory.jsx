@@ -19,13 +19,22 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
+import TrackingModal from './TrackingModal';
 
-export default function OrderHistory({ onBackToShop }) {
+export default function OrderHistory({ onBackToShop, onSelectOrder }) {
   const { user } = useAuth();
   const [orders, setOrders] = useState([]);
   const [activeTab, setActiveTab] = useState('ALL');
-  const [selectedOrder, setSelectedOrder] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [trackingModalOrder, setTrackingModalOrder] = useState(null);
+
+  const handleOrderSelect = (order) => {
+    if (onSelectOrder) {
+      onSelectOrder(order);
+    } else {
+      window.location.href = `/order-details?ref=${order.order_reference}`;
+    }
+  };
 
   // Review states
   const [userReviewsMap, setUserReviewsMap] = useState({}); // key: `${orderRef}_${productId}`
@@ -149,6 +158,33 @@ export default function OrderHistory({ onBackToShop }) {
 
     loadOrders();
   }, [user]);
+
+  // Real-time Supabase Subscription for Customer Orders (Status changes, tracking updates)
+  useEffect(() => {
+    if (!user?.id) return;
+    const channel = supabase
+      .channel(`order_history_realtime_${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'orders',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          console.log('[OrderHistory] Live order update received:', payload.new);
+          setOrders((prev) =>
+            prev.map((o) => (o.id === payload.new.id ? { ...o, ...payload.new } : o))
+          );
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id]);
 
   // Open review modal for a specific delivered item
   const openReviewModal = (order, item) => {
@@ -495,13 +531,28 @@ export default function OrderHistory({ onBackToShop }) {
                         </span>
                       </div>
 
-                      <button
-                        onClick={() => setSelectedOrder(order)}
-                        className="bg-[#2C1E1B] hover:bg-[#B86B60] text-white px-5 py-3 text-xs uppercase tracking-[0.18em] font-bold transition-colors flex items-center gap-2 rounded-none cursor-pointer"
-                      >
-                        <span>{isDelivered ? 'View & Review' : 'View Details'}</span>
-                        <ChevronRight className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        {order.tracking_number && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setTrackingModalOrder(order);
+                            }}
+                            className="bg-[#DA291C] hover:bg-[#b01e14] text-white px-3.5 py-3 text-xs uppercase tracking-wider font-bold transition-colors flex items-center gap-1.5 rounded-none cursor-pointer shadow-sm"
+                            title="Track J&T Package"
+                          >
+                            <Truck className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Track J&T</span>
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleOrderSelect(order)}
+                          className="bg-[#2C1E1B] hover:bg-[#B86B60] text-white px-5 py-3 text-xs uppercase tracking-[0.18em] font-bold transition-colors flex items-center gap-2 rounded-none cursor-pointer"
+                        >
+                          <span>{isDelivered ? 'View & Review' : 'View Details'}</span>
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -526,7 +577,7 @@ export default function OrderHistory({ onBackToShop }) {
 
                             {isDelivered && (
                               <button
-                                onClick={() => openReviewModal(order, item)}
+                                onClick={() => handleOrderSelect(order)}
                                 className={`text-[10px] uppercase font-brand font-bold tracking-wider px-2 py-0.5 transition-all cursor-pointer flex items-center gap-1 ${
                                   hasReview
                                     ? 'bg-amber-100 text-amber-900 hover:bg-amber-200'
@@ -557,220 +608,7 @@ export default function OrderHistory({ onBackToShop }) {
         </div>
       </div>
 
-      {/* Order Detail Modal */}
-      <AnimatePresence>
-        {selectedOrder && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-[#2C1E1B]/70 backdrop-blur-sm"
-              onClick={() => setSelectedOrder(null)}
-            />
 
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 15 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 15 }}
-              className="relative z-10 bg-white max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-[#E8DCD7] shadow-2xl p-6 sm:p-8 space-y-6 rounded-none"
-            >
-              <div className="flex items-center justify-between pb-4 border-b border-[#E8DCD7]">
-                <div>
-                  <span className="text-[10px] font-brand uppercase tracking-wider text-[#B86B60] font-bold">
-                    Order Details & Tracking
-                  </span>
-                  <h2 className="font-brand text-2xl font-bold text-[#2C1E1B]">
-                    {selectedOrder.order_reference}
-                  </h2>
-                </div>
-                <button
-                  onClick={() => setSelectedOrder(null)}
-                  className="p-2 text-[#705B56] hover:text-[#2C1E1B] border border-[#E8DCD7] cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Status Banner */}
-              <div className="p-4 bg-[#FAF5F2] border border-[#E8DCD7] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-[#2C1E1B] uppercase tracking-wider text-[11px]">
-                      Courier Delivery:
-                    </span>
-                    <span
-                      className={`text-[10px] font-brand uppercase tracking-wider font-bold px-2 py-0.5 border ${getStatusBadge(
-                        selectedOrder.status
-                      )}`}
-                    >
-                      {formatStatusLabel(selectedOrder.status)}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-[#2C1E1B] uppercase tracking-wider text-[11px]">
-                      Payment:
-                    </span>
-                    <span
-                      className={`text-[10px] font-brand uppercase tracking-wider font-bold px-2 py-0.5 border ${
-                        selectedOrder.payment_status === 'PAID'
-                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                          : 'bg-amber-50 text-amber-800 border-amber-200'
-                      }`}
-                    >
-                      {selectedOrder.payment_status === 'PAID' ? 'PAID (VERIFIED)' : 'PENDING'}
-                    </span>
-                  </div>
-                  {selectedOrder.tracking_number && (
-                    <div className="text-[11px] text-[#2C1E1B] pt-0.5">
-                      <strong>Tracking Number:</strong> {selectedOrder.tracking_number} (
-                      {selectedOrder.courier_name || 'J&T Express'})
-                    </div>
-                  )}
-                </div>
-                <div className="sm:text-right text-[11px] text-[#705B56]">
-                  <p>Ordered on {formatDate(selectedOrder.created_at)}</p>
-                  <p className="font-medium text-[#2C1E1B]">Method: {selectedOrder.payment_method || 'GCASH'}</p>
-                </div>
-              </div>
-
-              {/* Shipping Address */}
-              <div className="space-y-2 text-xs">
-                <h4 className="font-brand uppercase tracking-wider font-bold text-[#705B56]">
-                  Shipping Destination
-                </h4>
-                <div className="bg-[#FAF5F2] p-4 border border-[#E8DCD7] space-y-1">
-                  <p className="font-bold text-[#2C1E1B]">{selectedOrder.customer_name}</p>
-                  <p className="text-[#705B56]">{selectedOrder.customer_phone}</p>
-                  {selectedOrder.customer_email && (
-                    <p className="text-[#705B56]">{selectedOrder.customer_email}</p>
-                  )}
-                  {selectedOrder.shipping_address && (
-                    <p className="text-[#2C1E1B] pt-1">
-                      {selectedOrder.shipping_address.street},{' '}
-                      {selectedOrder.shipping_address.barangay},{' '}
-                      {selectedOrder.shipping_address.city},{' '}
-                      {selectedOrder.shipping_address.province || selectedOrder.shipping_address.region}{' '}
-                      {selectedOrder.shipping_address.zipCode}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {/* Items Table with Direct Review Action */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-brand uppercase tracking-wider font-bold text-[#705B56] text-xs">
-                    Purchased Garments
-                  </h4>
-                  {(selectedOrder.status || '').toUpperCase() === 'DELIVERED' && (
-                    <span className="text-[10px] text-emerald-800 font-bold uppercase tracking-wider bg-emerald-50 px-2 py-0.5 border border-emerald-200">
-                      Delivered • Rate your items below
-                    </span>
-                  )}
-                </div>
-
-                <div className="divide-y divide-[#E8DCD7]">
-                  {selectedOrder.items?.map((item, idx) => {
-                    const isDelivered = (selectedOrder.status || '').toUpperCase() === 'DELIVERED';
-                    const key = getItemReviewKey(selectedOrder.order_reference, item);
-                    const existing = userReviewsMap[key];
-
-                    return (
-                      <div key={idx} className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                        <div className="flex items-center gap-3">
-                          {item.image && (
-                            <img
-                              src={item.image}
-                              alt={item.name}
-                              loading="lazy"
-                              decoding="async"
-                              className="w-14 h-16 object-cover bg-[#FAF5F2] border border-[#E8DCD7]"
-                            />
-                          )}
-                          <div className="space-y-0.5">
-                            <p className="font-semibold text-[#2C1E1B] text-sm">{item.name}</p>
-                            <p className="text-[11px] text-[#B86B60]">
-                              Size: {typeof item.size === 'object' ? item.size?.name : (item.size || 'Standard')}
-                              {item.color && (typeof item.color === 'object' ? item.color?.name : item.color) !== 'Standard'
-                                ? ` / ${typeof item.color === 'object' ? item.color?.name : item.color}`
-                                : ''}{' '}
-                              • Qty: {item.quantity || 1}
-                            </p>
-                            <p className="font-bold text-[#2C1E1B]">
-                              ₱{((Number(item.price) || 0) * (item.quantity || 1)).toLocaleString()}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Review Button for Delivered Garments */}
-                        {isDelivered && (
-                          <div className="sm:text-right flex-shrink-0">
-                            {existing ? (
-                              <button
-                                onClick={() => openReviewModal(selectedOrder, item)}
-                                className="px-3 py-2 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 text-xs font-brand uppercase tracking-wider font-bold transition-all flex items-center gap-1.5 rounded-none cursor-pointer"
-                              >
-                                <div className="flex items-center">
-                                  {[1, 2, 3, 4, 5].map((s) => (
-                                    <Star
-                                      key={s}
-                                      className={`w-3 h-3 ${
-                                        s <= (existing.rating || 5) ? 'fill-amber-400 text-amber-400' : 'text-gray-300'
-                                      }`}
-                                    />
-                                  ))}
-                                </div>
-                                <span className="ml-1">Edit Review</span>
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => openReviewModal(selectedOrder, item)}
-                                className="px-4 py-2 bg-[#2C1E1B] hover:bg-[#B86B60] text-white text-xs font-brand uppercase tracking-wider font-bold transition-all flex items-center gap-1.5 rounded-none shadow-sm cursor-pointer"
-                              >
-                                <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                                <span>Write Review</span>
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Breakdown */}
-              <div className="border-t border-[#E8DCD7] pt-4 space-y-1.5 text-xs font-brand">
-                <div className="flex justify-between text-[#705B56]">
-                  <span>Subtotal</span>
-                  <span className="font-semibold text-[#2C1E1B]">
-                    ₱{(Number(selectedOrder.subtotal) || 0).toLocaleString()}
-                  </span>
-                </div>
-                <div className="flex justify-between text-[#705B56]">
-                  <span>Nationwide Shipping</span>
-                  <span className="font-semibold text-[#2C1E1B]">
-                    ₱{(Number(selectedOrder.shipping_fee) || 150).toLocaleString()}
-                  </span>
-                </div>
-                <div className="border-t border-[#E8DCD7] pt-2 flex justify-between text-sm font-bold text-[#2C1E1B]">
-                  <span className="uppercase tracking-wider">Total</span>
-                  <span>₱{(Number(selectedOrder.total_amount) || 0).toLocaleString()}</span>
-                </div>
-              </div>
-
-              {/* Close Button */}
-              <button
-                onClick={() => setSelectedOrder(null)}
-                className="w-full bg-[#2C1E1B] hover:bg-[#B86B60] text-white py-3.5 text-xs uppercase font-bold tracking-[0.2em] transition-colors rounded-none cursor-pointer"
-              >
-                Close Details
-              </button>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
 
       {/* Write Product Review Modal */}
       <AnimatePresence>
@@ -962,6 +800,16 @@ export default function OrderHistory({ onBackToShop }) {
           </div>
         )}
       </AnimatePresence>
+
+      {/* J&T Express Live Tracking Modal */}
+      <TrackingModal
+        isOpen={Boolean(trackingModalOrder)}
+        onClose={() => setTrackingModalOrder(null)}
+        trackingNumber={trackingModalOrder?.tracking_number}
+        orderReference={trackingModalOrder?.order_reference}
+        initialOrder={trackingModalOrder}
+      />
     </div>
   );
 }
+

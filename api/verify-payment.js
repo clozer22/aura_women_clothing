@@ -1,5 +1,4 @@
 import { getSupabaseServerClient } from './lib/supabaseServer.js';
-import { bookShipmentWithShipmates } from './lib/shipmates.js';
 import { ensureServerEnv } from './lib/envHelper.js';
 
 export default async function handler(req, res) {
@@ -35,11 +34,20 @@ export default async function handler(req, res) {
     const sb = getSupabaseServerClient();
     if (sb) {
       try {
-        const { data: existingOrder } = await sb
-          .from('orders')
-          .select('*')
-          .eq('order_reference', cleanRef)
-          .maybeSingle();
+        let existingOrder = null;
+        try {
+          const { data: rpcOrder } = await sb.rpc('get_order_by_reference', { p_order_ref: cleanRef });
+          existingOrder = rpcOrder;
+        } catch (e) {}
+
+        if (!existingOrder) {
+          const { data: dbOrder } = await sb
+            .from('orders')
+            .select('*')
+            .eq('order_reference', cleanRef)
+            .maybeSingle();
+          existingOrder = dbOrder;
+        }
 
         if (existingOrder && existingOrder.payment_method === 'COD') {
           return res.status(200).json({
@@ -60,9 +68,7 @@ export default async function handler(req, res) {
     }
 
     // 2. Initialize Xendit API Authorization
-    const xenditApiKey =
-      process.env.XENDIT_SECRET_KEY ||
-      process.env.VITE_XENDIT_API_KEY;
+    const xenditApiKey = process.env.XENDIT_SECRET_KEY;
 
     if (!xenditApiKey) {
       console.error('[verify-payment] Missing XENDIT_SECRET_KEY in server environment.');
@@ -102,24 +108,61 @@ export default async function handler(req, res) {
       const supabase = getSupabaseServerClient();
 
       try {
-        await supabase
-          .from('orders')
-          .update({
-            payment_status: 'PAID',
-            status: 'TO_SHIP',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('order_reference', cleanRef);
+        // Sync payment status via secure RPC
+        try {
+          await supabase.rpc('sync_order_fulfillment', {
+            p_order_ref: cleanRef,
+            p_status: 'TO_SHIP',
+            p_payment_status: 'PAID',
+          });
+        } catch (rpcErr) {}
 
-        // Fetch the order and ensure it is dispatched to Shipmates (idempotent)
-        const { data: currentOrder } = await supabase
-          .from('orders')
-          .select('*')
-          .eq('order_reference', cleanRef)
-          .maybeSingle();
+        try {
+          await supabase
+            .from('orders')
+            .update({
+              payment_status: 'PAID',
+              status: 'TO_SHIP',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('order_reference', cleanRef);
+        } catch (dirErr) {}
 
+        // Fetch the order and ensure it is dispatched to J&T Express (idempotent)
+        let currentOrder = null;
+        try {
+          const { data: rpcCur } = await supabase.rpc('get_order_by_reference', { p_order_ref: cleanRef });
+          currentOrder = rpcCur;
+        } catch (e) {}
+
+        if (!currentOrder) {
+          const { data: dbCur } = await supabase
+            .from('orders')
+            .select('*')
+            .eq('order_reference', cleanRef)
+            .maybeSingle();
+          currentOrder = dbCur;
+        }
+
+        // Idempotent inventory deduction check upon confirmed payment
+        if (currentOrder && !currentOrder.inventory_deducted && Array.isArray(currentOrder.items)) {
+          try {
+            await supabase.rpc('deduct_product_inventory', { p_items: currentOrder.items });
+            await supabase.from('orders').update({ inventory_deducted: true }).eq('order_reference', cleanRef);
+            currentOrder.inventory_deducted = true;
+          } catch (dedErr) {
+            console.warn('Verify-payment inventory deduction notice:', dedErr.message);
+          }
+        }
+
+        // Orders remain in Awaiting Shipment (TO_SHIP) stage until the admin
+        // arranges shipment (moves order to Awaiting Collection) in the seller dashboard.
         if (currentOrder) {
-          shipmentData = await bookShipmentWithShipmates(currentOrder);
+          shipmentData = {
+            trackingNumber: currentOrder.tracking_number || null,
+            courierName: currentOrder.courier_name || 'J&T Express',
+            waybillUrl: currentOrder.waybill_url || null,
+          };
         }
       } catch (dbErr) {
         console.warn('Could not update order or book shipment in Supabase:', dbErr.message);

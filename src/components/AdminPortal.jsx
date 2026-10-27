@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useTransition, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, ShoppingBag, Sliders, ArrowLeft, Search, Plus, X, Globe, Save, Trash2, LogOut, Upload, AlertTriangle, XCircle, Check, Edit, Star, Menu, ChevronLeft, ChevronRight, Loader2, LayoutDashboard, TrendingUp, Package, ShieldCheck, Users, CheckCircle2, DollarSign, Boxes, ArrowUpRight, Sparkles, RefreshCw, Bell, ExternalLink } from 'lucide-react';
+import { User, ShoppingBag, Sliders, ArrowLeft, Search, Plus, X, Globe, Save, Trash2, LogOut, Upload, AlertTriangle, XCircle, Check, Edit, Star, Menu, ChevronLeft, ChevronRight, Loader2, LayoutDashboard, TrendingUp, Package, ShieldCheck, Users, CheckCircle2, DollarSign, Boxes, ArrowUpRight, Sparkles, RefreshCw, Bell, ExternalLink, MessageSquare } from 'lucide-react';
 import { PRODUCTS } from '../data/products';
 import { supabaseAdmin as supabase } from '../lib/supabaseClient';
 import { invalidateProductsCache, saveCachedProducts, getCachedProducts } from '../lib/productCache';
@@ -13,6 +13,7 @@ import AdminProfileTab from './admin/AdminProfileTab';
 import AdminStaffTab from './admin/AdminStaffTab';
 import AdminCustomersTab from './admin/AdminCustomersTab';
 import AdminPromotionsTab from './admin/AdminPromotionsTab';
+import AdminChatTab from './admin/AdminChatTab';
 import AdminProductModal from './admin/AdminProductModal';
 import AdminBulkModal from './admin/AdminBulkModal';
 import { fetchSiteVisitorStats } from '../lib/visitorTracking';
@@ -107,17 +108,48 @@ export default function AdminPortal({
   const [authError, setAuthError] = useState(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
+  // Persistent Tab & Navigation states
+  const VALID_ADMIN_TABS = ['dashboard', 'products', 'orders', 'customers', 'promotions', 'reviews', 'customize', 'profile', 'staff', 'messages'];
+
+  const getInitialActiveTab = () => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const tabFromUrl = params.get('tab');
+      if (tabFromUrl && VALID_ADMIN_TABS.includes(tabFromUrl)) {
+        return tabFromUrl;
+      }
+      const savedTab = sessionStorage.getItem('aura_admin_active_tab');
+      if (savedTab && VALID_ADMIN_TABS.includes(savedTab)) {
+        return savedTab;
+      }
+    } catch (e) {
+      // ignore
+    }
+    return 'dashboard';
+  };
+
+  const getInitialSubfilter = () => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('subfilter') || sessionStorage.getItem('aura_admin_order_subfilter') || 'ALL';
+    } catch {
+      return 'ALL';
+    }
+  };
+
   // Dashboard states
-  const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard' | 'products' | 'orders' | 'reviews' | 'customize' | 'profile'
+  const [activeTab, setActiveTab] = useState(getInitialActiveTab); // 'dashboard' | 'products' | 'orders' | 'reviews' | 'customize' | 'profile' | 'customers' | 'promotions' | 'staff'
   const [isPendingTab, startTabTransition] = useTransition();
 
   // Orders Management & TikTok Shop Fulfillment Pipeline states
   const [ordersList, setOrdersList] = useState([]);
   const [isLoadingOrders, setIsLoadingOrders] = useState(false);
-  const [orderFilterTab, setOrderFilterTab] = useState('ALL');
+  const [orderFilterTab, setOrderFilterTab] = useState(getInitialSubfilter);
   const [orderCounts, setOrderCounts] = useState({
     total: 0,
     toShip: 0,
+    awaitingShipment: 0,
+    awaitingCollection: 0,
     shipped: 0,
     toDeliver: 0,
     delivered: 0,
@@ -134,7 +166,8 @@ export default function AdminPortal({
   const [visitorStats, setVisitorStats] = useState({ totalVisits: 0, todayVisits: 0 });
 
   // Granular page permissions state
-  const [permissions, setPermissions] = useState(['dashboard', 'products', 'orders', 'reviews', 'customize', 'profile']);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
+  const [permissions, setPermissions] = useState(['dashboard', 'products', 'orders', 'messages', 'reviews', 'customize', 'profile']);
 
   const hasPermission = useCallback((tabKey) => {
     if (adminRole === 'Super Admin') return true;
@@ -143,10 +176,45 @@ export default function AdminPortal({
     return permissions.includes(tabKey);
   }, [adminRole, permissions]);
 
+  // Sync active tab to sessionStorage and URL query parameter (without reloading)
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('aura_admin_active_tab', activeTab);
+      const url = new URL(window.location.href);
+      if (url.searchParams.get('tab') !== activeTab) {
+        url.searchParams.set('tab', activeTab);
+        window.history.replaceState({}, '', url.toString());
+      }
+    } catch (e) {}
+  }, [activeTab]);
+
+  // Handle browser back and forward navigation
+  useEffect(() => {
+    const handlePopState = () => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const tabFromUrl = params.get('tab');
+        if (tabFromUrl && VALID_ADMIN_TABS.includes(tabFromUrl) && hasPermission(tabFromUrl)) {
+          setActiveTab(tabFromUrl);
+        }
+      } catch (e) {}
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [hasPermission]);
+
   const handleTabChange = useCallback((tab) => {
     if (!hasPermission(tab)) {
       return;
     }
+    try {
+      sessionStorage.setItem('aura_admin_active_tab', tab);
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', tab);
+      window.history.replaceState({}, '', url.toString());
+    } catch (e) {}
+
     startTabTransition(() => {
       setActiveTab(tab);
     });
@@ -156,6 +224,17 @@ export default function AdminPortal({
     if (!hasPermission(tab)) {
       return;
     }
+    try {
+      sessionStorage.setItem('aura_admin_active_tab', tab);
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', tab);
+      if (subfilter) {
+        url.searchParams.set('subfilter', subfilter);
+        sessionStorage.setItem('aura_admin_order_subfilter', subfilter);
+      }
+      window.history.replaceState({}, '', url.toString());
+    } catch (e) {}
+
     if (subfilter) {
       setOrderFilterTab(subfilter);
     }
@@ -245,6 +324,96 @@ export default function AdminPortal({
   const [selectedProductIds, setSelectedProductIds] = useState([]);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [bulkSizeChart, setBulkSizeChart] = useState('');
+
+  // Notification Bell Center State
+  const [adminNotifications, setAdminNotifications] = useState(() => {
+    try {
+      const saved = localStorage.getItem('aura_admin_notifications');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+  const [isNotifDropdownOpen, setIsNotifDropdownOpen] = useState(false);
+  const notifDropdownRef = useRef(null);
+
+  const addNotification = (item) => {
+    const newNotif = {
+      id: item.id || `notif_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      title: item.title,
+      message: item.message,
+      type: item.type || 'order',
+      timestamp: new Date().toISOString(),
+      read: false,
+      orderReference: item.orderReference || null,
+      amount: item.amount || null,
+      customerName: item.customerName || null,
+    };
+    setAdminNotifications((prev) => {
+      const next = [newNotif, ...prev.slice(0, 49)];
+      try {
+        localStorage.setItem('aura_admin_notifications', JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+  };
+
+  const markAllNotificationsAsRead = () => {
+    setAdminNotifications((prev) => {
+      const next = prev.map((n) => ({ ...n, read: true }));
+      try {
+        localStorage.setItem('aura_admin_notifications', JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+  };
+
+  const clearAllNotifications = () => {
+    setAdminNotifications([]);
+    try {
+      localStorage.removeItem('aura_admin_notifications');
+    } catch (e) {}
+  };
+
+  const markNotificationAsRead = (id) => {
+    setAdminNotifications((prev) => {
+      const next = prev.map((n) => (n.id === id ? { ...n, read: true } : n));
+      try {
+        localStorage.setItem('aura_admin_notifications', JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+  };
+
+  const formatNotifTime = (isoString) => {
+    if (!isoString) return '';
+    try {
+      const diffMs = Date.now() - new Date(isoString).getTime();
+      const diffMins = Math.floor(diffMs / 60000);
+      if (diffMins < 1) return 'Just now';
+      if (diffMins < 60) return `${diffMins}m ago`;
+      const diffHours = Math.floor(diffMins / 60);
+      if (diffHours < 24) return `${diffHours}h ago`;
+      const diffDays = Math.floor(diffHours / 24);
+      return `${diffDays}d ago`;
+    } catch (e) {
+      return '';
+    }
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (notifDropdownRef.current && !notifDropdownRef.current.contains(event.target)) {
+        setIsNotifDropdownOpen(false);
+      }
+    };
+    if (isNotifDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isNotifDropdownOpen]);
 
   const triggerNotification = (type, title, message) => {
     setNotification({ type, title, message });
@@ -696,8 +865,12 @@ export default function AdminPortal({
             }
 
             const s = (o.status || 'PENDING').toUpperCase();
-            if (s === 'PENDING' || s === 'PROCESSING' || s === 'TO_SHIP') {
+            if (s === 'AWAITING_COLLECTION') {
               counts.toShip += 1;
+              counts.awaitingCollection = (counts.awaitingCollection || 0) + 1;
+            } else if (s === 'PENDING' || s === 'PROCESSING' || s === 'TO_SHIP' || s === 'AWAITING_SHIPMENT') {
+              counts.toShip += 1;
+              counts.awaitingShipment = (counts.awaitingShipment || 0) + 1;
             } else if (s === 'SHIPPED') {
               counts.shipped += 1;
             } else if (s === 'TO_DELIVER' || s === 'OUT_FOR_DELIVERY') {
@@ -778,6 +951,19 @@ export default function AdminPortal({
         console.warn('User profiles note:', uErr.message);
       }
 
+      // 7. Count unread customer service chat tickets
+      try {
+        const { data: ticketsData } = await supabase
+          .from('chat_tickets')
+          .select('unread_admin_count');
+        if (ticketsData) {
+          const unreadSum = ticketsData.reduce((acc, t) => acc + (t.unread_admin_count || 0), 0);
+          setUnreadChatCount(unreadSum);
+        }
+      } catch (cErr) {
+        console.debug('Chat tickets count note:', cErr?.message);
+      }
+
       setDashboardStats({
         totalSales,
         paidOrdersCount,
@@ -805,6 +991,8 @@ export default function AdminPortal({
     const counts = {
       total: updatedOrders.length,
       toShip: 0,
+      awaitingShipment: 0,
+      awaitingCollection: 0,
       shipped: 0,
       toDeliver: 0,
       delivered: 0,
@@ -814,8 +1002,12 @@ export default function AdminPortal({
     };
     updatedOrders.forEach(o => {
       const s = (o.status || 'PENDING').toUpperCase();
-      if (s === 'PENDING' || s === 'PROCESSING' || s === 'TO_SHIP') {
+      if (s === 'AWAITING_COLLECTION') {
         counts.toShip += 1;
+        counts.awaitingCollection += 1;
+      } else if (s === 'PENDING' || s === 'PROCESSING' || s === 'TO_SHIP' || s === 'AWAITING_SHIPMENT') {
+        counts.toShip += 1;
+        counts.awaitingShipment += 1;
       } else if (s === 'SHIPPED') {
         counts.shipped += 1;
       } else if (s === 'TO_DELIVER' || s === 'OUT_FOR_DELIVERY') {
@@ -833,7 +1025,7 @@ export default function AdminPortal({
     setOrderCounts(counts);
   };
 
-  const handleUpdateOrderStatus = async (orderId, newStatus, modifierInfo = null) => {
+  const handleUpdateOrderStatus = async (orderId, newStatus, modifierInfo = null, additionalFields = {}) => {
     try {
       const existingOrder = ordersList.find(o => o.id === orderId);
       const modifier = modifierInfo || {
@@ -847,14 +1039,42 @@ export default function AdminPortal({
       const existingAudit = Array.isArray(existingOrder?.audit_trail) ? existingOrder.audit_trail : [];
       const updatedAudit = [modifier, ...existingAudit].slice(0, 50);
 
+      // Automatic inventory sync upon cancellation / restoration
+      let newInventoryDeducted = existingOrder?.inventory_deducted;
+      if (newStatus === 'CANCELLED' && existingOrder?.status !== 'CANCELLED') {
+        if (existingOrder?.items && Array.isArray(existingOrder.items) && existingOrder.inventory_deducted !== false) {
+          try {
+            await supabase.rpc('restore_product_inventory', { p_items: existingOrder.items });
+            newInventoryDeducted = false;
+          } catch (rErr) {
+            console.warn('Notice: Could not restore inventory via RPC:', rErr.message);
+          }
+        }
+      } else if (existingOrder?.status === 'CANCELLED' && newStatus !== 'CANCELLED') {
+        if (existingOrder?.items && Array.isArray(existingOrder.items) && !existingOrder.inventory_deducted) {
+          try {
+            await supabase.rpc('deduct_product_inventory', { p_items: existingOrder.items });
+            newInventoryDeducted = true;
+          } catch (dErr) {
+            console.warn('Notice: Could not deduct inventory via RPC:', dErr.message);
+          }
+        }
+      }
+
+      const updatePayload = {
+        status: newStatus,
+        last_touched_by: modifier,
+        audit_trail: updatedAudit,
+        updated_at: new Date().toISOString(),
+        ...(additionalFields || {})
+      };
+      if (newInventoryDeducted !== undefined) {
+        updatePayload.inventory_deducted = newInventoryDeducted;
+      }
+
       const { error } = await supabase
         .from('orders')
-        .update({
-          status: newStatus,
-          last_touched_by: modifier,
-          audit_trail: updatedAudit,
-          updated_at: new Date().toISOString()
-        })
+        .update(updatePayload)
         .eq('id', orderId);
 
       if (error) throw error;
@@ -862,7 +1082,9 @@ export default function AdminPortal({
       setOrdersList(prev => {
         const next = prev.map(o => o.id === orderId ? {
           ...o,
+          ...updatePayload,
           status: newStatus,
+          inventory_deducted: newInventoryDeducted !== undefined ? newInventoryDeducted : o.inventory_deducted,
           last_touched_by: modifier,
           audit_trail: updatedAudit
         } : o);
@@ -1060,6 +1282,79 @@ export default function AdminPortal({
     }
   }, [activeTab]);
 
+  // Real-time synchronization for Orders and Products in Admin Portal
+  useEffect(() => {
+    if (!session?.user?.id || !isAdmin) return;
+
+    const channel = supabase
+      .channel('admin:realtime:portal')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'orders' },
+        (payload) => {
+          if (payload.eventType === 'INSERT' && payload.new) {
+            setOrdersList((prev) => {
+              if (prev.some((o) => o.id === payload.new.id)) return prev;
+              const next = [payload.new, ...prev];
+              recalculateOrderCounts(next);
+              return next;
+            });
+            // Push directly to Notification Bell instead of blocking modal popup
+            const ref = payload.new.order_reference || (payload.new.id ? payload.new.id.slice(0, 8) : 'NEW');
+            const customer = payload.new.customer_name || 'Customer';
+            const amount = payload.new.total_amount ? `₱${Number(payload.new.total_amount).toLocaleString()}` : '';
+            addNotification({
+              type: 'order',
+              title: `New Order #${ref}`,
+              message: `${customer} placed an order${amount ? ` for ${amount}` : ''} (${payload.new.payment_method || 'COD'}).`,
+              orderReference: payload.new.order_reference,
+              amount: payload.new.total_amount,
+              customerName: payload.new.customer_name,
+            });
+          } else if (payload.eventType === 'UPDATE' && payload.new) {
+            setOrdersList((prev) => {
+              const next = prev.map((o) => (o.id === payload.new.id ? { ...o, ...payload.new } : o));
+              recalculateOrderCounts(next);
+              return next;
+            });
+          } else if (payload.eventType === 'DELETE' && payload.old) {
+            setOrdersList((prev) => {
+              const next = prev.filter((o) => o.id !== payload.old.id);
+              recalculateOrderCounts(next);
+              return next;
+            });
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'products' },
+        (payload) => {
+          if (payload.eventType === 'UPDATE' && payload.new) {
+            setProductList((prev) =>
+              prev.map((p) => (p.id === payload.new.id ? { ...p, ...payload.new } : p))
+            );
+            fetchDashboardStats();
+          } else if (payload.eventType === 'INSERT' || payload.eventType === 'DELETE') {
+            fetchDashboardStats();
+            fetchProductsPage(currentPageRef.current || 1, searchQueryRef.current || '', categoryFilterRef.current || 'all');
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'chat_tickets' },
+        () => {
+          fetchDashboardStats();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [session?.user?.id, isAdmin]);
+
   // Handle Search and Filter changes with debouncing (resets to page 1, skips first mount)
   useEffect(() => {
     if (isInitialFilterMount.current) {
@@ -1161,26 +1456,32 @@ export default function AdminPortal({
       descriptionLabel: newProduct.descriptionLabel || 'Description',
       description: newProduct.description,
       shopeeLink: newProduct.shopeeLink || 'https://shopee.ph',
-      rating: Number(newProduct.rating) || 5.0,
-      solds: Number(newProduct.solds) || 0,
+      rating: editingProductId ? (Number(newProduct.rating) || 5.0) : 5.0,
+      solds: editingProductId ? (Number(newProduct.solds) || 0) : 0,
       statusBadge: newProduct.statusBadge || null
     };
 
     try {
       if (editingProductId) {
         // Edit mode (Update)
+        const existingProd = productList.find(p => p.id === editingProductId) || {};
+        const updatePayload = {
+          ...productObj,
+          rating: Number(existingProd.rating) || 5.0,
+          solds: Number(existingProd.solds) || 0,
+        };
+
         const { error } = await supabase
           .from('products')
-          .update(productObj)
+          .update(updatePayload)
           .eq('id', editingProductId);
 
         if (error) throw error;
 
-        const existingProd = productList.find(p => p.id === editingProductId) || {};
         const updatedObj = {
-          ...productObj,
+          ...updatePayload,
           id: editingProductId,
-          reviewsCount: existingProd.reviewsCount || 15,
+          reviewsCount: existingProd.reviewsCount || 0,
           isNew: existingProd.isNew ?? true,
           isFeatured: existingProd.isFeatured ?? false
         };
@@ -1192,7 +1493,9 @@ export default function AdminPortal({
         const newProductObj = {
           ...productObj,
           id: randomId,
-          reviewsCount: Math.floor(Math.random() * 50) + 10,
+          rating: 5.0,
+          solds: 0,
+          reviewsCount: 0,
           isNew: true
         };
 
@@ -1686,16 +1989,146 @@ export default function AdminPortal({
 
         {/* Right Actions: Storefront Link, Orders notification, Admin Profile */}
         <div className="flex items-center gap-2 sm:gap-3">
-          <button
-            onClick={() => handleTabChange('orders')}
-            className="relative p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors"
-            title="Orders & Notifications"
-          >
-            <Bell className="w-4 h-4" />
-            {orderCounts.toShip > 0 && (
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-white" />
-            )}
-          </button>
+          {/* Interactive Notification Bell Dropdown */}
+          <div className="relative" ref={notifDropdownRef}>
+            <button
+              id="admin-notification-bell-btn"
+              type="button"
+              onClick={() => setIsNotifDropdownOpen((prev) => !prev)}
+              className={`relative p-2 rounded-xl transition-all cursor-pointer ${
+                isNotifDropdownOpen
+                  ? 'bg-blue-50 text-blue-600'
+                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
+              }`}
+              title="Notifications"
+              aria-label="View notifications"
+            >
+              <Bell className="w-4 h-4" />
+              {adminNotifications.filter((n) => !n.read).length > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 ring-2 ring-white shadow-xs animate-pulse">
+                  {adminNotifications.filter((n) => !n.read).length > 99
+                    ? '99+'
+                    : adminNotifications.filter((n) => !n.read).length}
+                </span>
+              )}
+            </button>
+
+            <AnimatePresence>
+              {isNotifDropdownOpen && (
+                <motion.div
+                  id="admin-notification-dropdown"
+                  initial={{ opacity: 0, scale: 0.95, y: 8 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: 8 }}
+                  transition={{ duration: 0.18, ease: 'easeOut' }}
+                  className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-2xl border border-slate-200/90 z-50 overflow-hidden font-sans"
+                >
+                  {/* Dropdown Header */}
+                  <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-slate-800 tracking-wide uppercase">
+                        Notifications
+                      </span>
+                      {adminNotifications.filter((n) => !n.read).length > 0 && (
+                        <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                          {adminNotifications.filter((n) => !n.read).length} new
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {adminNotifications.some((n) => !n.read) && (
+                        <button
+                          type="button"
+                          onClick={markAllNotificationsAsRead}
+                          className="text-[11px] text-blue-600 hover:text-blue-800 font-semibold cursor-pointer"
+                        >
+                          Mark all read
+                        </button>
+                      )}
+                      {adminNotifications.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={clearAllNotifications}
+                          className="text-[11px] text-slate-400 hover:text-slate-600 font-medium cursor-pointer"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Notification List */}
+                  <div className="max-h-[360px] overflow-y-auto divide-y divide-slate-100">
+                    {adminNotifications.length === 0 ? (
+                      <div className="py-10 text-center px-4">
+                        <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-2">
+                          <Bell className="w-5 h-5 text-slate-400" />
+                        </div>
+                        <p className="text-xs font-semibold text-slate-700">All caught up!</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          New customer purchases and order updates will appear here.
+                        </p>
+                      </div>
+                    ) : (
+                      adminNotifications.map((notif) => (
+                        <div
+                          key={notif.id}
+                          onClick={() => {
+                            markNotificationAsRead(notif.id);
+                            setIsNotifDropdownOpen(false);
+                            handleTabChange('orders');
+                          }}
+                          className={`p-3.5 flex items-start gap-3 hover:bg-slate-50 transition-colors cursor-pointer text-left relative ${
+                            !notif.read ? 'bg-blue-50/40' : ''
+                          }`}
+                        >
+                          <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                            notif.type === 'order'
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : notif.type === 'stock'
+                              ? 'bg-amber-100 text-amber-700'
+                              : 'bg-blue-100 text-blue-700'
+                          }`}>
+                            <ShoppingBag className="w-4 h-4" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-1 mb-0.5">
+                              <p className="text-xs font-bold text-slate-900 truncate">
+                                {notif.title}
+                              </p>
+                              <span className="text-[10px] text-slate-400 flex-shrink-0 font-medium">
+                                {formatNotifTime(notif.timestamp)}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-600 leading-snug line-clamp-2">
+                              {notif.message}
+                            </p>
+                          </div>
+                          {!notif.read && (
+                            <span className="w-2 h-2 rounded-full bg-blue-600 flex-shrink-0 mt-2" />
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Footer Action */}
+                  <div className="p-2 border-t border-slate-100 bg-slate-50 text-center">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsNotifDropdownOpen(false);
+                        handleTabChange('orders');
+                      }}
+                      className="w-full py-2 text-xs font-semibold text-slate-700 hover:text-blue-600 transition-colors cursor-pointer"
+                    >
+                      View All Orders &rarr;
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
 
           <button
             onClick={() => window.open('/', '_blank')}
@@ -1881,6 +2314,25 @@ export default function AdminPortal({
                                 </span>
                               ) : (
                                 activeTab === 'reviews' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />
+                              )}
+                            </button>
+                          )}
+
+                          {hasPermission('messages') && (
+                            <button
+                              onClick={() => { handleTabChange('messages'); setIsMobileDrawerOpen(false); }}
+                              className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'messages' ? 'bg-blue-600 text-white font-semibold' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <MessageSquare className="w-4 h-4" />
+                                <span>Live Chat Support</span>
+                              </div>
+                              {unreadChatCount > 0 ? (
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 bg-rose-500 text-white rounded-md animate-pulse">
+                                  {unreadChatCount} new
+                                </span>
+                              ) : (
+                                activeTab === 'messages' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />
                               )}
                             </button>
                           )}
@@ -2108,6 +2560,26 @@ export default function AdminPortal({
                         )}
                       </button>
                     )}
+
+                    {hasPermission('messages') && (
+                      <button
+                        onClick={() => handleTabChange('messages')}
+                        className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'messages' ? 'bg-blue-600 text-white font-semibold shadow-xs shadow-blue-600/30' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                        title="Customer Live Chat & Automated Inquiries"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <MessageSquare className="w-4 h-4 opacity-90" />
+                          <span>Live Chat Support</span>
+                        </div>
+                        {unreadChatCount > 0 ? (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 bg-rose-500 text-white rounded-md animate-pulse">
+                            {unreadChatCount} new
+                          </span>
+                        ) : (
+                          activeTab === 'messages' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />
+                        )}
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
@@ -2298,6 +2770,16 @@ export default function AdminPortal({
             userEmail={session?.user?.email}
             onAvatarUpload={handleAvatarUpload}
             onUpdateProfile={handleUpdateProfile}
+          />
+        )}
+
+        {activeTab === 'messages' && hasPermission('messages') && (
+          <AdminChatTab
+            currentAdmin={{
+              name: profile.name || session?.user?.email?.split('@')[0] || 'Administrator',
+              email: session?.user?.email || '',
+              role: adminRole,
+            }}
           />
         )}
 

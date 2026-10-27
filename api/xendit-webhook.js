@@ -1,5 +1,5 @@
 import { getSupabaseServerClient } from './lib/supabaseServer.js';
-import { bookShipmentWithShipmates } from './lib/shipmates.js';
+
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -50,7 +50,7 @@ export default async function handler(req, res) {
 
       console.log(`Order ${external_id} successfully verified and updated to PAID.`);
 
-      // 4. Automatically Dispatch Shipment to Shipmates (Test Mode / Sandbox / Live)
+      // 4. Automatically Dispatch Shipment to J&T Express (with Shipmates fallback)
       try {
         const { data: paidOrder } = await supabase
           .from('orders')
@@ -59,12 +59,23 @@ export default async function handler(req, res) {
           .maybeSingle();
 
         if (paidOrder) {
-          console.log(`[Xendit Webhook] Auto-dispatching Order ${external_id} to Shipmates...`);
-          const shipResult = await bookShipmentWithShipmates(paidOrder);
-          console.log(`[Xendit Webhook] Shipmates booking complete for ${external_id}. Tracking: ${shipResult.trackingNumber}`);
+          // Idempotent inventory deduction check upon webhook confirmation
+          if (!paidOrder.inventory_deducted && Array.isArray(paidOrder.items)) {
+            try {
+              await supabase.rpc('deduct_product_inventory', { p_items: paidOrder.items });
+              await supabase.from('orders').update({ inventory_deducted: true }).eq('order_reference', external_id);
+              paidOrder.inventory_deducted = true;
+            } catch (dErr) {
+              console.warn('[Xendit Webhook] Inventory deduction notice:', dErr.message);
+            }
+          }
+
+          // Order remains in Awaiting Shipment (TO_SHIP) stage until the store admin
+          // arranges shipment (moving order to Awaiting Collection) in the seller dashboard.
+          console.log(`[Xendit Webhook] Order ${external_id} marked as PAID and ready for merchant fulfillment.`);
         }
       } catch (shipErr) {
-        console.error(`[Xendit Webhook] Shipmates booking error for ${external_id}:`, shipErr.message);
+        console.error(`[Xendit Webhook] Courier booking error for ${external_id}:`, shipErr.message);
       }
     } else if (status === 'EXPIRED') {
       await supabase

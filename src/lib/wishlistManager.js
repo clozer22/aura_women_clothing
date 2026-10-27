@@ -116,6 +116,9 @@ export function getWishlist() {
  * Add an item to the active cart (and Supabase if authenticated)
  */
 export async function addToWishlist(product, selectedSize = 'Standard', selectedColor = 'Standard') {
+  if (!product) return false;
+
+
   const cleanColor =
     typeof selectedColor === 'object' && selectedColor !== null
       ? selectedColor.name || 'Standard'
@@ -137,6 +140,8 @@ export async function addToWishlist(product, selectedSize = 'Standard', selected
     updated[existingIndex] = {
       ...updated[existingIndex],
       quantity: targetQuantity,
+      statusBadge: product.statusBadge || updated[existingIndex].statusBadge,
+      qty: product.qty !== undefined && product.qty !== null ? Number(product.qty) : updated[existingIndex].qty,
     };
   } else {
     const newItem = {
@@ -149,6 +154,8 @@ export async function addToWishlist(product, selectedSize = 'Standard', selected
       color: cleanColor,
       quantity: 1,
       category: product.category || product.mainCategory || 'Clothing',
+      statusBadge: product.statusBadge || 'IN_STOCK',
+      qty: product.qty !== undefined && product.qty !== null ? Number(product.qty) : null,
       addedAt: new Date().toISOString(),
     };
     updated = [newItem, ...currentItems];
