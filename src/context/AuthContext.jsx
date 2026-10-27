@@ -154,10 +154,10 @@ export function AuthProvider({ children }) {
 
   // Sign In with Google OAuth
   const signInWithGoogle = async () => {
-    const origin =
-      typeof window !== 'undefined' && window.location.origin && window.location.origin !== 'null'
-        ? window.location.origin
-        : 'https://aura-women-clothing-mzaa2w9w2-clozer22s-projects.vercel.app';
+    let origin = 'https://www.aurashophere.com';
+    if (typeof window !== 'undefined' && window.location.origin && window.location.origin !== 'null') {
+      origin = window.location.origin.replace(/\/+$/, '');
+    }
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
