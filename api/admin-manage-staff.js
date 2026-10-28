@@ -134,9 +134,33 @@ export default async function handler(req, res) {
             ? permissions
             : ['dashboard', 'orders']);
 
-      let createdUserId = null;
+      // 1. Primary: Use database RPC to atomically provision user & profile
+      try {
+        const { data: rpcProfile, error: rpcErr } = await supabase.rpc('admin_create_staff_user', {
+          new_email: cleanEmail,
+          new_password: password,
+          new_name: name || (cleanEmail.split('@')[0]),
+          new_role: assignedRole,
+          new_role_title: role_title || (assignedRole === 'Super Admin' ? 'Super Administrator' : 'Staff Specialist'),
+          new_permissions: defaultPermissions,
+        });
 
-      // If Service Role Key is configured, use admin auth API (instant confirmation)
+        if (!rpcErr && rpcProfile) {
+          return res.status(200).json({
+            success: true,
+            message: `Account for ${cleanEmail} created successfully.`,
+            staff: rpcProfile,
+          });
+        }
+
+        if (rpcErr && !rpcErr.message.includes('function') && !rpcErr.message.includes('not found')) {
+          return res.status(400).json({ error: rpcErr.message });
+        }
+      } catch (rpcEx) {
+        console.warn('RPC create notice:', rpcEx.message);
+      }
+
+      // 2. Fallback: If serviceRoleKey is present, use admin auth API
       if (serviceRoleKey) {
         const { data: authData, error: authErr } = await supabase.auth.admin.createUser({
           email: cleanEmail,
@@ -151,67 +175,37 @@ export default async function handler(req, res) {
         if (authErr) {
           return res.status(400).json({ error: authErr.message });
         }
-        createdUserId = authData?.user?.id;
-      } else {
-        // Fallback with non-persisted client
-        const nonPersistedClient = getSupabaseServerClient(anonKey);
-        if (!nonPersistedClient) {
-          return res.status(500).json({ error: 'Supabase client failed to initialize' });
-        }
 
-        const { data: signUpData, error: signUpErr } = await nonPersistedClient.auth.signUp({
+        const profilePayload = {
+          id: authData?.user?.id,
           email: cleanEmail,
-          password: password,
-          options: {
-            data: {
-              full_name: name || 'Staff Member',
-              role: assignedRole,
-            },
-          },
+          name: name || (cleanEmail.split('@')[0]),
+          role: assignedRole,
+          role_title: role_title || (assignedRole === 'Super Admin' ? 'Super Administrator' : 'Staff Specialist'),
+          permissions: defaultPermissions,
+          is_active: true,
+          updated_at: new Date().toISOString(),
+        };
+
+        const { data: newProfile, error: profErr } = await supabase
+          .from('admin_profiles')
+          .upsert(profilePayload, { onConflict: 'email' })
+          .select()
+          .single();
+
+        if (profErr) {
+          return res.status(400).json({ error: `Staff created, but profile update failed: ${profErr.message}` });
+        }
+
+        return res.status(200).json({
+          success: true,
+          message: `Account for ${cleanEmail} created successfully.`,
+          staff: newProfile || profilePayload,
         });
-
-        if (signUpErr) {
-          return res.status(400).json({ error: signUpErr.message });
-        }
-
-        // Supabase returns empty identities array if user already registered
-        if (signUpData?.user?.identities && signUpData.user.identities.length === 0) {
-          return res.status(400).json({ error: `A staff account for ${cleanEmail} is already registered.` });
-        }
-
-        createdUserId = signUpData?.user?.id;
       }
 
-      // Upsert into admin_profiles
-      const profilePayload = {
-        email: cleanEmail,
-        name: name || (cleanEmail.split('@')[0]),
-        role: assignedRole,
-        role_title: role_title || (assignedRole === 'Super Admin' ? 'Super Administrator' : 'Staff Specialist'),
-        permissions: defaultPermissions,
-        is_active: true,
-        updated_at: new Date().toISOString(),
-      };
-
-      if (createdUserId) {
-        profilePayload.id = createdUserId;
-      }
-
-      const { data: newProfile, error: profErr } = await supabase
-        .from('admin_profiles')
-        .upsert(profilePayload, { onConflict: 'email' })
-        .select()
-        .single();
-
-      if (profErr) {
-        console.error('Profile upsert failed:', profErr.message);
-        return res.status(400).json({ error: `Staff created, but profile update failed: ${profErr.message}` });
-      }
-
-      return res.status(200).json({
-        success: true,
-        message: `Account for ${cleanEmail} created successfully.`,
-        staff: newProfile || profilePayload,
+      return res.status(400).json({
+        error: 'Unable to provision staff account. Please verify database connectivity.',
       });
     }
 
