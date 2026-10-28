@@ -236,7 +236,7 @@ export default function LegalModal({ isOpen, initialTab = 'privacy', onClose }) 
                       Republic Act No. 7394 • Consumer Act of the Philippines & DTI Guidelines
                     </span>
                     <h3 className="font-editorial text-2xl text-[#2C1E1B]">Return, Refund & Exchange Policy</h3>
-                    <p className="text-[11px] text-[#705B56] mt-1">Comprehensive 7-day buyer protection policy</p>
+                    <p className="text-[11px] text-[#705B56] mt-1">Comprehensive 7-day buyer protection & reverse logistics policy</p>
                   </div>
 
                   <section className="space-y-2">
@@ -250,30 +250,37 @@ export default function LegalModal({ isOpen, initialTab = 'privacy', onClose }) 
                     <h4 className="font-bold text-sm text-[#2C1E1B]">2. Eligibility Standards for Garment Return</h4>
                     <p className="text-[#705B56]">To qualify for an exchange or refund:</p>
                     <ul className="list-disc pl-5 space-y-1 text-[#705B56]">
-                      <li>The garment must be in its original atelier condition: unwashed, unworn, and free of stains, cosmetics, perfume, or alterations.</li>
+                      <li>The garment must be in its original atelier condition: unwashed, unworn, and free of stains, cosmetics, perfume, odors, or alterations.</li>
                       <li>Original brand tags, size markers, and luxury polybags must be attached intact.</li>
-                      <li>Proof of purchase (Order Reference number and delivery receipt) must be provided.</li>
+                      <li>Proof of purchase (Order Reference number and courier delivery receipt / waybill) must be provided.</li>
                     </ul>
                   </section>
 
                   <section className="space-y-2">
-                    <h4 className="font-bold text-sm text-[#2C1E1B]">3. Defective or Incorrect Item Replacement (100% Covered)</h4>
+                    <h4 className="font-bold text-sm text-[#2C1E1B]">3. Defective or Incorrect Item Replacement (100% Brand Covered)</h4>
                     <p className="text-[#705B56]">
-                      If you receive a defective garment, damaged stitching, or an incorrect size/item dispatched by our warehouse, Aura will shoulder <strong>100% of the reverse pickup and replacement shipping costs</strong>. We will arrange courier pickup from your doorstep and dispatch the replacement immediately.
+                      If you receive a defective garment, damaged stitching, or an incorrect item/size dispatched by our atelier, Aura shoulders <strong>100% of reverse pickup and replacement transit fees</strong>. We arrange an automated doorstep pickup via J&T Express or provide a prepaid drop-off barcode for any of 2,000+ J&T branches nationwide, and dispatch your replacement immediately upon transit scan.
                     </p>
                   </section>
 
                   <section className="space-y-2">
                     <h4 className="font-bold text-sm text-[#2C1E1B]">4. Size Exchange (Fit Guarantee)</h4>
                     <p className="text-[#705B56]">
-                      If the garment does not fit as desired, we gladly accommodate size exchanges subject to inventory availability. Customers only shoulder standard courier logistics fees for change-of-mind size swaps.
+                      If a garment does not fit as desired, we gladly accommodate size swaps subject to atelier inventory. Customers only shoulder standard J&T Express courier logistics rates for change-of-mind size swaps, with convenient branch drop-off or rider pickup options available nationwide.
                     </p>
                   </section>
 
                   <section className="space-y-2">
-                    <h4 className="font-bold text-sm text-[#2C1E1B]">5. Refund Processing Timelines</h4>
+                    <h4 className="font-bold text-sm text-[#2C1E1B]">5. Reverse Logistics & Refund Turnaround</h4>
                     <p className="text-[#705B56]">
-                      Once your return parcel arrives at our atelier and passes physical inspection, refunds are processed within <strong>3 to 5 business days</strong> directly back to your original payment channel (GCash, Maya, Bank Transfer, or store credit voucher).
+                      Once your return parcel arrives at our atelier via J&T Express and passes quality inspection (within 24–48 hours), refunds are issued within <strong>3 to 5 business days</strong> directly to your original payment channel (GCash, Maya, Bank Transfer via Xendit) or as a store credit voucher.
+                    </p>
+                  </section>
+
+                  <section className="space-y-2">
+                    <h4 className="font-bold text-sm text-[#2C1E1B]">6. Hygiene & Non-Returnable Items</h4>
+                    <p className="text-[#705B56]">
+                      In accordance with Department of Trade and Industry (DTI) sanitation protocols, items that have been washed, worn, altered, or marked with cosmetics or fragrances cannot be accepted for refund or restocked.
                     </p>
                   </section>
                 </div>
@@ -284,33 +291,33 @@ export default function LegalModal({ isOpen, initialTab = 'privacy', onClose }) 
                 <div className="space-y-5">
                   <div className="border-b border-[#E8DCD7] pb-3">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-[#B86B60] block mb-1">
-                      Nationwide Delivery Standards
+                      Nationwide Delivery Standards • Integrated with J&T Express Philippines
                     </span>
                     <h3 className="font-editorial text-2xl text-[#2C1E1B]">Shipping & Logistics Terms</h3>
-                    <p className="text-[11px] text-[#705B56] mt-1">Doorstep parcel delivery across Luzon, Visayas, and Mindanao</p>
+                    <p className="text-[11px] text-[#705B56] mt-1">365-day doorstep parcel delivery across Luzon, Visayas, and Mindanao</p>
                   </div>
 
                   <section className="space-y-2">
                     <h4 className="font-bold text-sm text-[#2C1E1B]">1. Processing & Atelier Dispatch</h4>
                     <p className="text-[#705B56]">
-                      Orders placed before 2:00 PM PHT (Monday through Friday) are prepared, steam-pressed, and handed over to our courier partner within <strong>24 to 48 hours</strong>. Orders placed on Sundays or official Philippine public holidays are processed the next business day.
+                      Orders placed before 2:00 PM PHT (Monday through Friday) are prepared, steam-pressed, and handed over to our official logistics partner, <strong>J&T Express Philippines</strong>, within <strong>24 to 48 hours</strong>. J&T Express operates and transports parcels <strong>365 days a year</strong>, including weekends and public holidays.
                     </p>
                   </section>
 
                   <section className="space-y-2">
-                    <h4 className="font-bold text-sm text-[#2C1E1B]">2. Estimated Transit Timelines</h4>
+                    <h4 className="font-bold text-sm text-[#2C1E1B]">2. Estimated Transit Timelines (J&T Domestic Network)</h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                       <div className="p-3 bg-[#FAF5F2] border border-[#E8DCD7]">
-                        <p className="font-bold text-xs text-[#2C1E1B]">Metro Manila</p>
-                        <p className="text-[11px] text-[#705B56]">1 to 3 business days</p>
+                        <p className="font-bold text-xs text-[#2C1E1B]">Metro Manila (NCR)</p>
+                        <p className="text-[11px] text-[#705B56]">1 to 2 business days</p>
                       </div>
                       <div className="p-3 bg-[#FAF5F2] border border-[#E8DCD7]">
-                        <p className="font-bold text-xs text-[#2C1E1B]">Greater Manila (Cavite/Laguna/Rizal/Bulacan)</p>
-                        <p className="text-[11px] text-[#705B56]">2 to 4 business days</p>
+                        <p className="font-bold text-xs text-[#2C1E1B]">Greater Manila (Cavite / Laguna / Rizal / Bulacan)</p>
+                        <p className="text-[11px] text-[#705B56]">2 to 3 business days</p>
                       </div>
                       <div className="p-3 bg-[#FAF5F2] border border-[#E8DCD7]">
                         <p className="font-bold text-xs text-[#2C1E1B]">Provincial Luzon</p>
-                        <p className="text-[11px] text-[#705B56]">3 to 5 business days</p>
+                        <p className="text-[11px] text-[#705B56]">2 to 4 business days</p>
                       </div>
                       <div className="p-3 bg-[#FAF5F2] border border-[#E8DCD7]">
                         <p className="font-bold text-xs text-[#2C1E1B]">Visayas & Mindanao</p>
@@ -320,16 +327,23 @@ export default function LegalModal({ isOpen, initialTab = 'privacy', onClose }) 
                   </section>
 
                   <section className="space-y-2">
-                    <h4 className="font-bold text-sm text-[#2C1E1B]">3. Real-Time Parcel Tracking</h4>
+                    <h4 className="font-bold text-sm text-[#2C1E1B]">3. Real-Time J&T Waybill Tracking</h4>
                     <p className="text-[#705B56]">
-                      As soon as your parcel is scanned into the courier logistics hub, you will receive an active tracking code. You can monitor delivery progress directly from your <strong>Order History</strong> or through the courier portal (J&T Express / LBC).
+                      As soon as your parcel is scanned by the J&T courier rider, an official 12-digit Air Waybill (AWB) number is generated. You can monitor live milestone checkpoints directly through your <strong>Order History</strong> or on the official <a href="https://www.jtexpress.ph/trajectoryQuery" target="_blank" rel="noopener noreferrer" className="underline hover:text-[#B86B60] font-semibold">J&T Express Philippines Tracking Portal</a>.
                     </p>
                   </section>
 
                   <section className="space-y-2">
-                    <h4 className="font-bold text-sm text-[#2C1E1B]">4. Lost or Damaged Parcel Protocol</h4>
+                    <h4 className="font-bold text-sm text-[#2C1E1B]">4. Doorstep Delivery Attempts & Redelivery Protocol</h4>
                     <p className="text-[#705B56]">
-                      All outbound packages are covered by logistics transit insurance. If a parcel is deemed lost by the courier, Aura will immediately send a replacement at no additional charge or issue a 100% full refund.
+                      J&T delivery riders make up to <strong>2 to 3 delivery attempts</strong> to your designated address and will contact you via mobile call/SMS prior to arrival. If you are temporarily unavailable, redelivery will automatically be attempted on the following business day. If delivery cannot be completed after 3 attempts, the parcel will be safely routed back to the atelier (Return to Sender).
+                    </p>
+                  </section>
+
+                  <section className="space-y-2">
+                    <h4 className="font-bold text-sm text-[#2C1E1B]">5. Transit Insurance & Lost / Damaged Parcel Protocol</h4>
+                    <p className="text-[#705B56]">
+                      All outbound packages are protected under declared-value transit insurance. In the rare event that a package is confirmed lost or damaged in transit by J&T Express, Aura will immediately dispatch an expedited replacement at no additional charge or issue a <strong>100% full refund</strong>.
                     </p>
                   </section>
                 </div>
