@@ -12,9 +12,10 @@ class ServerWebSocketTransport {}
 /**
  * Creates a server-side Supabase client safe for Node.js < 22 runtimes
  * @param {string|null} customKey Optional override key (e.g. Service Role or Anon key)
+ * @param {Object} [customHeaders={}] Optional custom headers (e.g. Authorization bearer token)
  * @returns {import('@supabase/supabase-js').SupabaseClient|null}
  */
-export function getSupabaseServerClient(customKey = null) {
+export function getSupabaseServerClient(customKey = null, customHeaders = {}) {
   ensureServerEnv();
   const supabaseUrl =
     process.env.VITE_SUPABASE_URL ||
@@ -32,6 +33,9 @@ export function getSupabaseServerClient(customKey = null) {
   }
 
   return createClient(supabaseUrl, supabaseKey, {
+    global: {
+      headers: customHeaders || {},
+    },
     auth: {
       persistSession: false,
       autoRefreshToken: false,

@@ -1,3 +1,4 @@
+import { createClient } from '@supabase/supabase-js';
 import { getSupabaseServerClient } from './_lib/supabaseServer.js';
 
 export default async function handler(req, res) {
@@ -23,18 +24,23 @@ export default async function handler(req, res) {
     const anonKey =
       process.env.VITE_SUPABASE_ANON_KEY ||
       process.env.SUPABASE_ANON_KEY;
+    const supabaseUrl =
+      process.env.VITE_SUPABASE_URL ||
+      process.env.SUPABASE_URL ||
+      'https://pcmlleeuxbymomjxhwlv.supabase.co';
 
-    const supabase = getSupabaseServerClient(serviceRoleKey || anonKey);
+    // Administrative Authentication Verification
+    const authHeader = req.headers.authorization || req.headers.Authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+    const callerHeaders = token ? { Authorization: `Bearer ${token}` } : {};
+
+    const supabase = getSupabaseServerClient(serviceRoleKey || anonKey, callerHeaders);
     if (!supabase) {
       return res.status(500).json({ error: 'Supabase configuration missing' });
     }
 
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
     const action = body.action || req.query?.action || 'list';
-
-    // Administrative Authentication Verification
-    const authHeader = req.headers.authorization || req.headers.Authorization || '';
-    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
 
     let callerUser = null;
     let callerEmail = '';
@@ -131,12 +137,10 @@ export default async function handler(req, res) {
         createdUserId = authData?.user?.id;
       } else {
         // Fallback with non-persisted client
-        const nonPersistedClient = createClient(supabaseUrl, anonKey, {
-          auth: {
-            persistSession: false,
-            autoRefreshToken: false,
-          },
-        });
+        const nonPersistedClient = getSupabaseServerClient(anonKey);
+        if (!nonPersistedClient) {
+          return res.status(500).json({ error: 'Supabase client failed to initialize' });
+        }
 
         const { data: signUpData, error: signUpErr } = await nonPersistedClient.auth.signUp({
           email: cleanEmail,
@@ -152,6 +156,12 @@ export default async function handler(req, res) {
         if (signUpErr) {
           return res.status(400).json({ error: signUpErr.message });
         }
+
+        // Supabase returns empty identities array if user already registered
+        if (signUpData?.user?.identities && signUpData.user.identities.length === 0) {
+          return res.status(400).json({ error: `A staff account for ${cleanEmail} is already registered.` });
+        }
+
         createdUserId = signUpData?.user?.id;
       }
 
@@ -172,12 +182,13 @@ export default async function handler(req, res) {
 
       const { data: newProfile, error: profErr } = await supabase
         .from('admin_profiles')
-        .upsert(profilePayload)
+        .upsert(profilePayload, { onConflict: 'email' })
         .select()
         .single();
 
       if (profErr) {
-        console.warn('Profile upsert warning:', profErr.message);
+        console.error('Profile upsert failed:', profErr.message);
+        return res.status(400).json({ error: `Staff created, but profile update failed: ${profErr.message}` });
       }
 
       return res.status(200).json({
@@ -252,6 +263,21 @@ export default async function handler(req, res) {
 
       if (!isBootstrapping && !isSuperAdminCaller) {
         return res.status(403).json({ error: 'Forbidden: Only Super Administrators can delete staff accounts' });
+      }
+
+      // Use RPC to cleanly remove from both auth.users and admin_profiles
+      try {
+        const { error: rpcErr } = await supabase.rpc('admin_delete_staff_account', {
+          staff_id: staffId,
+        });
+        if (!rpcErr) {
+          return res.status(200).json({
+            success: true,
+            message: 'Staff account removed successfully',
+          });
+        }
+      } catch (rpcEx) {
+        console.warn('RPC delete notice:', rpcEx.message);
       }
 
       if (serviceRoleKey) {
