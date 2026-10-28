@@ -152,7 +152,7 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-  // Sign In with Google OAuth
+  // Sign In with Google OAuth (Redirect fallback)
   const signInWithGoogle = async () => {
     let origin = 'https://www.aurashophere.com';
     if (typeof window !== 'undefined' && window.location.origin && window.location.origin !== 'null') {
@@ -171,6 +171,19 @@ export function AuthProvider({ children }) {
     });
 
     if (error) throw error;
+  };
+
+  // Sign In with Google ID Token (Google Identity Services - Native In-Page, Zero Foreign Redirects)
+  const signInWithGoogleIdToken = async (idToken) => {
+    if (!idToken) throw new Error('No Google authentication token was received.');
+
+    const { data, error } = await supabase.auth.signInWithIdToken({
+      provider: 'google',
+      token: idToken,
+    });
+
+    if (error) throw error;
+    return data;
   };
 
   // Sign Up with Email and Password (triggers OTP email from Supabase)
@@ -364,6 +377,7 @@ export function AuthProvider({ children }) {
         isUserEmailVerified,
         sendVerificationOtp,
         signInWithGoogle,
+        signInWithGoogleIdToken,
         signUpWithEmail,
         verifyEmailOtp,
         resendEmailOtp,
