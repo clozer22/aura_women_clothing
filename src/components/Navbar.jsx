@@ -348,23 +348,32 @@ export default function Navbar({
       </div>
 
       {/* --- MOBILE VIEW ELEMENTS --- */}
-      {/* Mobile Menu Hamburger (Visible on mobile only, left aligned) */}
-      <div className="flex md:hidden items-center">
+      {/* Mobile Menu Hamburger & Brand Logo (Visible on mobile only, left aligned) */}
+      <div className="flex md:hidden items-center gap-2.5">
         <motion.button
           whileTap={{ scale: 0.95 }}
           onClick={() => {
             setMobileMenuOpen(!mobileMenuOpen);
             setShowSearchInput(false);
           }}
-          className="p-2 text-[#2C1E1B] bg-transparent border-none focus:outline-none flex items-center justify-center rounded-none"
+          className="p-1.5 text-[#2C1E1B] bg-transparent border-none focus:outline-none flex items-center gap-1.5 rounded-none cursor-pointer"
           aria-label="Toggle Navigation Menu"
         >
           {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          <span className="text-[10px] font-brand font-bold uppercase tracking-[0.16em] text-[#2C1E1B]">
+            {mobileMenuOpen ? 'Close' : 'Menu'}
+          </span>
         </motion.button>
+
+        <button onClick={onNavigateHome} className="focus:outline-none flex items-center">
+          <span className="text-xl font-brand font-normal tracking-wide text-[#2C1E1B]">
+            Aura
+          </span>
+        </button>
       </div>
 
-      {/* Mobile Actions: Search + Cart Basket + User Profile in far right corner */}
-      <div className="flex md:hidden items-center gap-3">
+      {/* Mobile Actions: Search + Cart Basket + User Profile with Labels */}
+      <div className="flex md:hidden items-center gap-2.5 sm:gap-3.5">
         {/* 1. Mobile Search Button */}
         <button
           ref={mobileSearchBtnRef}
@@ -372,46 +381,62 @@ export default function Navbar({
             setShowSearchInput(!showSearchInput);
             setMobileMenuOpen(false);
           }}
-          className="p-1 text-[#2C1E1B] bg-transparent border-none focus:outline-none flex items-center justify-center rounded-none"
+          className="flex flex-col items-center justify-center p-1 text-[#2C1E1B] bg-transparent border-none focus:outline-none rounded-none cursor-pointer"
           aria-label="Toggle Mobile Search"
         >
-          <Search className="w-5 h-5 stroke-[1.75]" />
+          <Search className="w-4 h-4 stroke-[1.75]" />
+          <span className="text-[8px] font-brand uppercase tracking-wider font-bold text-[#705B56] mt-0.5">
+            Search
+          </span>
         </button>
 
         {/* 2. Mobile Cart Basket */}
         <button
           onClick={onOpenWishlist}
-          className="p-1 text-[#2C1E1B] bg-transparent border-none focus:outline-none flex items-center justify-center rounded-none relative cursor-pointer"
+          className="flex flex-col items-center justify-center p-1 text-[#2C1E1B] bg-transparent border-none focus:outline-none rounded-none relative cursor-pointer"
           aria-label="View Shopping Bag"
         >
-          <img src={cartBasketIcon} alt="Cart" width={28} height={28} loading="lazy" decoding="async" className="w-[28px] h-[28px] object-contain" />
-          {wishlistCount > 0 && (
-            <span className="absolute -top-1 -right-1 bg-[#B86B60] text-white text-[8px] w-3.5 h-3.5 rounded-full flex items-center justify-center font-bold shadow-md">
-              {wishlistCount}
-            </span>
-          )}
+          <div className="relative">
+            <img src={cartBasketIcon} alt="Cart" width={22} height={22} loading="lazy" decoding="async" className="w-[22px] h-[22px] object-contain" />
+            {wishlistCount > 0 && (
+              <span className="absolute -top-1.5 -right-2 bg-[#B86B60] text-white text-[8px] w-3.5 h-3.5 rounded-full flex items-center justify-center font-bold shadow-md">
+                {wishlistCount}
+              </span>
+            )}
+          </div>
+          <span className="text-[8px] font-brand uppercase tracking-wider font-bold text-[#705B56] mt-0.5">
+            Bag
+          </span>
         </button>
 
-        {/* 3. Mobile User Account Button (Far Right Corner) */}
+        {/* 3. Mobile User Account Button */}
         {user ? (
           <button
             onClick={onOpenProfile}
-            className="w-8 h-8 rounded-full bg-[#2C1E1B] text-white flex items-center justify-center text-[10px] font-bold font-brand tracking-wider relative cursor-pointer"
+            className="flex flex-col items-center justify-center p-1 text-[#2C1E1B] bg-transparent border-none focus:outline-none rounded-none cursor-pointer"
             title="Account"
             aria-label="Account"
           >
-            {profile?.full_name ? profile.full_name.charAt(0).toUpperCase() : user.email.charAt(0).toUpperCase()}
-            {profile?.has_set_password === false && (
-              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-amber-500 rounded-full border border-white" />
-            )}
+            <div className="w-5 h-5 rounded-full bg-[#2C1E1B] text-white flex items-center justify-center text-[9px] font-bold font-brand tracking-wider relative">
+              {profile?.full_name ? profile.full_name.charAt(0).toUpperCase() : user.email.charAt(0).toUpperCase()}
+              {profile?.has_set_password === false && (
+                <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-amber-500 rounded-full border border-white" />
+              )}
+            </div>
+            <span className="text-[8px] font-brand uppercase tracking-wider font-bold text-[#705B56] mt-0.5">
+              Account
+            </span>
           </button>
         ) : (
           <button
             onClick={onOpenAuth}
-            className="p-1 text-[#2C1E1B] bg-transparent border-none focus:outline-none flex items-center justify-center cursor-pointer"
+            className="flex flex-col items-center justify-center p-1 text-[#2C1E1B] bg-transparent border-none focus:outline-none rounded-none cursor-pointer"
             aria-label="Sign In"
           >
-            <User className="w-5 h-5 stroke-[1.75]" />
+            <User className="w-4 h-4 stroke-[1.75]" />
+            <span className="text-[8px] font-brand uppercase tracking-wider font-bold text-[#705B56] mt-0.5">
+              Sign In
+            </span>
           </button>
         )}
       </div>
@@ -449,7 +474,7 @@ export default function Navbar({
         )}
       </AnimatePresence>
 
-      {/* Mobile Menu Dropdown containing centered square icon slots */}
+      {/* Mobile Menu Dropdown containing navigation bar items with icon and label */}
       <AnimatePresence>
         {mobileMenuOpen && (
           <motion.div
@@ -457,22 +482,73 @@ export default function Navbar({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.25 }}
-            className="absolute top-full left-0 right-0 bg-white/95 backdrop-blur-2xl border-b border-[#E8DCD7]/60 py-8 px-6 flex justify-center items-center gap-5 shadow-lg z-40 rounded-none"
+            className="absolute top-full left-0 right-0 bg-[#fff3f7]/98 backdrop-blur-2xl border-b border-[#E8DCD7] py-6 px-4 shadow-xl z-40 rounded-none md:hidden"
           >
-            {navLinks.map((link) => {
-              const IconComponent = link.icon;
-              return (
-                <button
-                  key={link.name}
-                  onClick={(e) => handleLinkClick(e, link)}
-                  className="w-14 h-14 border border-[#E8DCD7] hover:border-[#2C1E1B] flex items-center justify-center transition-all bg-[#FAF0EC]/30 text-[#B86B60] hover:text-[#2C1E1B] focus:outline-none rounded-none"
-                  title={link.name}
-                  aria-label={link.name}
-                >
-                  <IconComponent className="w-5 h-5 stroke-[1.6]" />
-                </button>
-              );
-            })}
+            <div className="max-w-md mx-auto space-y-4">
+              <div className="grid grid-cols-4 gap-2">
+                {navLinks.map((link) => {
+                  const IconComponent = link.icon;
+                  return (
+                    <button
+                      key={link.name}
+                      onClick={(e) => handleLinkClick(e, link)}
+                      className="flex flex-col items-center justify-center gap-1.5 py-3 px-1 border border-[#E8DCD7] hover:border-[#2C1E1B] bg-white/70 hover:bg-white text-[#2C1E1B] focus:outline-none transition-all rounded-none group cursor-pointer shadow-xs"
+                      title={link.name}
+                      aria-label={link.name}
+                    >
+                      <IconComponent className="w-5 h-5 stroke-[1.6] text-[#B86B60] group-hover:text-[#2C1E1B] transition-colors" />
+                      <span className="text-[10px] font-brand uppercase tracking-[0.14em] font-bold text-[#2C1E1B]">
+                        {link.name}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Mobile Quick Account / Sign In Row */}
+              <div className="pt-3.5 border-t border-[#E8DCD7]/60 flex items-center justify-between">
+                {user ? (
+                  <div className="flex items-center justify-between w-full text-xs font-brand tracking-wider">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        onOpenProfile();
+                      }}
+                      className="flex items-center gap-2 text-[#2C1E1B] hover:text-[#B86B60] font-semibold text-left cursor-pointer"
+                    >
+                      <User className="w-4 h-4 text-[#B86B60]" />
+                      <span className="truncate max-w-[180px] text-[11px] uppercase tracking-wider font-bold">
+                        {profile?.full_name || 'My Account'}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setMobileMenuOpen(false);
+                        await signOut();
+                      }}
+                      className="text-rose-700 hover:text-rose-900 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      onOpenAuth();
+                    }}
+                    className="w-full py-2.5 bg-[#2C1E1B] hover:bg-[#B86B60] text-white text-[11px] font-bold uppercase tracking-[0.2em] font-brand transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                  >
+                    <User className="w-4 h-4" />
+                    <span>Client Sign In / Register</span>
+                  </button>
+                )}
+              </div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

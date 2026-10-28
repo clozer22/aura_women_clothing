@@ -308,8 +308,21 @@ export default function OrderHistory({ onBackToShop, onSelectOrder }) {
   const filteredOrders = orders.filter((o) => {
     if (activeTab === 'ALL') return true;
     const s = (o.status || 'PENDING').toUpperCase();
-    if (activeTab === 'TO_SHIP') return s === 'PENDING' || s === 'PROCESSING' || s === 'TO_SHIP';
+    if (activeTab === 'TO_SHIP') {
+      return (
+        s === 'PENDING' ||
+        s === 'PROCESSING' ||
+        s === 'TO_SHIP' ||
+        s === 'AWAITING_COLLECTION' ||
+        s === 'AWAITING_SHIPMENT'
+      );
+    }
+    if (activeTab === 'SHIPPED') {
+      return s === 'SHIPPED' || s === 'IN_TRANSIT';
+    }
     if (activeTab === 'TO_DELIVER') return s === 'TO_DELIVER' || s === 'OUT_FOR_DELIVERY';
+    if (activeTab === 'DELIVERED') return s === 'DELIVERED' || s === 'COMPLETED';
+    if (activeTab === 'CANCELLED') return s === 'CANCELLED';
     if (activeTab === 'RETURNED') return s === 'RETURNED' || s === 'REFUNDED';
     return s === activeTab;
   });
@@ -338,7 +351,11 @@ export default function OrderHistory({ onBackToShop, onSelectOrder }) {
       case 'OUT_FOR_DELIVERY':
         return 'bg-teal-50 text-teal-800 border-teal-200';
       case 'SHIPPED':
+      case 'IN_TRANSIT':
         return 'bg-blue-50 text-blue-800 border-blue-200';
+      case 'AWAITING_COLLECTION':
+        return 'bg-indigo-50 text-indigo-800 border-indigo-200';
+      case 'AWAITING_SHIPMENT':
       case 'TO_SHIP':
       case 'PROCESSING':
         return 'bg-purple-50 text-purple-800 border-purple-200';
@@ -366,7 +383,12 @@ export default function OrderHistory({ onBackToShop, onSelectOrder }) {
       case 'OUT_FOR_DELIVERY':
         return 'Out for Delivery';
       case 'SHIPPED':
-        return 'Shipped';
+      case 'IN_TRANSIT':
+        return 'In Transit';
+      case 'AWAITING_COLLECTION':
+        return 'Awaiting Courier Pickup';
+      case 'AWAITING_SHIPMENT':
+        return 'Awaiting Shipment';
       case 'TO_SHIP':
       case 'PROCESSING':
         return 'To Ship / Processing';
@@ -380,7 +402,7 @@ export default function OrderHistory({ onBackToShop, onSelectOrder }) {
         return 'Failed to Deliver';
       case 'PENDING':
       default:
-        return 'Payment Pending';
+        return 'Preparing Order';
     }
   };
 
@@ -489,9 +511,17 @@ export default function OrderHistory({ onBackToShop, onSelectOrder }) {
                           <span className="text-[10px] font-brand uppercase tracking-wider font-bold px-2.5 py-0.5 border bg-amber-50 text-amber-900 border-amber-300">
                             REFUND PENDING
                           </span>
+                        ) : order.payment_status === 'REFUNDED' ? (
+                          <span className="text-[10px] font-brand uppercase tracking-wider font-bold px-2.5 py-0.5 border bg-orange-50 text-orange-900 border-orange-300">
+                            REFUNDED
+                          </span>
                         ) : order.payment_status === 'CANCELLED' ? (
                           <span className="text-[10px] font-brand uppercase tracking-wider font-bold px-2.5 py-0.5 border bg-neutral-100 text-neutral-600 border-neutral-300">
                             VOIDED
+                          </span>
+                        ) : order.payment_method === 'COD' ? (
+                          <span className="text-[10px] font-brand uppercase tracking-wider font-bold px-2.5 py-0.5 border bg-amber-50 text-amber-800 border-amber-200">
+                            COD • UNPAID
                           </span>
                         ) : (
                           <span className="text-[10px] font-brand uppercase tracking-wider font-bold px-2.5 py-0.5 border bg-amber-50 text-amber-800 border-amber-200">

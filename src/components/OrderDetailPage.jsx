@@ -337,11 +337,25 @@ export default function OrderDetailPage({
         dot: 'bg-blue-500',
       };
     }
-    if (s === 'SHIPPED') {
+    if (s === 'SHIPPED' || s === 'IN_TRANSIT') {
       return {
         label: 'In Transit',
         bg: 'bg-indigo-50 text-indigo-800 border-indigo-200',
         dot: 'bg-indigo-500',
+      };
+    }
+    if (s === 'AWAITING_COLLECTION') {
+      return {
+        label: 'Awaiting Courier Pickup',
+        bg: 'bg-indigo-50 text-indigo-800 border-indigo-200',
+        dot: 'bg-indigo-500',
+      };
+    }
+    if (s === 'AWAITING_SHIPMENT' || s === 'TO_SHIP' || s === 'PROCESSING') {
+      return {
+        label: 'To Ship / Processing',
+        bg: 'bg-purple-50 text-purple-800 border-purple-200',
+        dot: 'bg-purple-500',
       };
     }
     if (s === 'CANCELLED') {
@@ -453,16 +467,24 @@ export default function OrderDetailPage({
                   ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                   : order.payment_status === 'REFUND_PENDING'
                   ? 'bg-amber-50 text-amber-800 border-amber-300 font-bold'
+                  : order.payment_status === 'REFUNDED'
+                  ? 'bg-orange-50 text-orange-900 border-orange-300 font-bold'
                   : order.payment_status === 'CANCELLED'
                   ? 'bg-neutral-100 text-neutral-600 border-neutral-300'
+                  : order.payment_method === 'COD'
+                  ? 'bg-amber-50 text-amber-800 border-amber-200'
                   : 'bg-amber-50 text-amber-800 border-amber-200'
               }`}>
                 {order.payment_status === 'PAID'
                   ? 'Paid'
                   : order.payment_status === 'REFUND_PENDING'
                   ? 'Refund Pending'
+                  : order.payment_status === 'REFUNDED'
+                  ? 'Refunded'
                   : order.payment_status === 'CANCELLED'
                   ? 'Voided'
+                  : order.payment_method === 'COD'
+                  ? 'COD • Unpaid'
                   : 'Payment Pending'}
               </span>
             </div>
