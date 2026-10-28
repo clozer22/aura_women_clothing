@@ -2362,15 +2362,25 @@ const AdminOrdersTab = ({
                     ₱{(Number(selectedOrder.subtotal) || 0).toLocaleString()}
                   </span>
                 </div>
+                {Number(selectedOrder.discount_amount) > 0 && (
+                  <div className="flex justify-between text-emerald-600 font-medium">
+                    <span>Discount ({selectedOrder.promo_code || 'Promo Voucher'})</span>
+                    <span>-₱{(Number(selectedOrder.discount_amount) || 0).toLocaleString()}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-slate-600">
-                  <span>Courier Delivery Fee</span>
+                  <span>Courier Delivery Fee ({selectedOrder.courier_name || 'J&T Express'})</span>
                   <span className="font-semibold text-slate-800">
-                    ₱{(Number(selectedOrder.shipping_fee) || 150).toLocaleString()}
+                    {selectedOrder.shipping_fee !== undefined && selectedOrder.shipping_fee !== null && Number(selectedOrder.shipping_fee) === 0 ? (
+                      <span className="text-emerald-600 font-bold uppercase tracking-wider text-[11px]">FREE</span>
+                    ) : (
+                      `₱${(Number(selectedOrder.shipping_fee) || 0).toLocaleString()}`
+                    )}
                   </span>
                 </div>
                 <div className="border-t border-slate-100 pt-2 flex justify-between text-sm font-bold text-slate-900">
-                  <span>Total</span>
-                  <span>₱{(Number(selectedOrder.total_amount) || 0).toLocaleString()}</span>
+                  <span>Total Amount</span>
+                  <span className="font-sans text-base text-slate-950 font-extrabold">₱{(Number(selectedOrder.total_amount) || 0).toLocaleString()}</span>
                 </div>
               </div>
 

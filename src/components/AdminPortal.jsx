@@ -856,15 +856,18 @@ export default function AdminPortal({
           recentOrders = ordersData.slice(0, 6);
 
           ordersData.forEach(o => {
-            const isPaid = (o.payment_status || '').toUpperCase() === 'PAID' ||
-              (o.status || '').toUpperCase() === 'COMPLETED' ||
-              (o.status || '').toUpperCase() === 'DELIVERED';
+            const s = (o.status || 'PENDING').toUpperCase();
+            const p = (o.payment_status || '').toUpperCase();
+            const isCancelledOrRefunded = s === 'CANCELLED' || s === 'RETURNED' || s === 'REFUNDED' || p === 'REFUNDED' || p === 'REFUND_PENDING';
+
+            const isPaid = !isCancelledOrRefunded && (
+              p === 'PAID' || s === 'COMPLETED' || s === 'DELIVERED'
+            );
             if (isPaid) {
               totalSales += Number(o.total_amount) || 0;
               paidOrdersCount += 1;
             }
 
-            const s = (o.status || 'PENDING').toUpperCase();
             if (s === 'AWAITING_COLLECTION') {
               counts.toShip += 1;
               counts.awaitingCollection = (counts.awaitingCollection || 0) + 1;
