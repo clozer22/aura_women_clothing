@@ -50,8 +50,19 @@ export default async function handler(req, res) {
       const { data: authUserData, error: authUserErr } = await supabase.auth.getUser(token);
       if (!authUserErr && authUserData?.user) {
         callerUser = authUserData.user;
-        callerEmail = (callerUser.email || '').toLowerCase();
+        callerEmail = (callerUser.email || '').toLowerCase().trim();
         isSuperAdminCaller = callerEmail.endsWith('@superadmin.com');
+
+        if (!isSuperAdminCaller) {
+          const { data: callerProfile } = await supabase
+            .from('admin_profiles')
+            .select('role')
+            .eq('id', callerUser.id)
+            .maybeSingle();
+          if (callerProfile?.role === 'Super Admin') {
+            isSuperAdminCaller = true;
+          }
+        }
       }
     }
 
@@ -69,7 +80,7 @@ export default async function handler(req, res) {
           error: 'Unauthorized: Valid administrative session bearer token required.',
         });
       }
-      if (!callerEmail.endsWith('@admin.com') && !callerEmail.endsWith('@superadmin.com')) {
+      if (!callerEmail.endsWith('@admin.com') && !callerEmail.endsWith('@superadmin.com') && !isSuperAdminCaller) {
         return res.status(403).json({
           error: 'Forbidden: Caller is not an authorized administrator.',
         });
@@ -91,8 +102,14 @@ export default async function handler(req, res) {
       return res.status(200).json({ staff: staffList || [] });
     }
 
-    // 2. CREATE NEW STAFF ACCOUNT
+    // 2. CREATE NEW STAFF ACCOUNT (Restricted to Super Administrators)
     if (action === 'create') {
+      if (!isBootstrapping && !isSuperAdminCaller) {
+        return res.status(403).json({
+          error: 'Forbidden: Only Super Administrators (@superadmin.com) can provision staff accounts.',
+        });
+      }
+
       const { email, password, name, role = 'Admin', role_title = 'Staff', permissions } = body;
 
       if (!email || !password) {

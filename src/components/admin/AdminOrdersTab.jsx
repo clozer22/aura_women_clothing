@@ -36,7 +36,7 @@ import {
   User
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { supabase } from '../../lib/supabaseClient';
+import { supabaseAdmin as supabase } from '../../lib/supabaseClient';
 import TrackingModal from '../TrackingModal';
 import AddNoteModal, { FLAG_OPTIONS } from './AddNoteModal';
 import A6ThermalPrintModal from './A6ThermalPrintModal';

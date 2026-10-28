@@ -2790,6 +2790,7 @@ export default function AdminPortal({
           <AdminStaffTab
             currentAdminEmail={session?.user?.email || ''}
             currentAdminRole={adminRole}
+            adminSession={session}
             onNotification={triggerNotification}
           />
         )}

@@ -31,7 +31,7 @@ import {
   CornerDownRight,
   Smile
 } from 'lucide-react';
-import { supabase } from '../../lib/supabaseClient';
+import { supabaseAdmin as supabase } from '../../lib/supabaseClient';
 import {
   CHAT_CATEGORIES,
   getCategoryMeta,

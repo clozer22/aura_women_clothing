@@ -29,7 +29,7 @@ import {
   MessageSquare
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { supabase } from '../../lib/supabaseClient';
+import { supabaseAdmin as supabase } from '../../lib/supabaseClient';
 
 export const ALL_AVAILABLE_PAGES = [
   { id: 'dashboard', label: 'Dashboard Overview', desc: 'KPI metrics, revenue stats, visitor trends', icon: LayoutDashboard },
@@ -44,6 +44,7 @@ export const ALL_AVAILABLE_PAGES = [
 export default function AdminStaffTab({
   currentAdminEmail = '',
   currentAdminRole = 'Super Admin',
+  adminSession = null,
   onNotification = () => {},
 }) {
   const [staffList, setStaffList] = useState([]);
@@ -53,10 +54,14 @@ export default function AdminStaffTab({
   // Helper to attach Supabase session token to administrative endpoints
   const getAuthHeaders = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      let token = adminSession?.access_token;
+      if (!token) {
+        const { data: { session } } = await supabase.auth.getSession();
+        token = session?.access_token;
+      }
       const headers = { 'Content-Type': 'application/json' };
-      if (session?.access_token) {
-        headers['Authorization'] = `Bearer ${session.access_token}`;
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
       }
       return headers;
     } catch {
