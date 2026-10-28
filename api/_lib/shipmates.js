@@ -41,7 +41,7 @@ export async function bookShipmentWithShipmates(order, options = {}) {
   const sender = {
     name: process.env.SHIPMATES_SENDER_NAME || 'Aura Atelier Dispatch',
     phone: process.env.SHIPMATES_SENDER_PHONE || '09171234567',
-    email: process.env.SHIPMATES_SENDER_EMAIL || 'care@aurawomen.com',
+    email: process.env.SHIPMATES_SENDER_EMAIL || 'auraofficialph@gmail.com',
     street: process.env.SHIPMATES_SENDER_STREET || '108 Atelier Blvd, Salcedo Village',
     barangay: process.env.SHIPMATES_SENDER_BARANGAY || 'Bel-Air',
     city: process.env.SHIPMATES_SENDER_CITY || 'Makati City',
@@ -55,7 +55,7 @@ export async function bookShipmentWithShipmates(order, options = {}) {
   const recipient = {
     name: order.customer_name || 'Aura Customer',
     phone: (order.customer_phone || '').replace(/\D/g, '') || '09000000000',
-    email: order.customer_email || 'guest@aurawomen.com',
+    email: order.customer_email || 'auraofficialph@gmail.com',
     street: shippingAddress.street || shippingAddress.address || 'Street Address',
     barangay: shippingAddress.barangay || '',
     city: shippingAddress.city || 'Metro Manila',

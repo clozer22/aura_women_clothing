@@ -357,12 +357,12 @@ export default async function handler(req, res) {
     const xenditPayload = {
       external_id: orderReference,
       amount: Math.round(totalAmount),
-      payer_email: cleanEmail || 'guest@aurawomen.com',
+      payer_email: cleanEmail || 'auraofficialph@gmail.com',
       description: `Aura Women's Clothing - Order ${orderReference}${discountNote}`,
       customer: {
         given_names: cleanCustomerName,
         mobile_number: cleanPhone,
-        email: cleanEmail || 'guest@aurawomen.com',
+        email: cleanEmail || 'auraofficialph@gmail.com',
       },
       customer_notification_preference: {
         invoice_created: ['email'],

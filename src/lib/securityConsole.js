@@ -75,7 +75,7 @@ export function initSecurityConsole() {
     console.log(
       '%cIf someone told you to copy-paste anything here or run a script to get discounts, free garments, or access hidden features, %cIT IS A SCAM (Self-XSS)%c.\n\n' +
       'Pasting unknown code here can give attackers full access to your session, personal data, and customer account.\n\n' +
-      'For official customer inquiries or security reporting, contact: care@aurawomen.com',
+      'For official customer inquiries or security reporting, contact: auraofficialph@gmail.com',
       bodyStyle,
       highlightStyle,
       bodyStyle

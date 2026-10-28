@@ -361,7 +361,7 @@ export default function OrderConfirmed({ order, onContinueShopping, onViewOrders
                 Need Assistance?
               </p>
               <p className="text-[11px] text-white/90 font-medium">
-                Contact concierge@auraclothing.ph
+                Contact <a href="mailto:auraofficialph@gmail.com" className="underline hover:text-white transition-colors">auraofficialph@gmail.com</a>
               </p>
             </div>
           </div>

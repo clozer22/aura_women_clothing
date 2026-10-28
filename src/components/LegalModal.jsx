@@ -174,7 +174,7 @@ export default function LegalModal({ isOpen, initialTab = 'privacy', onClose }) 
                       Under Section 16 of the Data Privacy Act of 2012, you hold explicit rights to: (a) be informed of data processing, (b) access your data, (c) rectify inaccurate information, (d) request deletion or erasure of your account, and (e) object to non-essential processing.
                     </p>
                     <p className="text-[#705B56]">
-                      For privacy inquiries or data erasure requests, email our designated Data Protection Officer at: <strong className="text-[#2C1E1B]">care@aurawomen.com</strong>
+                      For privacy inquiries or data erasure requests, email our designated Data Protection Officer at: <a href="mailto:auraofficialph@gmail.com" className="font-bold text-[#2C1E1B] underline hover:text-[#B86B60] transition-colors">auraofficialph@gmail.com</a>
                     </p>
                   </section>
                 </div>
@@ -394,7 +394,7 @@ export default function LegalModal({ isOpen, initialTab = 'privacy', onClose }) 
                       For customer assistance, order inquiries, size sizing support, or formal communications:
                     </p>
                     <div className="p-4 bg-[#FAF0EC]/60 border border-[#E8DCD7] space-y-1 text-xs">
-                      <p><strong>Official Email:</strong> care@aurawomen.com</p>
+                      <p><strong>Official Email:</strong> <a href="mailto:auraofficialph@gmail.com" className="underline hover:text-[#B86B60] transition-colors">auraofficialph@gmail.com</a></p>
                       <p><strong>Support Hours:</strong> Monday – Saturday, 9:00 AM – 6:00 PM PHT</p>
                       <p><strong>Atelier Location:</strong> Metro Manila, Philippines</p>
                       <p><strong>Official Channels:</strong> Instagram (@auraofficial.ph) • TikTok (@auraofficial.ph)</p>
