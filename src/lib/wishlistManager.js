@@ -14,6 +14,8 @@ let currentUserId = null;
 let currentItems = [];
 const listeners = new Set();
 
+let isSyncingCart = false;
+
 function getStorageKey() {
   return currentUserId ? `aura_cart_${currentUserId}` : 'aura_guest_cart';
 }
@@ -52,59 +54,241 @@ function saveLocal(items) {
 
 /**
  * Switch the active cart context when auth state changes (login, logout)
+ * Lifecycle:
+ * 1. Guests store cart items in localStorage ('aura_guest_cart')
+ * 2. On Login: Guest items are merged into the user account in Supabase & local cache
+ * 3. De-duplication: Matching items (same product, size, color) sum quantities
+ * 4. Guest cart ('aura_guest_cart') is cleared after successful merge
+ * 5. On Logout: Screen cart clears to [] for privacy; Supabase account cart stays safe
  */
 export async function setWishlistUser(user) {
   const newUserId = user?.id || null;
-  if (currentUserId === newUserId && currentItems.length > 0) return;
+  const previousUserId = currentUserId;
 
+  // Case A: Remaining as guest (e.g. initial page load or re-render when not logged in)
+  if (!previousUserId && !newUserId) {
+    if (currentItems.length === 0) {
+      currentItems = loadInitialItems();
+      notify(currentItems);
+    }
+    return;
+  }
+
+  // Case B: Same authenticated user already loaded
+  if (previousUserId === newUserId && currentItems.length > 0) {
+    return;
+  }
+
+  // Prevent concurrent in-flight merges for the same user transition
+  if (isSyncingCart && currentUserId === newUserId) {
+    return;
+  }
+
+  isSyncingCart = true;
   currentUserId = newUserId;
 
-  if (currentUserId) {
-    // 1. Read user's isolated local cache first for instant rendering
-    try {
-      const cached = localStorage.getItem(`aura_cart_${currentUserId}`);
-      if (cached) {
-        currentItems = JSON.parse(cached);
+  try {
+    if (currentUserId) {
+      // ==========================================
+      // SCENARIO 1: USER LOGS IN (OR CREATES ACCOUNT)
+      // ==========================================
+
+      // A. Read any pending guest cart items from device localStorage
+      let guestItems = [];
+      try {
+        const guestRaw = localStorage.getItem('aura_guest_cart');
+        if (guestRaw) {
+          const parsed = JSON.parse(guestRaw);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            guestItems = parsed;
+          }
+        }
+      } catch (e) {
+        guestItems = [];
+      }
+
+      // B. Load user's cached cart first for instant rendering
+      let cachedUserItems = [];
+      try {
+        const cached = localStorage.getItem(`aura_cart_${currentUserId}`);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            cachedUserItems = parsed;
+          }
+        }
+      } catch (e) {}
+
+      // If we had a cached user cart and no guest items to merge, render it immediately
+      if (cachedUserItems.length > 0 && guestItems.length === 0) {
+        currentItems = cachedUserItems;
         notify(currentItems);
       }
-    } catch (e) {}
 
-    // 2. Fetch fresh cart from Supabase wishlists table
-    try {
-      const { data, error } = await supabase
-        .from('wishlists')
-        .select('*')
-        .eq('user_id', currentUserId)
-        .order('created_at', { ascending: false });
+      // C. Fetch the user's authoritative cart rows from Supabase
+      let dbUserItems = [];
+      try {
+        const { data, error } = await supabase
+          .from('wishlists')
+          .select('*')
+          .eq('user_id', currentUserId)
+          .order('created_at', { ascending: false });
 
-      if (!error && data) {
-        const mapped = data.map((row) => ({
-          wishlistId: `${row.product_id}-${row.size || 'Standard'}-${row.color || 'Standard'}`,
-          id: row.product_id,
-          name: row.product_name,
-          image: row.product_image,
-          price: Number(row.price) || 0,
-          size: row.size || 'Standard',
-          color: row.color || 'Standard',
-          quantity: Number(row.quantity) || 1,
-          dbId: row.id,
-        }));
-        saveLocal(mapped);
-        notify(mapped);
+        if (!error && data) {
+          dbUserItems = data.map((row) => ({
+            wishlistId: `${row.product_id}-${row.size || 'Standard'}-${row.color || 'Standard'}`,
+            id: row.product_id,
+            name: row.product_name,
+            image: row.product_image,
+            price: Number(row.price) || 0,
+            size: row.size || 'Standard',
+            color: row.color || 'Standard',
+            quantity: Number(row.quantity) || 1,
+            dbId: row.id,
+          }));
+        } else if (cachedUserItems.length > 0) {
+          dbUserItems = cachedUserItems;
+        }
+      } catch (err) {
+        console.warn('Could not sync user cart from Supabase:', err);
+        dbUserItems = cachedUserItems;
       }
-    } catch (err) {
-      console.warn('Could not sync user cart from Supabase:', err);
-    }
-  } else {
-    // User logged out: switch to guest cart (guest does not see logged-out user's items)
-    try {
-      const guestRaw = localStorage.getItem('aura_guest_cart');
-      const guestItems = guestRaw ? JSON.parse(guestRaw) : [];
-      saveLocal(guestItems);
-      notify(guestItems);
-    } catch (e) {
+
+      // D. Merge Guest Cart with User Account Cart (if guest items exist)
+      let finalCart = [...dbUserItems];
+
+      if (guestItems.length > 0) {
+        const itemsToInsert = [];
+        const itemsToUpdate = [];
+
+        for (const guestItem of guestItems) {
+          const guestKey =
+            guestItem.wishlistId ||
+            `${guestItem.id}-${guestItem.size || 'Standard'}-${guestItem.color || 'Standard'}`;
+
+          const existingIndex = finalCart.findIndex((it) => {
+            const itKey =
+              it.wishlistId ||
+              `${it.id}-${it.size || 'Standard'}-${it.color || 'Standard'}`;
+            return itKey === guestKey;
+          });
+
+          if (existingIndex > -1) {
+            // DUPLICATE DETECTED: Same product, size, and color -> ADD QUANTITY!
+            const existing = finalCart[existingIndex];
+            const newQuantity = (existing.quantity || 1) + (guestItem.quantity || 1);
+
+            // Respect physical inventory stock limit if known
+            const maxStock =
+              existing.qty !== undefined && existing.qty !== null
+                ? Number(existing.qty)
+                : guestItem.qty !== undefined && guestItem.qty !== null
+                ? Number(guestItem.qty)
+                : null;
+            const cappedQuantity =
+              maxStock && maxStock > 0 && newQuantity > maxStock ? maxStock : newQuantity;
+
+            finalCart[existingIndex] = {
+              ...existing,
+              quantity: cappedQuantity,
+              statusBadge: guestItem.statusBadge || existing.statusBadge,
+              qty: maxStock !== null ? maxStock : existing.qty,
+            };
+
+            itemsToUpdate.push({
+              dbId: existing.dbId,
+              productId: String(existing.id),
+              size: existing.size || 'Standard',
+              color: existing.color || 'Standard',
+              quantity: cappedQuantity,
+            });
+          } else {
+            // NEW ITEM: Append to user's cart
+            const newItem = {
+              ...guestItem,
+              wishlistId: guestKey,
+              quantity: Number(guestItem.quantity) || 1,
+            };
+            finalCart.push(newItem);
+
+            itemsToInsert.push({
+              user_id: currentUserId,
+              product_id: String(guestItem.id),
+              product_name: guestItem.name,
+              product_image: guestItem.image,
+              price: Number(guestItem.price) || 0,
+              size: guestItem.size || 'Standard',
+              color: guestItem.color || 'Standard',
+              quantity: Number(guestItem.quantity) || 1,
+            });
+          }
+        }
+
+        // Sync merged updates and inserts to Supabase
+        try {
+          if (itemsToInsert.length > 0) {
+            const { data: insertedRows, error: insErr } = await supabase
+              .from('wishlists')
+              .upsert(itemsToInsert, { onConflict: 'user_id,product_id,size,color' })
+              .select();
+
+            if (!insErr && insertedRows) {
+              insertedRows.forEach((row) => {
+                const rowKey = `${row.product_id}-${row.size || 'Standard'}-${row.color || 'Standard'}`;
+                const match = finalCart.find(
+                  (it) => (it.wishlistId || `${it.id}-${it.size}-${it.color}`) === rowKey
+                );
+                if (match) match.dbId = row.id;
+              });
+            }
+          }
+
+          for (const upd of itemsToUpdate) {
+            if (upd.dbId) {
+              await supabase
+                .from('wishlists')
+                .update({ quantity: upd.quantity })
+                .eq('id', upd.dbId)
+                .eq('user_id', currentUserId);
+            } else {
+              await supabase
+                .from('wishlists')
+                .update({ quantity: upd.quantity })
+                .eq('user_id', currentUserId)
+                .eq('product_id', upd.productId)
+                .eq('size', upd.size)
+                .eq('color', upd.color);
+            }
+          }
+        } catch (syncErr) {
+          console.warn('Error syncing merged cart items to Supabase:', syncErr);
+        }
+
+        // Clear the guest cart in localStorage now that items are merged into user account
+        try {
+          localStorage.removeItem('aura_guest_cart');
+        } catch (e) {}
+      }
+
+      // Save merged cart to the user's isolated local cache and notify listeners
+      saveLocal(finalCart);
+      notify(finalCart);
+
+    } else {
+      // ==========================================
+      // SCENARIO 2: USER LOGS OUT
+      // ==========================================
+      // 1. The logged-out user's account cart remains safely stored in Supabase (and aura_cart_{userId}).
+      // 2. The active screen cart on this device is immediately cleared to [] for privacy and security.
+      // 3. The guest cart starts fresh as empty [].
+      try {
+        localStorage.setItem('aura_guest_cart', JSON.stringify([]));
+      } catch (e) {}
+      currentItems = [];
       notify([]);
     }
+  } finally {
+    isSyncingCart = false;
   }
 }
 
@@ -117,7 +301,6 @@ export function getWishlist() {
  */
 export async function addToWishlist(product, selectedSize = 'Standard', selectedColor = 'Standard') {
   if (!product) return false;
-
 
   const cleanColor =
     typeof selectedColor === 'object' && selectedColor !== null
@@ -137,11 +320,19 @@ export async function addToWishlist(product, selectedSize = 'Standard', selected
   if (existingIndex > -1) {
     updated = [...currentItems];
     targetQuantity = (updated[existingIndex].quantity || 1) + 1;
+    // Stock limit cap if applicable
+    const maxStock =
+      product.qty !== undefined && product.qty !== null
+        ? Number(product.qty)
+        : updated[existingIndex].qty;
+    if (maxStock && maxStock > 0 && targetQuantity > maxStock) {
+      targetQuantity = maxStock;
+    }
     updated[existingIndex] = {
       ...updated[existingIndex],
       quantity: targetQuantity,
       statusBadge: product.statusBadge || updated[existingIndex].statusBadge,
-      qty: product.qty !== undefined && product.qty !== null ? Number(product.qty) : updated[existingIndex].qty,
+      qty: maxStock !== null ? maxStock : updated[existingIndex].qty,
     };
   } else {
     const newItem = {
@@ -188,18 +379,33 @@ export async function addToWishlist(product, selectedSize = 'Standard', selected
           .eq('size', cleanSize)
           .eq('color', cleanColor);
       } else {
-        await supabase.from('wishlists').insert([
-          {
-            user_id: currentUserId,
-            product_id: String(product.id),
-            product_name: product.name,
-            product_image: product.image,
-            price: Number(product.price) || 0,
-            size: cleanSize,
-            color: cleanColor,
-            quantity: 1,
-          },
-        ]);
+        const { data: inserted, error: insErr } = await supabase
+          .from('wishlists')
+          .upsert(
+            [
+              {
+                user_id: currentUserId,
+                product_id: String(product.id),
+                product_name: product.name,
+                product_image: product.image,
+                price: Number(product.price) || 0,
+                size: cleanSize,
+                color: cleanColor,
+                quantity: 1,
+              },
+            ],
+            { onConflict: 'user_id,product_id,size,color' }
+          )
+          .select()
+          .maybeSingle();
+
+        if (!insErr && inserted) {
+          const matchIdx = updated.findIndex((it) => it.wishlistId === itemId);
+          if (matchIdx > -1) {
+            updated[matchIdx].dbId = inserted.id;
+            saveLocal(updated);
+          }
+        }
       }
     } catch (err) {
       console.warn('Could not insert item to Supabase wishlists:', err);
@@ -323,11 +529,10 @@ export async function removeItemsFromWishlist(itemsToRemove = []) {
   const targetIds = new Set(
     itemsToRemove.map((it) => it.wishlistId || `${it.id}-${it.size || 'Standard'}-${it.color || 'Standard'}`)
   );
-  const targetProductIds = new Set(itemsToRemove.map((it) => String(it.id)));
 
   const updated = currentItems.filter((item) => {
-    const wId = item.wishlistId || `${item.id}-${item.size || 'Standard'}-${item.color || 'Standard'}`;
-    return !targetIds.has(wId) && !targetProductIds.has(String(item.id));
+    const wId = item.wishlistId || `${item.id}-${item.size || 'Standard'}-${it.color || 'Standard'}`;
+    return !targetIds.has(wId);
   });
 
   saveLocal(updated);
@@ -336,11 +541,21 @@ export async function removeItemsFromWishlist(itemsToRemove = []) {
   if (currentUserId) {
     try {
       for (const item of itemsToRemove) {
-        await supabase
+        let query = supabase
           .from('wishlists')
           .delete()
           .eq('user_id', currentUserId)
           .eq('product_id', String(item.id));
+
+        if (item.size) query = query.eq('size', item.size);
+        if (item.color) {
+          const col =
+            typeof item.color === 'object' && item.color !== null
+              ? item.color.name || 'Standard'
+              : item.color;
+          query = query.eq('color', col);
+        }
+        await query;
       }
     } catch (err) {
       console.warn('Could not remove checked-out items from Supabase wishlists:', err);
