@@ -21,10 +21,17 @@ import {
   ChevronRight,
   Maximize2,
   Camera,
-  ZoomIn
+  ZoomIn,
+  ChevronDown
 } from 'lucide-react';
 import sizeChartImg from '../images/size_chart.webp';
-import { addToWishlist, isInWishlist } from '../lib/wishlistManager';
+import {
+  addToWishlist,
+  isInWishlist,
+  removeFromWishlist,
+  getWishlist,
+  subscribeWishlist
+} from '../lib/wishlistManager';
 import { trackViewContent } from '../lib/metaPixel';
 import { supabase } from '../lib/supabaseClient';
 
@@ -48,6 +55,8 @@ export default function ProductDetailPage({
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [shareToast, setShareToast] = useState(false);
   const [mediaZoomOpen, setMediaZoomOpen] = useState(false);
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
+  const [wishlistCount, setWishlistCount] = useState(() => getWishlist().length);
 
   // Reviews state
   const [reviews, setReviews] = useState([]);
@@ -119,6 +128,17 @@ export default function ProductDetailPage({
         : ['Standard'];
       setSelectedSize(rawSizes[0] || 'Standard');
     }
+  }, [product?.id]);
+
+  // Sync wishlist reactive count and status
+  useEffect(() => {
+    const unsub = subscribeWishlist((items) => {
+      setWishlistCount(items.length);
+      if (product?.id) {
+        setIsWishlisted(isInWishlist(product.id));
+      }
+    });
+    return () => unsub();
   }, [product?.id]);
 
   // 2. Fetch Customer Reviews for this specific product
@@ -239,6 +259,12 @@ export default function ProductDetailPage({
   const remainingStock =
     product?.qty !== undefined && product?.qty !== null ? Number(product.qty) : null;
 
+  // Description length calculation for "Read more.." toggle
+  const strippedDesc = useMemo(() => {
+    return (product?.description || '').replace(/<[^>]*>/g, '').trim();
+  }, [product?.description]);
+  const isLongDescription = strippedDesc.length > 150;
+
   // Actions
   const handleToggleWishlist = () => {
     if (!product) return;
@@ -246,6 +272,23 @@ export default function ProductDetailPage({
     setIsWishlisted(true);
     if (onOpenWishlist) {
       onOpenWishlist();
+    }
+  };
+
+  const handleQuickHeartToggle = async () => {
+    if (!product) return;
+    if (isWishlisted) {
+      const currentList = getWishlist();
+      const itemToRemove = currentList.find(
+        (item) => String(item.id) === String(product.id)
+      );
+      if (itemToRemove) {
+        await removeFromWishlist(itemToRemove.wishlistId || itemToRemove.id);
+      }
+      setIsWishlisted(false);
+    } else {
+      await addToWishlist(product, selectedSize, 'Standard');
+      setIsWishlisted(true);
     }
   };
 
@@ -327,7 +370,7 @@ export default function ProductDetailPage({
   }
 
   return (
-    <div className="min-h-screen bg-[#FAF5F2] text-[#2C1E1B] pt-24 sm:pt-28 pb-20 selection:bg-[#D99B91] selection:text-white">
+    <div className="min-h-screen bg-[#FAF5F2] text-[#2C1E1B] pt-24 sm:pt-28 pb-36 sm:pb-28 md:pb-20 selection:bg-[#D99B91] selection:text-white">
 
       {/* Share Toast Notification */}
       <AnimatePresence>
@@ -518,15 +561,44 @@ export default function ProductDetailPage({
                 )}
               </div>
 
-              {/* Description Section */}
+              {/* Description Section with Desktop/Responsive Read More */}
               <div className="space-y-2 pt-2">
-                <h4 className="text-xs uppercase font-brand tracking-[0.25em] font-bold text-[#2C1E1B]">
-                  {product.descriptionLabel || 'Garment Silhouette & Notes'}
-                </h4>
-                <div
-                  className="text-xs sm:text-sm text-[#705B56] leading-relaxed whitespace-pre-wrap product-description-html"
-                  dangerouslySetInnerHTML={{ __html: product.description || '' }}
-                />
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs uppercase font-brand tracking-[0.25em] font-bold text-[#2C1E1B]">
+                    {product.descriptionLabel || 'Garment Silhouette & Notes'}
+                  </h4>
+                </div>
+
+                <div className="relative">
+                  <div
+                    className={`text-xs sm:text-sm text-[#705B56] leading-relaxed whitespace-pre-wrap product-description-html transition-all duration-300 ${
+                      !isDescriptionExpanded && isLongDescription
+                        ? 'max-h-20 overflow-hidden'
+                        : ''
+                    }`}
+                    dangerouslySetInnerHTML={{ __html: product.description || '' }}
+                  />
+
+                  {/* Gradient fade overlay when collapsed */}
+                  {!isDescriptionExpanded && isLongDescription && (
+                    <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-[#FAF5F2] via-[#FAF5F2]/80 to-transparent pointer-events-none" />
+                  )}
+                </div>
+
+                {isLongDescription && (
+                  <button
+                    type="button"
+                    onClick={() => setIsDescriptionExpanded((prev) => !prev)}
+                    className="inline-flex items-center gap-1 text-[11px] font-brand uppercase tracking-wider font-bold text-[#B86B60] hover:text-[#2C1E1B] transition-colors cursor-pointer pt-0.5"
+                  >
+                    <span>{isDescriptionExpanded ? 'Read less' : 'Read more..'}</span>
+                    <ChevronDown
+                      className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                        isDescriptionExpanded ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </button>
+                )}
               </div>
 
               {/* Atelier Details / Feature Highlights */}
@@ -1124,6 +1196,111 @@ export default function ProductDetailPage({
           </div>
         )}
       </AnimatePresence>
+
+      {/* Fixed Bottom Action Bar for Mobile View (SHEIN style) */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 md:hidden bg-white/95 backdrop-blur-md border-t border-[#E8DCD7] shadow-[0_-4px_25px_rgba(0,0,0,0.08)] px-3.5 pt-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]">
+        <div className="max-w-md mx-auto space-y-2">
+          {/* Quick Size Selection Strip (if garment has multiple sizes) */}
+          {sizesList && sizesList.length > 1 && (
+            <div className="flex items-center justify-between pb-2 border-b border-[#E8DCD7]/70">
+              <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5">
+                <span className="text-[10px] uppercase font-brand font-bold tracking-wider text-[#705B56] mr-1 flex-shrink-0">
+                  Size:
+                </span>
+                {sizesList.map((sz, idx) => {
+                  const isSelected = selectedSize === sz;
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setSelectedSize(sz)}
+                      className={`px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider border transition-all cursor-pointer flex-shrink-0 ${
+                        isSelected
+                          ? 'bg-[#2C1E1B] text-white border-[#2C1E1B] shadow-sm'
+                          : 'bg-white text-[#705B56] border-[#E8DCD7] active:border-[#2C1E1B]'
+                      }`}
+                    >
+                      {sz}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowSizeChart(true)}
+                className="text-[10px] text-[#B86B60] hover:underline uppercase tracking-wider font-semibold flex-shrink-0 ml-2 cursor-pointer"
+              >
+                Size Guide
+              </button>
+            </div>
+          )}
+
+          {/* Action Row: Shopping Bag, Wishlist Heart, Add to Bag, Buy Now */}
+          <div className="flex items-center gap-2">
+            {/* Bag Icon Button with Counter Badge */}
+            <button
+              type="button"
+              onClick={onOpenWishlist}
+              className="relative p-2.5 border border-[#E8DCD7] bg-[#FAF7F4] text-[#2C1E1B] hover:border-[#2C1E1B] transition-colors flex-shrink-0 cursor-pointer"
+              aria-label="View Shopping Bag"
+              title="Shopping Bag"
+            >
+              <ShoppingBag className="w-5 h-5" />
+              {wishlistCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 bg-[#B86B60] text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                  {wishlistCount > 99 ? '99+' : wishlistCount}
+                </span>
+              )}
+            </button>
+
+            {/* Wishlist Heart Button */}
+            <button
+              type="button"
+              onClick={handleQuickHeartToggle}
+              className={`p-2.5 border transition-colors flex-shrink-0 cursor-pointer ${
+                isWishlisted
+                  ? 'border-[#B86B60] bg-[#FAF0EC] text-[#B86B60]'
+                  : 'border-[#E8DCD7] bg-[#FAF7F4] text-[#705B56] hover:text-[#2C1E1B]'
+              }`}
+              aria-label={isWishlisted ? 'Remove from Bag' : 'Save to Bag'}
+              title={isWishlisted ? 'In Your Bag' : 'Save to Bag'}
+            >
+              <Heart className={`w-5 h-5 ${isWishlisted ? 'fill-[#B86B60] text-[#B86B60]' : ''}`} />
+            </button>
+
+            {/* Add to Bag Button */}
+            <button
+              type="button"
+              disabled={isSoldOut}
+              onClick={handleToggleWishlist}
+              className={`flex-1 py-3 px-2 border text-[11px] font-brand font-bold uppercase tracking-wider transition-all flex items-center justify-center text-center cursor-pointer ${
+                isSoldOut
+                  ? 'bg-[#E8DCD7] border-[#E8DCD7] text-[#9E8E89] cursor-not-allowed'
+                  : isWishlisted
+                  ? 'bg-[#FAF0EC] border-[#B86B60] text-[#B86B60]'
+                  : 'bg-white border-[#2C1E1B] text-[#2C1E1B] hover:bg-[#FAF7F4] active:scale-[0.98]'
+              }`}
+            >
+              {isSoldOut ? 'Sold Out' : isWishlisted ? 'In Bag' : 'Add to Bag'}
+            </button>
+
+            {/* Buy Now Button */}
+            <button
+              type="button"
+              disabled={isSoldOut}
+              onClick={handleBuyNow}
+              className={`flex-1 py-3 px-2 text-[11px] font-brand font-bold uppercase tracking-wider transition-all flex items-center justify-center text-center shadow-sm cursor-pointer ${
+                isSoldOut
+                  ? 'bg-[#E8DCD7] text-[#9E8E89] cursor-not-allowed shadow-none'
+                  : 'bg-[#2C1E1B] hover:bg-[#B86B60] text-white active:scale-[0.98]'
+              }`}
+            >
+              {isSoldOut ? 'Sold Out' : 'Buy Now'}
+            </button>
+          </div>
+        </div>
+      </div>
 
     </div>
   );
