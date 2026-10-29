@@ -67,20 +67,13 @@ export const DEFAULT_ABOUT_AURA_HOTSPOTS: LookbookHotspot[] = [
     label: 'Model 1 Skirt',
   },
 
-  // Model 2 (Center-Left) - Teal Green Draped Top & Dark Gray Skirt
+  // Model 2 (Center-Left) - Teal Green Draped Top
   {
     id: 'spot-m2-top',
     x: 37.0,
     y: 36.5,
     productId: 'aura-custom-1787407522452', // AURA Olivia Top in Teal Green
     label: 'Model 2 Top',
-  },
-  {
-    id: 'spot-m2-skirt',
-    x: 37.0,
-    y: 51.0,
-    productId: 'aura-custom-1788973753112', // AURA Petal Skirt in Dark Gray
-    label: 'Model 2 Skirt',
   },
 
   // Model 3 (Center-Right with Sunglasses) - Ruched Pastel Pink Set
