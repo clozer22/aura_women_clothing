@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Mail, Lock, User, ArrowRight, ShieldCheck, KeyRound, Loader2, CheckCircle2 } from 'lucide-react';
 import { useAuth, isAdminEmail } from '../context/AuthContext';
 import { trackLead } from '../lib/metaPixel';
+import { supabase } from '../lib/supabaseClient';
 
 export default function CustomerAuthModal({
   isOpen,
@@ -180,7 +181,26 @@ export default function CustomerAuthModal({
         setIsLoading(false);
         return;
       }
-      setErrorMsg(err.message || 'Invalid email or password.');
+
+      // Check if user was registered via Google
+      try {
+        const { data: regInfo } = await supabase.rpc('check_email_registered', {
+          check_email: cleanEmail,
+        });
+        if (regInfo?.exists && regInfo?.provider === 'google') {
+          setErrorMsg('This account was created with Google Sign-In. Please click "Continue with Google" above to sign in.');
+          setIsLoading(false);
+          return;
+        }
+      } catch (checkErr) {
+        // Fallback to standard error
+      }
+
+      if (msg.toLowerCase().includes('rate limit')) {
+        setErrorMsg('Too many sign in attempts. Please wait a few minutes before trying again.');
+      } else {
+        setErrorMsg(err.message || 'Invalid email or password.');
+      }
       setIsLoading(false);
     }
   };
@@ -215,6 +235,42 @@ export default function CustomerAuthModal({
     setIsLoading(true);
     setErrorMsg('');
     try {
+      // 1. Explicitly pre-check if account already exists in Supabase to prevent silent OTP failure and rate limit exhaustion
+      const { data: regInfo, error: checkErr } = await supabase.rpc('check_email_registered', {
+        check_email: cleanEmail,
+      });
+
+      if (!checkErr && regInfo?.exists) {
+        if (regInfo.provider === 'google') {
+          setErrorMsg('This email is already registered using Google Sign-In. Please sign in with Google or switch to the Sign In tab.');
+          setIsLoading(false);
+          return;
+        }
+
+        if (regInfo.is_confirmed) {
+          setErrorMsg('An account with this email address already exists. Please switch to the Sign In tab to log in.');
+          setIsLoading(false);
+          return;
+        }
+
+        // Account was previously created but awaiting email OTP verification
+        try {
+          await resendEmailOtp(cleanEmail);
+          setResendCooldown(60);
+          setSuccessMsg(`Your account is awaiting verification. A fresh 6-digit code has been sent to ${cleanEmail}.`);
+        } catch (resendErr) {
+          const rMsg = resendErr.message || '';
+          if (rMsg.toLowerCase().includes('rate limit')) {
+            setErrorMsg('Email verification limit reached. Please wait a few minutes before trying again.');
+            setIsLoading(false);
+            return;
+          }
+        }
+        setMode('verify_otp');
+        setIsLoading(false);
+        return;
+      }
+
       await signUpWithEmail({ email: cleanEmail, password, fullName: cleanName });
       setMode('verify_otp');
       setResendCooldown(60);
@@ -222,7 +278,12 @@ export default function CustomerAuthModal({
       setIsLoading(false);
     } catch (err) {
       console.error('Sign Up Error:', err);
-      setErrorMsg(err.message || 'Sign up failed. Please try again.');
+      const msg = err.message || '';
+      if (msg.toLowerCase().includes('rate limit') || msg.toLowerCase().includes('over_email_send_rate_limit')) {
+        setErrorMsg('Email verification limit reached. Please wait a few minutes before trying again, or continue with Google Sign-In.');
+      } else {
+        setErrorMsg(msg || 'Sign up failed. Please try again.');
+      }
       setIsLoading(false);
     }
   };
@@ -266,7 +327,12 @@ export default function CustomerAuthModal({
       setResendCooldown(60);
       setSuccessMsg('A new 6-digit code has been sent to your email.');
     } catch (err) {
-      setErrorMsg(err.message || 'Failed to resend verification code.');
+      const msg = err.message || '';
+      if (msg.toLowerCase().includes('rate limit') || msg.toLowerCase().includes('over_email_send_rate_limit')) {
+        setErrorMsg('Email sending limit reached. Please wait a few minutes before requesting another code.');
+      } else {
+        setErrorMsg(msg || 'Failed to resend verification code.');
+      }
     }
   };
 
@@ -322,8 +388,20 @@ export default function CustomerAuthModal({
 
           {/* Error & Success Alerts */}
           {errorMsg && (
-            <div className="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-none">
-              {errorMsg}
+            <div className="mb-4 p-3.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-none">
+              <p className="leading-relaxed">{errorMsg}</p>
+              {mode === 'signup' && (errorMsg.includes('Sign In') || errorMsg.includes('already exists') || errorMsg.includes('Google Sign-In')) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode('signin');
+                    setErrorMsg('');
+                  }}
+                  className="mt-2.5 inline-flex items-center gap-1.5 font-bold text-[#B86B60] hover:text-[#2C1E1B] transition-colors uppercase text-[10px] tracking-wider cursor-pointer underline"
+                >
+                  Switch to Sign In &rarr;
+                </button>
+              )}
             </div>
           )}
           {successMsg && (

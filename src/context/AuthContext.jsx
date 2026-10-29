@@ -217,7 +217,19 @@ export function AuthProvider({ children }) {
       },
     });
 
-    if (error) throw error;
+    if (error) {
+      const msg = error.message || '';
+      if (msg.toLowerCase().includes('rate limit') || error.status === 429) {
+        throw new Error('Email verification limit reached. Please wait a few minutes before trying again, or sign in directly with Google.');
+      }
+      throw error;
+    }
+
+    // When an account already exists, Supabase returns user with empty identities array and sends NO email
+    if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+      throw new Error('An account with this email address already exists. Please switch to the Sign In tab or use Google Sign-In.');
+    }
+
     return data;
   };
 
@@ -258,7 +270,13 @@ export function AuthProvider({ children }) {
       type: 'signup',
       email: cleanEmail,
     });
-    if (error) throw error;
+    if (error) {
+      const msg = error.message || '';
+      if (msg.toLowerCase().includes('rate limit') || error.status === 429) {
+        throw new Error('Email verification limit reached. Please wait a few minutes before requesting another code.');
+      }
+      throw error;
+    }
   };
 
   // Explicitly send verification OTP to logged-in user or specified email
@@ -269,7 +287,13 @@ export function AuthProvider({ children }) {
       type: 'signup',
       email: cleanEmail,
     });
-    if (error) throw error;
+    if (error) {
+      const msg = error.message || '';
+      if (msg.toLowerCase().includes('rate limit') || error.status === 429) {
+        throw new Error('Email verification limit reached. Please wait a few minutes before requesting another code.');
+      }
+      throw error;
+    }
   };
 
   // Direct Sign In with Email & Password
