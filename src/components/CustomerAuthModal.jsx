@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Mail, Lock, User, ArrowRight, ShieldCheck, KeyRound, Loader2, CheckCircle2 } from 'lucide-react';
+import { X, Mail, Lock, User, ArrowRight, ShieldCheck, Loader2, CheckCircle2 } from 'lucide-react';
 import { useAuth, isAdminEmail } from '../context/AuthContext';
 import { trackLead } from '../lib/metaPixel';
 import { supabase } from '../lib/supabaseClient';
@@ -13,19 +13,18 @@ export default function CustomerAuthModal({
   initialEmail = '',
 }) {
   const {
+    user,
     signInWithGoogle,
     signInWithGoogleIdToken,
     signUpWithEmail,
-    verifyEmailOtp,
     resendEmailOtp,
     signInWithEmail,
   } = useAuth();
 
-  const [mode, setMode] = useState(initialMode); // 'signin' | 'signup' | 'verify_otp'
+  const [mode, setMode] = useState(initialMode); // 'signin' | 'signup' | 'check_email'
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [otpCode, setOtpCode] = useState('');
   const [resendCooldown, setResendCooldown] = useState(0);
 
   const [isLoading, setIsLoading] = useState(false);
@@ -35,9 +34,21 @@ export default function CustomerAuthModal({
 
   const googleBtnRef = useRef(null);
 
+  // Auto-detect when user confirms email in browser or from email link and logs in
+  useEffect(() => {
+    if (isOpen && user && (mode === 'check_email' || mode === 'verify_otp')) {
+      setSuccessMsg('Account verified! Welcome to Aura Atelier.');
+      const timer = setTimeout(() => {
+        if (onSuccess) onSuccess();
+        onClose();
+      }, 900);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen, user, mode, onSuccess, onClose]);
+
   // Initialize Google Identity Services (GIS) for native in-page Google Sign-In (no foreign domain redirects)
   useEffect(() => {
-    if (!isOpen || mode === 'verify_otp') return;
+    if (!isOpen || mode === 'check_email' || mode === 'verify_otp') return;
 
     const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
     if (!googleClientId) {
@@ -167,7 +178,7 @@ export default function CustomerAuthModal({
     } catch (err) {
       console.error('Sign In Error:', err);
       const msg = err.message || '';
-      // If user signed up but has not verified their email, gracefully transition to OTP verification
+      // If user signed up but has not verified their email, gracefully transition to confirmation screen
       if (
         msg.toLowerCase().includes('not confirmed') ||
         msg.toLowerCase().includes('email not confirmed')
@@ -176,8 +187,8 @@ export default function CustomerAuthModal({
           await resendEmailOtp(cleanEmail);
           setResendCooldown(60);
         } catch (e) {}
-        setMode('verify_otp');
-        setSuccessMsg(`Your account is not verified yet. We just sent a 6-digit verification code to ${cleanEmail}.`);
+        setMode('check_email');
+        setSuccessMsg(`Your account is not verified yet. We just sent a confirmation link to ${cleanEmail}.`);
         setIsLoading(false);
         return;
       }
@@ -205,7 +216,7 @@ export default function CustomerAuthModal({
     }
   };
 
-  // Handle Email Sign Up (triggers OTP)
+  // Handle Email Sign Up (triggers confirmation link email)
   const handleEmailSignUp = async (e) => {
     e.preventDefault();
     const cleanName = (fullName || '').replace(/<[^>]*>?/gm, '').trim().slice(0, 80);
@@ -235,7 +246,7 @@ export default function CustomerAuthModal({
     setIsLoading(true);
     setErrorMsg('');
     try {
-      // 1. Explicitly pre-check if account already exists in Supabase to prevent silent OTP failure and rate limit exhaustion
+      // 1. Explicitly pre-check if account already exists in Supabase to prevent duplicate registration
       const { data: regInfo, error: checkErr } = await supabase.rpc('check_email_registered', {
         check_email: cleanEmail,
       });
@@ -253,11 +264,11 @@ export default function CustomerAuthModal({
           return;
         }
 
-        // Account was previously created but awaiting email OTP verification
+        // Account was previously created but awaiting email confirmation
         try {
           await resendEmailOtp(cleanEmail);
           setResendCooldown(60);
-          setSuccessMsg(`Your account is awaiting verification. A fresh 6-digit code has been sent to ${cleanEmail}.`);
+          setSuccessMsg(`Your account is awaiting confirmation. A fresh link has been sent to ${cleanEmail}.`);
         } catch (resendErr) {
           const rMsg = resendErr.message || '';
           if (rMsg.toLowerCase().includes('rate limit')) {
@@ -266,15 +277,18 @@ export default function CustomerAuthModal({
             return;
           }
         }
-        setMode('verify_otp');
+        setMode('check_email');
         setIsLoading(false);
         return;
       }
 
       await signUpWithEmail({ email: cleanEmail, password, fullName: cleanName });
-      setMode('verify_otp');
+      try {
+        trackLead('Customer Sign Up', { email: cleanEmail });
+      } catch (e) {}
+      setMode('check_email');
       setResendCooldown(60);
-      setSuccessMsg(`Verification code sent to ${cleanEmail}`);
+      setSuccessMsg(`Confirmation link sent to ${cleanEmail}`);
       setIsLoading(false);
     } catch (err) {
       console.error('Sign Up Error:', err);
@@ -288,50 +302,20 @@ export default function CustomerAuthModal({
     }
   };
 
-  // Handle OTP Verification
-  const handleVerifyOtp = async (e) => {
-    e.preventDefault();
-    const cleanOtp = (otpCode || '').replace(/\D/g, '').trim().slice(0, 6);
-    if (cleanOtp.length !== 6) {
-      setErrorMsg('Please enter the full 6-digit verification code.');
-      return;
-    }
-
-    const cleanEmail = (email || '').trim().toLowerCase();
-
-    setIsLoading(true);
-    setErrorMsg('');
-    try {
-      await verifyEmailOtp({ email: cleanEmail, token: cleanOtp });
-      try {
-        trackLead('Customer Sign Up', { email: cleanEmail });
-      } catch (e) {}
-      setSuccessMsg('Account verified and activated successfully!');
-      setTimeout(() => {
-        if (onSuccess) onSuccess();
-        onClose();
-      }, 900);
-    } catch (err) {
-      console.error('OTP Verification Error:', err);
-      setErrorMsg(err.message || 'Invalid or expired verification code.');
-      setIsLoading(false);
-    }
-  };
-
-  // Handle Resend OTP
+  // Handle Resend Confirmation Email
   const handleResendOtp = async () => {
     if (resendCooldown > 0) return;
     setErrorMsg('');
     try {
       await resendEmailOtp(email);
       setResendCooldown(60);
-      setSuccessMsg('A new 6-digit code has been sent to your email.');
+      setSuccessMsg('A new confirmation email has been sent. Please check your inbox.');
     } catch (err) {
       const msg = err.message || '';
       if (msg.toLowerCase().includes('rate limit') || msg.toLowerCase().includes('over_email_send_rate_limit')) {
-        setErrorMsg('Email sending limit reached. Please wait a few minutes before requesting another code.');
+        setErrorMsg('Email sending limit reached. Please wait a few minutes before requesting another email.');
       } else {
-        setErrorMsg(msg || 'Failed to resend verification code.');
+        setErrorMsg(msg || 'Failed to resend confirmation email.');
       }
     }
   };
@@ -371,15 +355,15 @@ export default function CustomerAuthModal({
               AURA ATELIER CLIENT ACCOUNT
             </span>
             <h2 className="font-brand text-2xl font-normal text-[#2C1E1B]">
-              {mode === 'verify_otp'
-                ? 'Verify Your Email'
+              {mode === 'check_email' || mode === 'verify_otp'
+                ? 'Check Your Email'
                 : mode === 'signup'
                 ? 'Create Your Account'
                 : 'Welcome Back'}
             </h2>
             <p className="text-xs text-[#705B56] mt-1 font-sans">
-              {mode === 'verify_otp'
-                ? `Enter the 6-digit code sent to ${email}`
+              {mode === 'check_email' || mode === 'verify_otp'
+                ? 'Confirm your email to activate your account'
                 : mode === 'signup'
                 ? 'Sign up to track orders, save wishlists, and checkout faster.'
                 : 'Sign in to access your order history and saved items.'}
@@ -412,7 +396,7 @@ export default function CustomerAuthModal({
           )}
 
           {/* Mode Tabs (Sign In vs Create Account) */}
-          {mode !== 'verify_otp' && (
+          {mode !== 'check_email' && mode !== 'verify_otp' && (
             <div className="flex border-b border-[#E8DCD7] mb-6">
               <button
                 type="button"
@@ -446,7 +430,7 @@ export default function CustomerAuthModal({
           )}
 
           {/* Google One-Click Sign-In (For Sign In and Sign Up) */}
-          {mode !== 'verify_otp' && (
+          {mode !== 'check_email' && mode !== 'verify_otp' && (
             <div className="space-y-4 mb-5">
               {/* Native Google Identity Services Button Container (Zero foreign redirects) */}
               <div
@@ -613,11 +597,11 @@ export default function CustomerAuthModal({
                 {isLoading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Sending Verification Code...</span>
+                    <span>Sending Activation Link...</span>
                   </>
                 ) : (
                   <>
-                    <span>Send Verification Code</span>
+                    <span>Create Account</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}
@@ -625,75 +609,88 @@ export default function CustomerAuthModal({
             </form>
           )}
 
-          {/* FORM 3: 6-Digit Email OTP Verification Screen */}
-          {mode === 'verify_otp' && (
-            <form onSubmit={handleVerifyOtp} className="space-y-5">
-              <div className="bg-[#FAF5F2] border border-[#E8DCD7] p-4 text-center">
-                <ShieldCheck className="w-6 h-6 text-[#B86B60] mx-auto mb-1.5" />
-                <p className="text-xs text-[#2C1E1B] font-semibold">
-                  6-Digit OTP Code Sent
-                </p>
-                <p className="text-[11px] text-[#705B56] mt-0.5">
-                  Check your inbox at <span className="font-bold text-[#2C1E1B]">{email}</span>
-                </p>
+          {/* FORM 3: Check Your Email Confirmation Screen */}
+          {(mode === 'check_email' || mode === 'verify_otp') && (
+            <div className="space-y-5 text-center">
+              {/* Premium Mail Icon with subtle pulse */}
+              <div className="relative mx-auto w-16 h-16 flex items-center justify-center bg-[#FAF5F2] border border-[#E8DCD7] rounded-full">
+                <Mail className="w-8 h-8 text-[#B86B60]" />
+                <span className="absolute -top-1 -right-1 flex h-4 w-4">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#B86B60] opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-4 w-4 bg-[#B86B60]"></span>
+                </span>
               </div>
 
-              <div>
-                <label className="block text-[11px] uppercase font-bold tracking-wider text-[#705B56] mb-1.5 text-center">
-                  Enter 6-Digit Code
-                </label>
-                <div className="relative">
-                  <KeyRound className="w-4 h-4 text-[#A38E88] absolute left-3.5 top-3.5" />
-                  <input
-                    type="text"
-                    required
-                    maxLength={8}
-                    value={otpCode}
-                    onChange={(e) => setOtpCode(e.target.value)}
-                    placeholder="123456"
-                    className="w-full pl-10 pr-3.5 py-3 bg-[#FAF5F2] border border-[#E8DCD7] text-center text-lg font-mono tracking-[0.35em] text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B] rounded-none transition-colors"
-                    autoFocus
-                  />
+              {/* Message Details */}
+              <div className="bg-[#FAF5F2] border border-[#E8DCD7] p-5 text-left">
+                <p className="text-sm font-semibold text-[#2C1E1B] text-center mb-1 font-brand">
+                  Check your email to confirm it was you
+                </p>
+                <p className="text-xs text-[#705B56] leading-relaxed text-center mb-4">
+                  We've sent an activation link to <strong className="text-[#2C1E1B] font-mono break-all">{email}</strong>
+                </p>
+
+                <div className="pt-3 border-t border-[#E8DCD7] text-[11px] text-[#705B56] space-y-2">
+                  <div className="flex items-start gap-2">
+                    <span className="w-4 h-4 rounded-full bg-[#B86B60] text-white flex items-center justify-center text-[9px] font-bold flex-shrink-0 mt-0.5">1</span>
+                    <span>Open your email inbox and find the email from <strong>Aura Atelier</strong>.</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="w-4 h-4 rounded-full bg-[#B86B60] text-white flex items-center justify-center text-[9px] font-bold flex-shrink-0 mt-0.5">2</span>
+                    <span>Click <strong>"Confirm email address"</strong> inside the email.</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="w-4 h-4 rounded-full bg-[#B86B60] text-white flex items-center justify-center text-[9px] font-bold flex-shrink-0 mt-0.5">3</span>
+                    <span>You'll be automatically redirected back here and logged into your account.</span>
+                  </div>
+                </div>
+
+                <div className="mt-3 pt-2.5 border-t border-[#E8DCD7]/60 text-[10px] text-[#A38E88] text-center italic">
+                  Tip: If you don't see it within a couple minutes, please check your Spam or Promotions folder.
                 </div>
               </div>
 
-              <div className="flex items-center justify-between text-xs pt-1">
-                <button
-                  type="button"
-                  onClick={() => setMode('signup')}
-                  className="text-[#705B56] hover:text-[#2C1E1B] underline cursor-pointer"
-                >
-                  Change email
-                </button>
-
+              {/* Action Buttons */}
+              <div className="space-y-3 pt-1">
                 <button
                   type="button"
                   onClick={handleResendOtp}
-                  disabled={resendCooldown > 0}
-                  className="text-[#B86B60] hover:underline font-semibold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={resendCooldown > 0 || isLoading}
+                  className="w-full py-3.5 px-4 bg-[#2C1E1B] hover:bg-[#B86B60] text-white text-xs uppercase font-bold tracking-[0.2em] transition-all rounded-none shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {resendCooldown > 0 ? `Resend Code (${resendCooldown}s)` : 'Resend Code'}
+                  <Mail className="w-4 h-4" />
+                  <span>
+                    {resendCooldown > 0
+                      ? `Resend Email (${resendCooldown}s)`
+                      : 'Resend Confirmation Email'}
+                  </span>
                 </button>
-              </div>
 
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full py-4 px-6 bg-emerald-800 hover:bg-emerald-900 text-white text-xs uppercase font-bold tracking-[0.2em] transition-all rounded-none shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-75"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Verifying Code...</span>
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Verify & Activate Account</span>
-                  </>
-                )}
-              </button>
-            </form>
+                <div className="flex items-center justify-between text-xs pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode('signup');
+                      setErrorMsg('');
+                    }}
+                    className="text-[#705B56] hover:text-[#2C1E1B] underline cursor-pointer"
+                  >
+                    Change email
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode('signin');
+                      setErrorMsg('');
+                    }}
+                    className="text-[#B86B60] hover:text-[#2C1E1B] font-bold cursor-pointer"
+                  >
+                    Already confirmed? Sign In &rarr;
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* Footer Notice */}

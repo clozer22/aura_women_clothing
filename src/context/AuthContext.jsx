@@ -207,10 +207,16 @@ export function AuthProvider({ children }) {
       throw new Error('Password must contain both letters and at least one number.');
     }
 
+    let origin = 'https://www.aurashophere.com';
+    if (typeof window !== 'undefined' && window.location.origin && window.location.origin !== 'null') {
+      origin = window.location.origin.replace(/\/+$/, '');
+    }
+
     const { data, error } = await supabase.auth.signUp({
       email: cleanEmail,
       password,
       options: {
+        emailRedirectTo: `${origin}/`,
         data: {
           full_name: cleanName,
         },
@@ -263,12 +269,19 @@ export function AuthProvider({ children }) {
     return data;
   };
 
-  // Resend OTP verification email
+  // Resend confirmation email
   const resendEmailOtp = async (email) => {
     const cleanEmail = (email || '').trim().toLowerCase();
+    let origin = 'https://www.aurashophere.com';
+    if (typeof window !== 'undefined' && window.location.origin && window.location.origin !== 'null') {
+      origin = window.location.origin.replace(/\/+$/, '');
+    }
     const { error } = await supabase.auth.resend({
       type: 'signup',
       email: cleanEmail,
+      options: {
+        emailRedirectTo: `${origin}/`,
+      },
     });
     if (error) {
       const msg = error.message || '';
