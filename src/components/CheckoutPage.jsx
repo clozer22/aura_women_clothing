@@ -386,7 +386,7 @@ export default function CheckoutPage({
     }
     // Strict Anti-Bogus Email Verification Gate
     if (!isEmailVerified) {
-      setPaymentError('Email verification required: Please verify your account email with the 6-digit code before proceeding.');
+      setPaymentError('Email verification required: Please verify your account email with the verification code before proceeding.');
       setShowOtpModal(true);
       return;
     }
@@ -617,7 +617,7 @@ export default function CheckoutPage({
                         </h4>
                         <p className="text-[11px] text-amber-800 mt-0.5 leading-relaxed">
                           To protect against bogus transactions and ensure your J&T Express delivery updates reach you, please verify{' '}
-                          <strong className="underline">{user?.email || formData.email}</strong> with a 6-digit OTP code before proceeding.
+                          <strong className="underline">{user?.email || formData.email}</strong> with your email verification code before proceeding.
                         </p>
                       </div>
                     </div>

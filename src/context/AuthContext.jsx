@@ -239,13 +239,13 @@ export function AuthProvider({ children }) {
     return data;
   };
 
-  // Verify 6-digit OTP code sent to Email
+  // Verify OTP code sent to Email (supports 6, 8, or variable length code)
   const verifyEmailOtp = async ({ email, token }) => {
     const cleanEmail = (email || '').trim().toLowerCase();
-    const cleanToken = (token || '').replace(/\D/g, '').trim().slice(0, 6);
+    const cleanToken = (token || '').replace(/\D/g, '').trim().slice(0, 10);
 
-    if (cleanToken.length !== 6) {
-      throw new Error('Please enter a valid 6-digit verification code.');
+    if (cleanToken.length < 6 || cleanToken.length > 10) {
+      throw new Error('Please enter the full verification code sent to your email.');
     }
 
     // Try signup OTP verification

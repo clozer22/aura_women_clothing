@@ -243,12 +243,11 @@ export default function Navbar({
               <button
                 type="button"
                 onClick={onOpenAuth}
-                className="text-[#2C1E1B] hover:text-[#B86B60] p-1.5 focus:outline-none transition-colors flex items-center gap-1.5 text-xs uppercase font-bold tracking-wider cursor-pointer"
+                className="text-[#2C1E1B] hover:text-[#B86B60] p-1.5 focus:outline-none transition-colors flex items-center justify-center cursor-pointer"
                 title="Sign In / Register"
                 aria-label="Sign In or Register"
               >
                 <User className="w-[22px] h-[22px] stroke-[1.75]" />
-                <span className="hidden lg:inline text-[11px]">Sign In</span>
               </button>
             )}
 
@@ -356,13 +355,10 @@ export default function Navbar({
             setMobileMenuOpen(!mobileMenuOpen);
             setShowSearchInput(false);
           }}
-          className="p-1.5 text-[#2C1E1B] bg-transparent border-none focus:outline-none flex items-center gap-1.5 rounded-none cursor-pointer"
+          className="p-1.5 text-[#2C1E1B] bg-transparent border-none focus:outline-none flex items-center justify-center rounded-none cursor-pointer"
           aria-label="Toggle Navigation Menu"
         >
           {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          <span className="text-[10px] font-brand font-bold uppercase tracking-[0.16em] text-[#2C1E1B]">
-            {mobileMenuOpen ? 'Close' : 'Menu'}
-          </span>
         </motion.button>
 
         <button onClick={onNavigateHome} className="focus:outline-none flex items-center">
@@ -372,8 +368,8 @@ export default function Navbar({
         </button>
       </div>
 
-      {/* Mobile Actions: Search + Cart Basket + User Profile with Labels */}
-      <div className="flex md:hidden items-center gap-2.5 sm:gap-3.5">
+      {/* Mobile Actions: Search + Cart Basket + User Profile (Icons only) */}
+      <div className="flex md:hidden items-center gap-3 sm:gap-4">
         {/* 1. Mobile Search Button */}
         <button
           ref={mobileSearchBtnRef}
@@ -381,62 +377,51 @@ export default function Navbar({
             setShowSearchInput(!showSearchInput);
             setMobileMenuOpen(false);
           }}
-          className="flex flex-col items-center justify-center p-1 text-[#2C1E1B] bg-transparent border-none focus:outline-none rounded-none cursor-pointer"
+          className="p-1 text-[#2C1E1B] hover:text-[#B86B60] bg-transparent border-none focus:outline-none rounded-none cursor-pointer transition-colors"
           aria-label="Toggle Mobile Search"
         >
-          <Search className="w-4 h-4 stroke-[1.75]" />
-          <span className="text-[8px] font-brand uppercase tracking-wider font-bold text-[#705B56] mt-0.5">
-            Search
-          </span>
+          <Search className="w-5 h-5 stroke-[1.75]" />
         </button>
 
         {/* 2. Mobile Cart Basket */}
         <button
           onClick={onOpenWishlist}
-          className="flex flex-col items-center justify-center p-1 text-[#2C1E1B] bg-transparent border-none focus:outline-none rounded-none relative cursor-pointer"
+          className="p-1 text-[#2C1E1B] hover:text-[#B86B60] bg-transparent border-none focus:outline-none rounded-none relative cursor-pointer transition-colors"
           aria-label="View Shopping Bag"
         >
           <div className="relative">
-            <img src={cartBasketIcon} alt="Cart" width={22} height={22} loading="lazy" decoding="async" className="w-[22px] h-[22px] object-contain" />
+            <img src={cartBasketIcon} alt="Cart" width={24} height={24} loading="lazy" decoding="async" className="w-[24px] h-[24px] object-contain" />
             {wishlistCount > 0 && (
               <span className="absolute -top-1.5 -right-2 bg-[#B86B60] text-white text-[8px] w-3.5 h-3.5 rounded-full flex items-center justify-center font-bold shadow-md">
                 {wishlistCount}
               </span>
             )}
           </div>
-          <span className="text-[8px] font-brand uppercase tracking-wider font-bold text-[#705B56] mt-0.5">
-            Bag
-          </span>
         </button>
 
         {/* 3. Mobile User Account Button */}
         {user ? (
           <button
             onClick={onOpenProfile}
-            className="flex flex-col items-center justify-center p-1 text-[#2C1E1B] bg-transparent border-none focus:outline-none rounded-none cursor-pointer"
+            className="p-1 text-[#2C1E1B] bg-transparent border-none focus:outline-none rounded-none cursor-pointer"
             title="Account"
             aria-label="Account"
           >
-            <div className="w-5 h-5 rounded-full bg-[#2C1E1B] text-white flex items-center justify-center text-[9px] font-bold font-brand tracking-wider relative">
+            <div className="w-6 h-6 rounded-full bg-[#2C1E1B] text-white flex items-center justify-center text-[10px] font-bold font-brand tracking-wider relative">
               {profile?.full_name ? profile.full_name.charAt(0).toUpperCase() : user.email.charAt(0).toUpperCase()}
               {profile?.has_set_password === false && (
                 <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-amber-500 rounded-full border border-white" />
               )}
             </div>
-            <span className="text-[8px] font-brand uppercase tracking-wider font-bold text-[#705B56] mt-0.5">
-              Account
-            </span>
           </button>
         ) : (
           <button
             onClick={onOpenAuth}
-            className="flex flex-col items-center justify-center p-1 text-[#2C1E1B] bg-transparent border-none focus:outline-none rounded-none cursor-pointer"
+            className="p-1 text-[#2C1E1B] hover:text-[#B86B60] bg-transparent border-none focus:outline-none rounded-none cursor-pointer transition-colors"
             aria-label="Sign In"
+            title="Sign In / Register"
           >
-            <User className="w-4 h-4 stroke-[1.75]" />
-            <span className="text-[8px] font-brand uppercase tracking-wider font-bold text-[#705B56] mt-0.5">
-              Sign In
-            </span>
+            <User className="w-5 h-5 stroke-[1.75]" />
           </button>
         )}
       </div>

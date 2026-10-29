@@ -190,7 +190,7 @@ export default function CustomerAuthModal({
           setResendCooldown(60);
         } catch (e) {}
         setMode('verify_otp');
-        setSuccessMsg(`Your account is not verified yet. We just sent a 6-digit verification code to ${cleanEmail}.`);
+        setSuccessMsg(`Your account is not verified yet. We just sent a verification code to ${cleanEmail}.`);
         setIsLoading(false);
         return;
       }
@@ -270,7 +270,7 @@ export default function CustomerAuthModal({
         try {
           await resendEmailOtp(cleanEmail);
           setResendCooldown(60);
-          setSuccessMsg(`Your account is awaiting verification. A fresh 6-digit code has been sent to ${cleanEmail}.`);
+          setSuccessMsg(`Your account is awaiting verification. A fresh verification code has been sent to ${cleanEmail}.`);
         } catch (resendErr) {
           const rMsg = resendErr.message || '';
           if (rMsg.toLowerCase().includes('rate limit')) {
@@ -307,9 +307,9 @@ export default function CustomerAuthModal({
   // Handle OTP Verification
   const handleVerifyOtp = async (e) => {
     e.preventDefault();
-    const cleanOtp = (otpCode || '').replace(/\D/g, '').trim().slice(0, 6);
-    if (cleanOtp.length !== 6) {
-      setErrorMsg('Please enter the full 6-digit verification code.');
+    const cleanOtp = (otpCode || '').replace(/\D/g, '').trim().slice(0, 10);
+    if (cleanOtp.length < 6 || cleanOtp.length > 10) {
+      setErrorMsg('Please enter the full verification code sent to your email.');
       return;
     }
 
@@ -338,7 +338,7 @@ export default function CustomerAuthModal({
     try {
       await resendEmailOtp(email);
       setResendCooldown(60);
-      setSuccessMsg('A new 6-digit verification code has been sent to your email.');
+      setSuccessMsg('A new verification code has been sent to your email.');
     } catch (err) {
       const msg = err.message || '';
       if (msg.toLowerCase().includes('rate limit') || msg.toLowerCase().includes('over_email_send_rate_limit')) {
@@ -392,7 +392,7 @@ export default function CustomerAuthModal({
             </h2>
             <p className="text-xs text-[#705B56] mt-1 font-sans">
               {mode === 'verify_otp'
-                ? `Enter the 6-digit code sent to ${email}`
+                ? `Enter the verification code sent to ${email}`
                 : mode === 'signup'
                 ? 'Sign up to track orders, save wishlists, and checkout faster.'
                 : 'Sign in to access your order history and saved items.'}
@@ -638,13 +638,13 @@ export default function CustomerAuthModal({
             </form>
           )}
 
-          {/* FORM 3: 6-Digit Email OTP Verification Screen */}
+          {/* FORM 3: Email OTP Verification Screen */}
           {mode === 'verify_otp' && (
             <form onSubmit={handleVerifyOtp} className="space-y-5">
               <div className="bg-[#FAF5F2] border border-[#E8DCD7] p-4 text-center">
                 <ShieldCheck className="w-6 h-6 text-[#B86B60] mx-auto mb-1.5" />
                 <p className="text-xs text-[#2C1E1B] font-semibold font-brand">
-                  6-Digit OTP Code Sent
+                  Verification Code Sent
                 </p>
                 <p className="text-[11px] text-[#705B56] mt-0.5">
                   Check your inbox at <span className="font-bold text-[#2C1E1B]">{email}</span>
@@ -653,18 +653,18 @@ export default function CustomerAuthModal({
 
               <div>
                 <label className="block text-[11px] uppercase font-bold tracking-wider text-[#705B56] mb-1.5 text-center">
-                  Enter 6-Digit Code
+                  Enter Verification Code
                 </label>
                 <div className="relative">
                   <KeyRound className="w-4 h-4 text-[#A38E88] absolute left-3.5 top-3.5" />
                   <input
                     type="text"
                     required
-                    maxLength={6}
+                    maxLength={10}
                     value={otpCode}
-                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    placeholder="123456"
-                    className="w-full pl-10 pr-3.5 py-3 bg-[#FAF5F2] border border-[#E8DCD7] text-center text-xl font-mono tracking-[0.4em] font-bold text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B] rounded-none transition-colors"
+                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                    placeholder="Enter code"
+                    className="w-full pl-10 pr-3.5 py-3 bg-[#FAF5F2] border border-[#E8DCD7] text-center text-xl font-mono tracking-[0.25em] font-bold text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B] rounded-none transition-colors"
                     autoFocus
                   />
                 </div>
