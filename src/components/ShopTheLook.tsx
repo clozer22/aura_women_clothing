@@ -318,10 +318,10 @@ export const ShopTheLook: React.FC<ShopTheLookProps> = ({
           <span>✦ Scroll horizontally to explore models ✦</span>
         </div>
 
-        {/* Scrollable Viewport Wrapper: horizontally scrollable on mobile with momentum physics */}
+        {/* Scrollable Viewport Wrapper: horizontally scrollable on mobile with momentum physics; touch-pan-y enabled so dragging vertically smoothly scrolls the page */}
         <div
           ref={scrollContainerRef}
-          className="w-full overflow-x-auto overflow-y-hidden scrollbar-none touch-pan-x"
+          className="w-full overflow-x-auto overflow-y-hidden scrollbar-none overscroll-x-contain touch-pan-y touch-pan-x"
           style={{ WebkitOverflowScrolling: 'touch' }}
         >
           {/* Main Lookbook Canvas: Keeps full scale (h-[580px] - h-[800px]), aspect-[1920/1080], so the image & models never shrink on mobile */}

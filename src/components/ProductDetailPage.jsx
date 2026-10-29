@@ -19,7 +19,9 @@ import {
   ThumbsUp,
   Tag,
   ChevronRight,
-  Maximize2
+  Maximize2,
+  Camera,
+  ZoomIn
 } from 'lucide-react';
 import sizeChartImg from '../images/size_chart.webp';
 import { addToWishlist, isInWishlist } from '../lib/wishlistManager';
@@ -50,7 +52,8 @@ export default function ProductDetailPage({
   // Reviews state
   const [reviews, setReviews] = useState([]);
   const [isLoadingReviews, setIsLoadingReviews] = useState(true);
-  const [activeStarFilter, setActiveStarFilter] = useState('ALL'); // 'ALL' | 5 | 4 | 3 | 2 | 1
+  const [activeStarFilter, setActiveStarFilter] = useState('ALL');
+  const [reviewLightboxImg, setReviewLightboxImg] = useState(null); // 'ALL' | 5 | 4 | 3 | 2 | 1
 
   // 1. Resolve product by ID if not provided as object
   useEffect(() => {
@@ -916,6 +919,36 @@ export default function ProductDetailPage({
                         ))}
                       </div>
                     )}
+
+                    {/* Customer Photo Proofs */}
+                    {Array.isArray(rev.images) && rev.images.length > 0 && (
+                      <div className="pt-2">
+                        <span className="text-[10px] font-brand uppercase tracking-wider text-[#705B56] block mb-1.5 font-bold">
+                          Customer Photos ({rev.images.length}):
+                        </span>
+                        <div className="flex flex-wrap gap-2.5">
+                          {rev.images.map((imgUrl, imgIdx) => (
+                            <button
+                              key={imgIdx}
+                              type="button"
+                              onClick={() => setReviewLightboxImg(imgUrl)}
+                              className="relative w-16 h-16 sm:w-20 sm:h-20 bg-white border border-[#E8DCD7] hover:border-[#2C1E1B] transition-all cursor-pointer group shadow-2xs overflow-hidden"
+                              title="View photo proof"
+                            >
+                              <img
+                                src={imgUrl}
+                                alt="Customer Proof"
+                                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
+                                loading="lazy"
+                              />
+                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                                <ZoomIn className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-md" />
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </motion.div>
                 );
               })
@@ -1058,6 +1091,35 @@ export default function ProductDetailPage({
                   className="max-h-[85vh] max-w-full object-contain"
                 />
               )}
+            </div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Review Customer Photo Proof Lightbox Modal */}
+      <AnimatePresence>
+        {reviewLightboxImg && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm"
+            onClick={() => setReviewLightboxImg(null)}
+          >
+            <div
+              className="relative max-w-2xl max-h-[90vh] bg-white p-2 border border-[#E8DCD7] shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                onClick={() => setReviewLightboxImg(null)}
+                className="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-[#2C1E1B] text-white flex items-center justify-center hover:bg-rose-600 transition-colors shadow-lg cursor-pointer"
+                title="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              <img
+                src={reviewLightboxImg}
+                alt="Customer Garment Proof"
+                className="max-w-full max-h-[80vh] object-contain block mx-auto"
+              />
             </div>
           </div>
         )}

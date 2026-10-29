@@ -15,11 +15,14 @@ import {
   Sparkles,
   ThumbsUp,
   RotateCcw,
-  AlertCircle
+  AlertCircle,
+  Camera,
+  ZoomIn
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import TrackingModal from './TrackingModal';
+import { uploadReviewImages, MAX_REVIEW_IMAGES } from '../lib/reviewImageService';
 
 export default function OrderHistory({ onBackToShop, onSelectOrder }) {
   const { user } = useAuth();
@@ -49,6 +52,8 @@ export default function OrderHistory({ onBackToShop, onSelectOrder }) {
   const [reviewComment, setReviewComment] = useState('');
   const [reviewFit, setReviewFit] = useState('True to size');
   const [reviewTags, setReviewTags] = useState([]);
+  const [reviewImages, setReviewImages] = useState([]);
+  const [lightboxImg, setLightboxImg] = useState(null);
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [reviewSuccessMessage, setReviewSuccessMessage] = useState(null);
 
@@ -208,11 +213,13 @@ export default function OrderHistory({ onBackToShop, onSelectOrder }) {
       setReviewComment(existing.comment || '');
       setReviewFit(existing.fit_feedback || 'True to size');
       setReviewTags(existing.tags || []);
+      setReviewImages(Array.isArray(existing.images) ? [...existing.images] : []);
     } else {
       setReviewRating(5);
       setReviewComment('');
       setReviewFit('True to size');
       setReviewTags(['True to size', 'Luxurious fabric']);
+      setReviewImages([]);
     }
   };
 
@@ -223,6 +230,7 @@ export default function OrderHistory({ onBackToShop, onSelectOrder }) {
       item: null,
       existingReview: null
     });
+    setReviewImages([]);
   };
 
   const toggleTag = (tag) => {
@@ -248,6 +256,15 @@ export default function OrderHistory({ onBackToShop, onSelectOrder }) {
     const prodId = String(item.id || item.productId || item.name);
     const key = getItemReviewKey(order.order_reference, item);
 
+    let finalImages = [];
+    try {
+      if (Array.isArray(reviewImages) && reviewImages.length > 0) {
+        finalImages = await uploadReviewImages(reviewImages);
+      }
+    } catch (uploadErr) {
+      console.warn('Image upload error:', uploadErr);
+    }
+
     const payload = {
       order_id: order.id,
       order_reference: order.order_reference,
@@ -265,6 +282,7 @@ export default function OrderHistory({ onBackToShop, onSelectOrder }) {
       comment: (reviewComment || '').replace(/<[^>]*>?/gm, '').trim().slice(0, 1000),
       fit_feedback: (reviewFit || '').replace(/<[^>]*>?/gm, '').trim().slice(0, 50),
       tags: Array.isArray(reviewTags) ? reviewTags.map((t) => String(t).replace(/<[^>]*>?/gm, '').trim().slice(0, 30)) : [],
+      images: finalImages,
       is_verified_purchase: true,
       updated_at: new Date().toISOString()
     };
@@ -821,6 +839,75 @@ export default function OrderHistory({ onBackToShop, onSelectOrder }) {
                     />
                   </div>
 
+                  {/* Customer Photo Proof Upload */}
+                  <div className="space-y-2 pt-1 border-t border-[#E8DCD7]/60">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56] flex items-center gap-1.5">
+                        <Camera className="w-3.5 h-3.5 text-[#B86B60]" />
+                        <span>Photo Proof (Optional):</span>
+                      </label>
+                      <span className="text-[10px] text-[#A38E88]">
+                        {reviewImages.length} / {MAX_REVIEW_IMAGES} photos
+                      </span>
+                    </div>
+
+                    {/* Previews */}
+                    {reviewImages.length > 0 && (
+                      <div className="flex flex-wrap gap-2.5">
+                        {reviewImages.map((imgItem, idx) => {
+                          const previewSrc = typeof imgItem === 'string' ? imgItem : imgItem?.previewUrl || imgItem?.url;
+                          return (
+                            <div key={idx} className="relative w-16 h-16 sm:w-20 sm:h-20 bg-white border border-[#E8DCD7] shadow-2xs group">
+                              <img
+                                src={previewSrc}
+                                alt="Review Proof Preview"
+                                className="w-full h-full object-cover"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setReviewImages((prev) => prev.filter((_, i) => i !== idx));
+                                }}
+                                className="absolute -top-1.5 -right-1.5 bg-[#2C1E1B] hover:bg-rose-600 text-white w-5 h-5 rounded-full flex items-center justify-center transition-colors shadow-sm cursor-pointer"
+                                title="Remove photo"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* File picker button */}
+                    {reviewImages.length < MAX_REVIEW_IMAGES && (
+                      <div>
+                        <label className="inline-flex items-center gap-2 px-3.5 py-2 bg-white border border-dashed border-[#B86B60] hover:border-[#2C1E1B] text-[#705B56] hover:text-[#2C1E1B] text-[10px] uppercase tracking-wider font-bold transition-all cursor-pointer">
+                          <Camera className="w-3.5 h-3.5 text-[#B86B60]" />
+                          <span>Attach Photo Proof</span>
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp,image/heic"
+                            multiple
+                            className="hidden"
+                            onChange={(e) => {
+                              const files = Array.from(e.target.files || []);
+                              if (files.length === 0) return;
+                              const slotsLeft = MAX_REVIEW_IMAGES - reviewImages.length;
+                              const added = files.slice(0, slotsLeft).map((file) => ({
+                                file,
+                                previewUrl: URL.createObjectURL(file),
+                                name: file.name,
+                              }));
+                              setReviewImages((prev) => [...prev, ...added]);
+                              e.target.value = '';
+                            }}
+                          />
+                        </label>
+                      </div>
+                    )}
+                  </div>
+
                   {/* Submit & Cancel Buttons */}
                   <div className="pt-3 border-t border-[#E8DCD7] flex items-center justify-end gap-3">
                     <button
@@ -860,6 +947,35 @@ export default function OrderHistory({ onBackToShop, onSelectOrder }) {
         orderReference={trackingModalOrder?.order_reference}
         initialOrder={trackingModalOrder}
       />
+
+      {/* Photo Proof Lightbox Modal */}
+      <AnimatePresence>
+        {lightboxImg && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm"
+            onClick={() => setLightboxImg(null)}
+          >
+            <div
+              className="relative max-w-2xl max-h-[90vh] bg-white p-2 border border-[#E8DCD7] shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                onClick={() => setLightboxImg(null)}
+                className="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-[#2C1E1B] text-white flex items-center justify-center hover:bg-rose-600 transition-colors shadow-lg cursor-pointer"
+                title="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              <img
+                src={lightboxImg}
+                alt="Proof Fullscreen"
+                className="max-w-full max-h-[80vh] object-contain block mx-auto"
+              />
+            </div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

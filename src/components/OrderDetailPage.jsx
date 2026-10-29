@@ -20,11 +20,14 @@ import {
   XCircle,
   X,
   Ban,
-  RotateCcw
+  RotateCcw,
+  Camera,
+  ZoomIn
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import TrackingModal from './TrackingModal';
+import { uploadReviewImages, MAX_REVIEW_IMAGES } from '../lib/reviewImageService';
 
 const FIT_OPTIONS = [
   { id: 'Runs Small', label: 'Runs Small' },
@@ -55,8 +58,9 @@ export default function OrderDetailPage({
   // Reviews state per product: { [productId]: reviewObject }
   const [productReviews, setProductReviews] = useState({});
   const [isLoadingReviews, setIsLoadingReviews] = useState(true);
+  const [lightboxImg, setLightboxImg] = useState(null);
 
-  // Review draft state: { [productId]: { rating, comment, fit, hoverRating, isSubmitting, isEditing, error, success } }
+  // Review draft state: { [productId]: { rating, comment, fit, images, hoverRating, isSubmitting, isEditing, error, success } }
   const [reviewForms, setReviewForms] = useState({});
 
   // Customer Cancellation Modal states
@@ -242,6 +246,7 @@ export default function OrderDetailPage({
         rating: existingReview.rating || 5,
         comment: existingReview.comment || '',
         fit: existingReview.fit_feedback || 'True to Size',
+        images: Array.isArray(existingReview.images) ? [...existingReview.images] : [],
         isEditing: true,
       },
     }));
@@ -274,6 +279,15 @@ export default function OrderDetailPage({
     handleFormChange(pId, 'isSubmitting', true);
     handleFormChange(pId, 'error', null);
 
+    let finalImages = [];
+    try {
+      if (Array.isArray(form.images) && form.images.length > 0) {
+        finalImages = await uploadReviewImages(form.images);
+      }
+    } catch (uploadErr) {
+      console.warn('Image upload error:', uploadErr);
+    }
+
     const reviewerName =
       user?.user_metadata?.full_name ||
       user?.user_metadata?.name ||
@@ -291,6 +305,7 @@ export default function OrderDetailPage({
       rating: ratingVal,
       comment: commentVal.slice(0, 1000),
       fit_feedback: form.fit || 'True to Size',
+      images: finalImages,
       is_verified_purchase: true,
       updated_at: new Date().toISOString(),
     };
@@ -750,6 +765,7 @@ export default function OrderDetailPage({
                 rating: existingReview?.rating || 5,
                 comment: existingReview?.comment || '',
                 fit: existingReview?.fit_feedback || 'True to Size',
+                images: Array.isArray(existingReview?.images) ? existingReview.images : [],
                 isEditing: false,
               };
               const isFormEditing = form.isEditing || !existingReview;
@@ -814,6 +830,35 @@ export default function OrderDetailPage({
                         <p className="text-xs sm:text-sm text-[#2C1E1B] leading-relaxed whitespace-pre-wrap bg-white p-3.5 border border-[#E8DCD7]">
                           "{existingReview.comment}"
                         </p>
+
+                        {/* Customer Photo Proofs Display */}
+                        {Array.isArray(existingReview.images) && existingReview.images.length > 0 && (
+                          <div className="pt-1">
+                            <span className="text-[10px] font-brand uppercase tracking-wider text-[#705B56] block mb-1.5 font-bold">
+                              Photo Proof ({existingReview.images.length}):
+                            </span>
+                            <div className="flex flex-wrap gap-2.5">
+                              {existingReview.images.map((imgUrl, imgIdx) => (
+                                <button
+                                  key={imgIdx}
+                                  type="button"
+                                  onClick={() => setLightboxImg(imgUrl)}
+                                  className="relative w-16 h-16 sm:w-20 sm:h-20 bg-white border border-[#E8DCD7] hover:border-[#2C1E1B] transition-all cursor-pointer group shadow-2xs overflow-hidden"
+                                  title="View photo proof"
+                                >
+                                  <img
+                                    src={imgUrl}
+                                    alt="Review Proof"
+                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                  />
+                                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                                    <ZoomIn className="w-3.5 h-3.5 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-md" />
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
 
                         <div className="flex items-center justify-between text-[11px] text-[#705B56] pt-1">
                           <span>Reviewed by {existingReview.user_name || 'Client'}</span>
@@ -917,6 +962,77 @@ export default function OrderDetailPage({
                             placeholder="Write your feedback regarding the silhouette, material softness, stitch finish, and styling notes..."
                             className="w-full p-3 bg-white border border-[#E8DCD7] text-xs text-[#2C1E1B] placeholder:text-slate-400 focus:outline-none focus:border-[#2C1E1B] rounded-none resize-none leading-relaxed"
                           />
+                        </div>
+
+                        {/* Customer Photo Proof Upload */}
+                        <div className="space-y-2 pt-1 border-t border-[#E8DCD7]/60">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[11px] uppercase tracking-wider font-bold text-[#705B56] flex items-center gap-1.5">
+                              <Camera className="w-3.5 h-3.5 text-[#B86B60]" />
+                              <span>Photo Proof (Optional):</span>
+                            </label>
+                            <span className="text-[10px] text-[#A38E88]">
+                              {(form.images || []).length} / {MAX_REVIEW_IMAGES} photos
+                            </span>
+                          </div>
+
+                          {/* Previews Grid */}
+                          {(form.images || []).length > 0 && (
+                            <div className="flex flex-wrap gap-2.5">
+                              {form.images.map((imgItem, idx) => {
+                                const previewSrc = typeof imgItem === 'string' ? imgItem : imgItem?.previewUrl || imgItem?.url;
+                                return (
+                                  <div key={idx} className="relative w-16 h-16 sm:w-20 sm:h-20 bg-white border border-[#E8DCD7] shadow-2xs group">
+                                    <img
+                                      src={previewSrc}
+                                      alt="Photo Proof Preview"
+                                      className="w-full h-full object-cover"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const updated = form.images.filter((_, i) => i !== idx);
+                                        handleFormChange(pId, 'images', updated);
+                                      }}
+                                      className="absolute -top-1.5 -right-1.5 bg-[#2C1E1B] hover:bg-rose-600 text-white w-5 h-5 rounded-full flex items-center justify-center transition-colors shadow-sm cursor-pointer"
+                                      title="Remove photo"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {/* File Input Trigger */}
+                          {(form.images || []).length < MAX_REVIEW_IMAGES && (
+                            <div>
+                              <label className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-dashed border-[#B86B60] hover:border-[#2C1E1B] text-[#705B56] hover:text-[#2C1E1B] text-[11px] uppercase tracking-wider font-bold transition-all cursor-pointer">
+                                <Camera className="w-4 h-4 text-[#B86B60]" />
+                                <span>Upload Garment Photo</span>
+                                <input
+                                  type="file"
+                                  accept="image/jpeg,image/png,image/webp,image/heic"
+                                  multiple
+                                  className="hidden"
+                                  onChange={(e) => {
+                                    const files = Array.from(e.target.files || []);
+                                    if (files.length === 0) return;
+                                    const currentImages = form.images || [];
+                                    const slotsLeft = MAX_REVIEW_IMAGES - currentImages.length;
+                                    const added = files.slice(0, slotsLeft).map((file) => ({
+                                      file,
+                                      previewUrl: URL.createObjectURL(file),
+                                      name: file.name,
+                                    }));
+                                    handleFormChange(pId, 'images', [...currentImages, ...added]);
+                                    e.target.value = '';
+                                  }}
+                                />
+                              </label>
+                            </div>
+                          )}
                         </div>
 
                         {/* Error message */}
@@ -1130,6 +1246,35 @@ export default function OrderDetailPage({
                 </div>
               )}
             </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Photo Proof Lightbox Modal */}
+      <AnimatePresence>
+        {lightboxImg && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm"
+            onClick={() => setLightboxImg(null)}
+          >
+            <div
+              className="relative max-w-2xl max-h-[90vh] bg-white p-2 border border-[#E8DCD7] shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                onClick={() => setLightboxImg(null)}
+                className="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-[#2C1E1B] text-white flex items-center justify-center hover:bg-rose-600 transition-colors shadow-lg cursor-pointer"
+                title="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              <img
+                src={lightboxImg}
+                alt="Proof Fullscreen"
+                className="max-w-full max-h-[80vh] object-contain block mx-auto"
+              />
+            </div>
           </div>
         )}
       </AnimatePresence>

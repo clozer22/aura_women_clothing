@@ -293,6 +293,34 @@ const AdminReviewsTab = memo(({
                     "{rev.comment}"
                   </p>
                 )}
+
+                {/* Proof Images if attached */}
+                {Array.isArray(rev.images) && rev.images.length > 0 && (
+                  <div className="pt-1">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                      Customer Photo Proof ({rev.images.length}):
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {rev.images.map((imgUrl, idx) => (
+                        <a
+                          key={idx}
+                          href={imgUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="relative w-14 h-14 rounded-lg overflow-hidden border border-slate-200 hover:border-blue-500 shadow-2xs group block"
+                          title="Click to view full photo in new tab"
+                        >
+                          <img
+                            src={imgUrl}
+                            alt="Customer Proof"
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                            loading="lazy"
+                          />
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Author */}
