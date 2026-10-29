@@ -71,7 +71,7 @@ export default function OrderHistory({ onBackToShop, onSelectOrder }) {
   // Load reviews for delivered orders
   const loadUserReviews = async (orderList) => {
     const deliveredRefs = orderList
-      .filter((o) => (o.status || '').toUpperCase() === 'DELIVERED')
+      .filter((o) => ['DELIVERED', 'COMPLETED', 'SUCCESS'].includes((o.status || '').toUpperCase()))
       .map((o) => o.order_reference)
       .filter(Boolean);
 
@@ -188,6 +188,11 @@ export default function OrderHistory({ onBackToShop, onSelectOrder }) {
 
   // Open review modal for a specific delivered item
   const openReviewModal = (order, item) => {
+    const isOrderDelivered = ['DELIVERED', 'COMPLETED', 'SUCCESS'].includes(
+      (order?.status || '').toUpperCase()
+    );
+    if (!isOrderDelivered) return;
+
     const key = getItemReviewKey(order.order_reference, item);
     const existing = userReviewsMap[key] || null;
 
@@ -229,6 +234,14 @@ export default function OrderHistory({ onBackToShop, onSelectOrder }) {
   const handleSaveReview = async (e) => {
     e.preventDefault();
     if (!reviewModal.order || !reviewModal.item) return;
+
+    const isOrderDelivered = ['DELIVERED', 'COMPLETED', 'SUCCESS'].includes(
+      (reviewModal.order?.status || '').toUpperCase()
+    );
+    if (!isOrderDelivered) {
+      setReviewSuccessMessage('Reviews can only be added for delivered orders.');
+      return;
+    }
 
     setIsSubmittingReview(true);
     const { order, item, existingReview } = reviewModal;
@@ -485,7 +498,7 @@ export default function OrderHistory({ onBackToShop, onSelectOrder }) {
             </div>
           ) : (
             filteredOrders.map((order) => {
-              const isDelivered = (order.status || '').toUpperCase() === 'DELIVERED';
+              const isDelivered = ['DELIVERED', 'COMPLETED', 'SUCCESS'].includes((order?.status || '').toUpperCase());
               const itemsCount = order.items?.reduce((sum, it) => sum + (it.quantity || 1), 0) || 1;
 
               return (

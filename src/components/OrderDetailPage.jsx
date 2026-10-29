@@ -249,6 +249,18 @@ export default function OrderDetailPage({
 
   // Submit Review to Supabase
   const handleSubmitReview = async (item) => {
+    const isOrderDelivered = ['DELIVERED', 'COMPLETED', 'SUCCESS'].includes(
+      (order?.status || '').toUpperCase()
+    );
+    if (!isOrderDelivered) {
+      handleFormChange(
+        item.id,
+        'error',
+        'Garment reviews can only be submitted once your order has been delivered or successfully completed.'
+      );
+      return;
+    }
+
     const pId = item.id;
     const form = reviewForms[pId] || { rating: 5, comment: '', fit: 'True to Size' };
     const ratingVal = Math.min(5, Math.max(1, parseInt(form.rating, 10) || 5));
@@ -424,7 +436,7 @@ export default function OrderDetailPage({
   const badge = getStatusBadge(order.status);
   const items = Array.isArray(order.items) ? order.items : [];
   const trackingNumber = order.tracking_number;
-  const isDelivered = (order.status || '').toUpperCase() === 'DELIVERED';
+  const isDelivered = ['DELIVERED', 'COMPLETED', 'SUCCESS'].includes((order?.status || '').toUpperCase());
 
   return (
     <div className="min-h-screen bg-[#FAF5F2] text-[#2C1E1B] py-8 sm:py-12 px-4 sm:px-6 lg:px-8 font-sans">
@@ -720,11 +732,13 @@ export default function OrderDetailPage({
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-[#B86B60]" />
               <h2 className="font-brand text-lg font-bold text-[#2C1E1B]">
-                Purchased Garments & Client Feedback
+                Purchased Garments {isDelivered ? '& Client Feedback' : ''}
               </h2>
             </div>
             <p className="text-xs text-[#705B56] mt-1">
-              Rate your atelier pieces and share fit, tailoring, and fabric reviews below.
+              {isDelivered
+                ? 'Your order has arrived! Rate your atelier pieces and share fit, tailoring, and fabric reviews below.'
+                : 'Itemized garment list for this order. Reviews will unlock once your package has been delivered.'}
             </p>
           </div>
 
@@ -786,13 +800,15 @@ export default function OrderDetailPage({
                             )}
                           </div>
 
-                          <button
-                            type="button"
-                            onClick={() => startEditReview(pId, existingReview)}
-                            className="text-xs font-bold text-[#B86B60] hover:underline uppercase tracking-wider cursor-pointer"
-                          >
-                            Edit Review
-                          </button>
+                          {isDelivered && (
+                            <button
+                              type="button"
+                              onClick={() => startEditReview(pId, existingReview)}
+                              className="text-xs font-bold text-[#B86B60] hover:underline uppercase tracking-wider cursor-pointer"
+                            >
+                              Edit Review
+                            </button>
+                          )}
                         </div>
 
                         <p className="text-xs sm:text-sm text-[#2C1E1B] leading-relaxed whitespace-pre-wrap bg-white p-3.5 border border-[#E8DCD7]">
@@ -804,8 +820,8 @@ export default function OrderDetailPage({
                           <span>{formatDate(existingReview.updated_at || existingReview.created_at)}</span>
                         </div>
                       </div>
-                    ) : (
-                      /* Interactive Review Form */
+                    ) : isDelivered ? (
+                      /* Interactive Review Form (Only accessible once DELIVERED / COMPLETED / SUCCESS) */
                       <div className="space-y-4">
                         <div className="flex items-center justify-between border-b border-[#E8DCD7] pb-3">
                           <div>
@@ -939,6 +955,19 @@ export default function OrderDetailPage({
                             )}
                           </button>
                         </div>
+                      </div>
+                    ) : (
+                      /* Locked Notice while order is processing, awaiting shipment, in transit, or cancelled */
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-white border border-[#E8DCD7] text-xs">
+                        <div className="flex items-center gap-2.5 text-[#705B56]">
+                          <Truck className="w-4 h-4 text-[#B86B60] flex-shrink-0" />
+                          <span>
+                            Garment reviews & ratings will unlock once your package has been <strong>delivered</strong>.
+                          </span>
+                        </div>
+                        <span className="text-[10px] uppercase font-mono font-bold tracking-wider px-2 py-0.5 bg-[#FAF5F2] border border-[#E8DCD7] text-[#705B56] self-start sm:self-auto">
+                          Status: {order.status?.replace(/_/g, ' ') || 'PROCESSING'}
+                        </span>
                       </div>
                     )}
                   </div>
