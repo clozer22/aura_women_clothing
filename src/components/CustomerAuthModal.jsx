@@ -190,7 +190,7 @@ export default function CustomerAuthModal({
           setResendCooldown(60);
         } catch (e) {}
         setMode('verify_otp');
-        setSuccessMsg(`Your account is not verified yet. We just sent a verification code to ${cleanEmail}.`);
+        setSuccessMsg(`Your account is not verified yet. We just sent an 8-digit verification code to ${cleanEmail}.`);
         setIsLoading(false);
         return;
       }
@@ -270,7 +270,7 @@ export default function CustomerAuthModal({
         try {
           await resendEmailOtp(cleanEmail);
           setResendCooldown(60);
-          setSuccessMsg(`Your account is awaiting verification. A fresh verification code has been sent to ${cleanEmail}.`);
+          setSuccessMsg(`Your account is awaiting verification. A fresh 8-digit code has been sent to ${cleanEmail}.`);
         } catch (resendErr) {
           const rMsg = resendErr.message || '';
           if (rMsg.toLowerCase().includes('rate limit')) {
@@ -338,7 +338,7 @@ export default function CustomerAuthModal({
     try {
       await resendEmailOtp(email);
       setResendCooldown(60);
-      setSuccessMsg('A new verification code has been sent to your email.');
+      setSuccessMsg('A new 8-digit verification code has been sent to your email.');
     } catch (err) {
       const msg = err.message || '';
       if (msg.toLowerCase().includes('rate limit') || msg.toLowerCase().includes('over_email_send_rate_limit')) {
@@ -392,7 +392,7 @@ export default function CustomerAuthModal({
             </h2>
             <p className="text-xs text-[#705B56] mt-1 font-sans">
               {mode === 'verify_otp'
-                ? `Enter the verification code sent to ${email}`
+                ? `Enter the 8-digit verification code sent to ${email}`
                 : mode === 'signup'
                 ? 'Sign up to track orders, save wishlists, and checkout faster.'
                 : 'Sign in to access your order history and saved items.'}
@@ -644,7 +644,7 @@ export default function CustomerAuthModal({
               <div className="bg-[#FAF5F2] border border-[#E8DCD7] p-4 text-center">
                 <ShieldCheck className="w-6 h-6 text-[#B86B60] mx-auto mb-1.5" />
                 <p className="text-xs text-[#2C1E1B] font-semibold font-brand">
-                  Verification Code Sent
+                  8-Digit Verification Code Sent
                 </p>
                 <p className="text-[11px] text-[#705B56] mt-0.5">
                   Check your inbox at <span className="font-bold text-[#2C1E1B]">{email}</span>
@@ -653,7 +653,7 @@ export default function CustomerAuthModal({
 
               <div>
                 <label className="block text-[11px] uppercase font-bold tracking-wider text-[#705B56] mb-1.5 text-center">
-                  Enter Verification Code
+                  Enter 8-Digit Code
                 </label>
                 <div className="relative">
                   <KeyRound className="w-4 h-4 text-[#A38E88] absolute left-3.5 top-3.5" />
@@ -663,7 +663,7 @@ export default function CustomerAuthModal({
                     maxLength={10}
                     value={otpCode}
                     onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                    placeholder="Enter code"
+                    placeholder="12345678"
                     className="w-full pl-10 pr-3.5 py-3 bg-[#FAF5F2] border border-[#E8DCD7] text-center text-xl font-mono tracking-[0.25em] font-bold text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B] rounded-none transition-colors"
                     autoFocus
                   />
