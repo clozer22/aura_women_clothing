@@ -257,6 +257,17 @@ html, body {
   /* Firefox */
 }
 
+/* Ambient Background Video Utility: Prevent iOS/WebKit from showing native controls */
+video.ambient-bg::-webkit-media-controls,
+video.ambient-bg::-webkit-media-controls-start-playback-button,
+video.ambient-bg::-webkit-media-controls-play-button,
+video.ambient-bg::-webkit-media-controls-panel,
+video.ambient-bg::-webkit-media-controls-enclosure {
+  display: none !important;
+  -webkit-appearance: none !important;
+  opacity: 0 !important;
+}
+
 /* J&T Express & Shipmates Thermal Waybill Printing (A6 / 105mm x 148mm) */
 @media print {
   @page {

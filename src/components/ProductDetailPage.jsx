@@ -432,7 +432,12 @@ export default function ProductDetailPage({
                   loop
                   muted
                   playsInline
-                  className="w-full h-auto max-h-[650px] object-cover object-center mx-auto"
+                  webkit-playsinline="true"
+                  controls={false}
+                  controlsList="nofullscreen nodownload noremoteplayback"
+                  disablePictureInPicture
+                  disableRemotePlayback
+                  className="w-full h-auto max-h-[650px] object-cover object-center mx-auto ambient-bg pointer-events-none"
                 />
               ) : (
                 <img

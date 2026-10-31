@@ -45,6 +45,13 @@ function Hero({ config }) {
     const videoEl = mediaRef.current;
     if (!isVideo || !videoEl) return;
 
+    // Hardened iOS WebKit inline & muted configuration to prevent fullscreen hijack
+    videoEl.defaultMuted = true;
+    videoEl.muted = true;
+    videoEl.playsInline = true;
+    videoEl.setAttribute('playsinline', '');
+    videoEl.setAttribute('webkit-playsinline', '');
+
     let isVisibleInViewport = false;
 
     const observer = new IntersectionObserver(
@@ -62,6 +69,9 @@ function Hero({ config }) {
     );
 
     observer.observe(videoEl);
+
+    // Initial play trigger
+    videoEl.play().catch(() => {});
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
@@ -109,10 +119,16 @@ function Hero({ config }) {
               loop
               muted
               playsInline
+              webkit-playsinline="true"
+              controls={false}
+              controlsList="nofullscreen nodownload noremoteplayback"
+              disablePictureInPicture
+              disableRemotePlayback
               onLoadedData={() => setMediaLoaded(true)}
               onError={() => setMediaLoaded(true)}
-              className={`w-full h-full object-cover object-center scale-105 group-hover:scale-100 transition-all duration-[1200ms] ease-out rounded-none ${mediaLoaded ? 'opacity-100' : 'opacity-0'
-                }`}
+              className={`w-full h-full object-cover object-center scale-105 group-hover:scale-100 transition-all duration-[1200ms] ease-out rounded-none ambient-bg pointer-events-none select-none ${
+                mediaLoaded ? 'opacity-100' : 'opacity-0'
+              }`}
             />
           ) : (
             <img

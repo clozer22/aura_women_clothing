@@ -81,6 +81,13 @@ export default function AboutSection({
     const videoEl = mediaRef.current;
     if (!isVideoUrl || !videoEl) return;
 
+    // Hardened iOS WebKit inline & muted configuration
+    videoEl.defaultMuted = true;
+    videoEl.muted = true;
+    videoEl.playsInline = true;
+    videoEl.setAttribute('playsinline', '');
+    videoEl.setAttribute('webkit-playsinline', '');
+
     let isVisibleInViewport = false;
 
     const observer = new IntersectionObserver(
@@ -139,9 +146,14 @@ export default function AboutSection({
               loop
               muted
               playsInline
+              webkit-playsinline="true"
+              controls={false}
+              controlsList="nofullscreen nodownload noremoteplayback"
+              disablePictureInPicture
+              disableRemotePlayback
               onLoadedData={() => setLoaded(true)}
               onError={() => setLoaded(true)}
-              className={`h-full w-auto max-w-none sm:absolute sm:inset-0 sm:w-full sm:h-full sm:object-cover sm:object-center transition-opacity duration-700 ease-out ${
+              className={`h-full w-auto max-w-none sm:absolute sm:inset-0 sm:w-full sm:h-full sm:object-cover sm:object-center transition-opacity duration-700 ease-out ambient-bg pointer-events-none select-none ${
                 loaded ? 'opacity-100' : 'opacity-0'
               }`}
             />
