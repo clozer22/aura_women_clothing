@@ -92,12 +92,12 @@ export const DEFAULT_ABOUT_AURA_HOTSPOTS: LookbookHotspot[] = [
     label: 'Model 3 Skirt',
   },
 
-  // Model 4 (Far Right) - Black Bell Sleeve Top
+  // Model 4 (Far Right) - Black Batwing / Boatneck Top
   {
     id: 'spot-m4-top',
     x: 86.5,
     y: 36.0,
-    productId: 'aura-custom-1787406946155', // AURA Aurora Top in Black
+    productId: 'aura-custom-1788969473847', // AURA Camilla Top in Black
     label: 'Model 4 Top',
   },
 ];
@@ -215,6 +215,12 @@ export const ShopTheLook: React.FC<ShopTheLookProps> = ({
       return catalogProducts.find((p) => {
         const n = (p.name || p.title || '').toLowerCase();
         return n.includes('petal') && n.includes('pink');
+      }) || null;
+    }
+    if (idStr.includes('1788969473847')) {
+      return catalogProducts.find((p) => {
+        const n = (p.name || p.title || '').toLowerCase();
+        return n.includes('camilla') && n.includes('black');
       }) || null;
     }
     if (idStr.includes('1787406946155')) {
