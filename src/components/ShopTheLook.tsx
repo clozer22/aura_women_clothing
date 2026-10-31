@@ -97,7 +97,7 @@ export const DEFAULT_ABOUT_AURA_HOTSPOTS: LookbookHotspot[] = [
     id: 'spot-m4-top',
     x: 86.5,
     y: 36.0,
-    productId: 'aura-custom-1787405963084', // AURA Amelia Top in Black
+    productId: 'aura-custom-1787406946155', // AURA Aurora Top in Black
     label: 'Model 4 Top',
   },
 ];
@@ -215,6 +215,12 @@ export const ShopTheLook: React.FC<ShopTheLookProps> = ({
       return catalogProducts.find((p) => {
         const n = (p.name || p.title || '').toLowerCase();
         return n.includes('petal') && n.includes('pink');
+      }) || null;
+    }
+    if (idStr.includes('1787406946155')) {
+      return catalogProducts.find((p) => {
+        const n = (p.name || p.title || '').toLowerCase();
+        return n.includes('aurora') && n.includes('black');
       }) || null;
     }
     if (idStr.includes('1787405963084')) {
