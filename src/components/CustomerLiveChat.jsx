@@ -48,9 +48,8 @@ const ChatMessageItem = React.memo(({ msg, onExpandImage }) => {
 
   return (
     <div
-      className={`flex flex-col ${
-        isCustomer ? 'items-end' : 'items-start'
-      } space-y-1 my-2.5 max-w-[85%] ${isCustomer ? 'ml-auto' : 'mr-auto'}`}
+      className={`flex flex-col ${isCustomer ? 'items-end' : 'items-start'
+        } space-y-1 my-2.5 max-w-[85%] ${isCustomer ? 'ml-auto' : 'mr-auto'}`}
     >
       {/* Sender Header */}
       <div className="flex items-center gap-1.5 px-1 text-[10px] text-[#A38E88]">
@@ -68,11 +67,10 @@ const ChatMessageItem = React.memo(({ msg, onExpandImage }) => {
 
       {/* Bubble Content */}
       <div
-        className={`p-3.5 rounded-2xl text-xs leading-relaxed break-words shadow-xs ${
-          isCustomer
-            ? 'bg-[#2C1E1B] text-white rounded-tr-none'
-            : 'bg-white border border-[#E8DCD7] text-[#2C1E1B] rounded-tl-none'
-        }`}
+        className={`p-3.5 rounded-2xl text-xs leading-relaxed break-words shadow-xs ${isCustomer
+          ? 'bg-[#2C1E1B] text-white rounded-tr-none'
+          : 'bg-white border border-[#E8DCD7] text-[#2C1E1B] rounded-tl-none'
+          }`}
       >
         {/* Text */}
         {msg.message_text && (
@@ -109,9 +107,8 @@ const ChatMessageItem = React.memo(({ msg, onExpandImage }) => {
             )}
             {msg.media_name && (
               <p
-                className={`text-[10px] px-2 py-1 truncate ${
-                  isCustomer ? 'text-white/70 bg-black/20' : 'text-[#705B56] bg-slate-50'
-                }`}
+                className={`text-[10px] px-2 py-1 truncate ${isCustomer ? 'text-white/70 bg-black/20' : 'text-[#705B56] bg-slate-50'
+                  }`}
               >
                 {msg.media_name}
               </p>
@@ -160,7 +157,7 @@ export default function CustomerLiveChat() {
   useEffect(() => {
     try {
       localStorage.removeItem('aura_active_chat_ticket');
-    } catch (e) {}
+    } catch (e) { }
   }, []);
 
   // Account-isolated chat session sync:
@@ -191,7 +188,7 @@ export default function CustomerLiveChat() {
           const parsed = JSON.parse(raw);
           if (parsed?.id) cachedTicketId = parsed.id;
         }
-      } catch (e) {}
+      } catch (e) { }
 
       // Fetch tickets strictly belonging to this authenticated user
       fetchCustomerTickets({ customerId: user.id, customerEmail: email }).then((userTickets) => {
@@ -216,7 +213,7 @@ export default function CustomerLiveChat() {
                 customer_id: matched.customer_id,
               })
             );
-          } catch (e) {}
+          } catch (e) { }
         } else {
           // Brand new user or user with no previous tickets: Clean ticket selection screen
           setActiveTicket(null);
@@ -238,7 +235,7 @@ export default function CustomerLiveChat() {
           const parsed = JSON.parse(raw);
           if (parsed?.id) cachedGuestId = parsed.id;
         }
-      } catch (e) {}
+      } catch (e) { }
 
       if (cachedGuestId) {
         fetchTicket(cachedGuestId).then((t) => {
@@ -470,7 +467,7 @@ export default function CustomerLiveChat() {
       try {
         localStorage.removeItem(storageKey);
         localStorage.removeItem('aura_active_chat_ticket');
-      } catch (e) {}
+      } catch (e) { }
       setActiveTicket(null);
       setMessages([]);
       setUnreadCount(0);
@@ -497,26 +494,32 @@ export default function CustomerLiveChat() {
           }}
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
-          className="relative group p-4 rounded-full bg-[#2C1E1B] text-white shadow-2xl border border-[#E8DCD7]/30 hover:bg-[#3D2B27] transition-all flex items-center justify-center cursor-pointer"
+          className="relative group w-14 h-14 rounded-full bg-[#2C1E1B] text-white shadow-2xl border-2 border-white hover:bg-[#3D2B27] transition-all flex items-center justify-center cursor-pointer p-0 overflow-visible"
           aria-label="Atelier Customer Service Live Chat"
           title="Chat with Aura Concierge"
         >
           {isOpen ? (
-            <X className="w-6 h-6 transition-transform rotate-0 group-hover:rotate-90" />
+            <X className="w-6 h-6 transition-transform rotate-0 group-hover:rotate-90 text-white" />
           ) : (
-            <MessageCircle className="w-6 h-6 text-white stroke-[1.8]" />
+            <div className="w-full h-full rounded-full overflow-hidden flex items-center justify-center">
+              <img
+                src="/assets/auralogo.jpg"
+                alt="Aura Support"
+                className="w-full h-full object-cover rounded-full"
+              />
+            </div>
           )}
 
           {/* Unread Message Pill Badge */}
           {!isOpen && unreadCount > 0 && (
-            <span className="absolute -top-1 -right-1 px-2 py-0.5 rounded-full bg-rose-600 text-white font-bold text-[10px] animate-pulse shadow-md border-2 border-white">
+            <span className="absolute -top-1 -right-1 px-2 py-0.5 rounded-full bg-rose-600 text-white font-bold text-[10px] animate-pulse shadow-md border-2 border-white z-10">
               {unreadCount}
             </span>
           )}
 
-          {/* Pulse Ripple indicator when closed and ready */}
+          {/* Online indicator when closed */}
           {!isOpen && unreadCount === 0 && (
-            <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white" />
+            <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 rounded-full border-2 border-white z-10" />
           )}
         </motion.button>
       </div>
@@ -532,20 +535,22 @@ export default function CustomerLiveChat() {
             className="fixed bottom-24 right-4 sm:right-6 z-40 w-[calc(100vw-32px)] sm:w-[420px] h-[580px] max-h-[85vh] bg-[#FAF5F2] border border-[#E8DCD7] shadow-2xl flex flex-col rounded-none overflow-hidden font-sans"
           >
             {/* Header */}
-            <div className="p-4 bg-[#2C1E1B] text-white flex items-center justify-between border-b border-black/10">
+            <div className="p-4 bg-white text-black flex items-center justify-between border-b border-black/10">
               <div className="flex items-center gap-3">
                 <div className="relative">
-                  <div className="w-9 h-9 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-sm font-bold text-amber-200">
-                    A
-                  </div>
-                  <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-[#2C1E1B]" />
+                  <img
+                    src="/assets/auralogo.jpg"
+                    alt="Aura Logo"
+                    className="w-9 h-9 rounded-full object-cover border border-[#E8DCD7] shadow-xs"
+                  />
+                  <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white" />
                 </div>
                 <div>
-                  <h3 className="font-brand text-xs font-bold tracking-widest uppercase text-white">
-                    Aura Atelier Concierge
+                  <h3 className="font-brand text-xs font-bold tracking-widest uppercase text-black">
+                    Chat with Aura
                   </h3>
-                  <p className="text-[10px] text-white/70 flex items-center gap-1">
-                    <span>Atelier Support Online</span>
+                  <p className="text-[10px] text-black/70 flex items-center gap-1">
+                    <span>Aura Support Online</span>
                     {activeTicket && (
                       <span className="text-amber-300 font-mono font-semibold">
                         • {activeTicket.ticket_number}
@@ -569,7 +574,7 @@ export default function CustomerLiveChat() {
                 <button
                   type="button"
                   onClick={() => setIsOpen(false)}
-                  className="p-1.5 text-white/70 hover:text-white rounded-lg transition-colors cursor-pointer"
+                  className="p-1.5 text-black/70 hover:text-white rounded-lg transition-colors cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -604,16 +609,14 @@ export default function CustomerLiveChat() {
                           <div
                             key={cat.id}
                             onClick={() => setSelectedCategory(cat.id)}
-                            className={`p-3 border transition-all cursor-pointer flex items-start gap-3 rounded-none ${
-                              isSelected
-                                ? 'border-[#2C1E1B] bg-white shadow-xs'
-                                : 'border-[#E8DCD7] hover:border-[#B86B60] bg-[#FAF5F2]'
-                            }`}
+                            className={`p-3 border transition-all cursor-pointer flex items-start gap-3 rounded-none ${isSelected
+                              ? 'border-[#2C1E1B] bg-white shadow-xs'
+                              : 'border-[#E8DCD7] hover:border-[#B86B60] bg-[#FAF5F2]'
+                              }`}
                           >
                             <div
-                              className={`w-3.5 h-3.5 rounded-full border mt-0.5 flex items-center justify-center ${
-                                isSelected ? 'border-[#2C1E1B]' : 'border-[#A38E88]'
-                              }`}
+                              className={`w-3.5 h-3.5 rounded-full border mt-0.5 flex items-center justify-center ${isSelected ? 'border-[#2C1E1B]' : 'border-[#A38E88]'
+                                }`}
                             >
                               {isSelected && (
                                 <div className="w-1.5 h-1.5 rounded-full bg-[#2C1E1B]" />

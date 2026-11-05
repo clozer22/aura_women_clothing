@@ -33,7 +33,8 @@ import {
   AlertCircle,
   Bookmark,
   MoreVertical,
-  User
+  User,
+  Mail
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabaseAdmin as supabase } from '../../lib/supabaseClient';
@@ -59,7 +60,7 @@ const AdminOrdersTab = ({
       if (urlTab) return urlTab;
       const savedTab = sessionStorage.getItem('aura_admin_order_tab');
       if (savedTab) return savedTab;
-    } catch {}
+    } catch { }
     return initialFilterTab || 'ALL';
   };
 
@@ -70,7 +71,7 @@ const AdminOrdersTab = ({
       if (urlSub === 'AWAITING_SHIPMENT' || urlSub === 'AWAITING_COLLECTION') return urlSub;
       const savedSub = sessionStorage.getItem('aura_admin_toship_subtab');
       if (savedSub === 'AWAITING_SHIPMENT' || savedSub === 'AWAITING_COLLECTION') return savedSub;
-    } catch {}
+    } catch { }
     return 'AWAITING_SHIPMENT';
   };
 
@@ -86,7 +87,7 @@ const AdminOrdersTab = ({
         url.searchParams.set('orderTab', activeTab);
         window.history.replaceState({}, '', url.toString());
       }
-    } catch (e) {}
+    } catch (e) { }
   }, [activeTab]);
 
   useEffect(() => {
@@ -97,7 +98,7 @@ const AdminOrdersTab = ({
         url.searchParams.set('pipelineStage', toShipSubTab);
         window.history.replaceState({}, '', url.toString());
       }
-    } catch (e) {}
+    } catch (e) { }
   }, [toShipSubTab]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -111,6 +112,10 @@ const AdminOrdersTab = ({
   const [showRawPayload, setShowRawPayload] = useState(false);
   const [selectedWaybillOrder, setSelectedWaybillOrder] = useState(null);
   const [adminTrackingOrder, setAdminTrackingOrder] = useState(null);
+  const [isSyncingAllJt, setIsSyncingAllJt] = useState(false);
+  const [syncingOrderId, setSyncingOrderId] = useState(null);
+  const [isSendingDeliveryEmail, setIsSendingDeliveryEmail] = useState(null);
+  const [jtSyncFeedback, setJtSyncFeedback] = useState(null);
 
   // TikTok Seller Center Fulfillment: Action Dropdown, Note & Flag Modal, 2-Page A6 Print Modal
   const [activeDropdownOrderId, setActiveDropdownOrderId] = useState(null);
@@ -196,7 +201,7 @@ const AdminOrdersTab = ({
       if (parsed && typeof parsed === 'object') {
         return { flag: parsed.flag || 'none', note: parsed.note || '' };
       }
-    } catch (e) {}
+    } catch (e) { }
     return { flag: 'none', note: String(adminNotes) };
   };
 
@@ -546,11 +551,142 @@ const AdminOrdersTab = ({
           ...prev,
           status: newStatus,
           last_touched_by: modifierInfo,
-          audit_trail: [modifierInfo, ...(Array.isArray(prev.audit_trail) ? prev.audit_trail : [])]
+          audit_trail: [modifierInfo, ...(Array.isArray(prev.audit_trail) ? prev.audit_trail : [])],
+          ...(newStatus === 'TO_DELIVER'
+            ? {
+              shipment_payload: {
+                ...(prev.shipment_payload || {}),
+                out_for_delivery_notified_at: new Date().toISOString(),
+                out_for_delivery_recipient: prev.customer_email,
+              },
+            }
+            : {}),
         }));
       }
     } finally {
       setIsUpdatingStatus(null);
+    }
+  };
+
+  const handleSyncAllJtOrders = async () => {
+    setIsSyncingAllJt(true);
+    setJtSyncFeedback(null);
+    try {
+      const res = await fetch('/api/jt-sync-orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to sync with J&T Express tracking');
+      }
+      const count = data.totalProcessed || data.orders?.length || 0;
+      const updatedCount = data.syncedCount || (data.orders ? data.orders.filter(o => o.statusChanged).length : 0);
+      const emailsCount = data.emailsSent || (data.orders ? data.orders.filter(o => o.emailDispatched).length : 0);
+      setJtSyncFeedback({
+        type: 'success',
+        message: `J&T Sync Complete: Checked ${count} active parcel(s). ${updatedCount} status update(s). ${emailsCount > 0 ? `${emailsCount} Out for Delivery email(s) dispatched!` : ''}`,
+      });
+      if (onRefresh) await onRefresh();
+    } catch (err) {
+      console.error('J&T Sync error:', err);
+      setJtSyncFeedback({
+        type: 'error',
+        message: `J&T Sync Error: ${err.message}`,
+      });
+    } finally {
+      setIsSyncingAllJt(false);
+    }
+  };
+
+  const handleSyncSingleOrder = async (order) => {
+    if (!order?.tracking_number) return;
+    setSyncingOrderId(order.id);
+    try {
+      const res = await fetch('/api/jt-sync-orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: order.id, trackingNumber: order.tracking_number }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to sync order tracking');
+      }
+      const result = data.orders?.[0] || data.results?.[0];
+      const statusMsg = result?.statusChanged
+        ? `Status updated to ${result.currentStatus || result.newStatus}.`
+        : `Tracking verified (${result?.currentStatus || order.status}).`;
+      const emailMsg = result?.emailDispatched ? ' Customer notified via Out for Delivery email!' : '';
+
+      setJtSyncFeedback({
+        type: 'success',
+        message: `Order [${order.order_reference}] synced with J&T Express: ${statusMsg}${emailMsg}`,
+      });
+
+      if (onRefresh) await onRefresh();
+      if (selectedOrder && selectedOrder.id === order.id && result) {
+        setSelectedOrder((prev) => ({
+          ...prev,
+          status: result.currentStatus || result.newStatus || prev.status,
+          shipment_payload: {
+            ...(prev.shipment_payload || {}),
+            ...(result.emailDispatched ? {
+              out_for_delivery_notified_at: new Date().toISOString(),
+              out_for_delivery_recipient: prev.customer_email
+            } : {}),
+            latest_scan: result.latestLocation || prev.shipment_payload?.latest_scan,
+            last_synced_at: new Date().toISOString(),
+          }
+        }));
+      }
+    } catch (err) {
+      setJtSyncFeedback({
+        type: 'error',
+        message: `Failed to sync [${order.order_reference}]: ${err.message}`,
+      });
+    } finally {
+      setSyncingOrderId(null);
+    }
+  };
+
+  const handleSendDeliveryEmailManually = async (order) => {
+    if (!order?.customer_email) {
+      alert('This order does not have a customer email address.');
+      return;
+    }
+    setIsSendingDeliveryEmail(order.id);
+    try {
+      const res = await fetch('/api/notify-delivery', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: order.id, orderReference: order.order_reference }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to dispatch delivery notification email');
+      }
+      setJtSyncFeedback({
+        type: 'success',
+        message: `Out for Delivery email dispatched to ${order.customer_email}!`,
+      });
+      if (selectedOrder && selectedOrder.id === order.id) {
+        setSelectedOrder((prev) => ({
+          ...prev,
+          shipment_payload: {
+            ...(prev.shipment_payload || {}),
+            out_for_delivery_notified_at: new Date().toISOString(),
+            out_for_delivery_recipient: order.customer_email,
+          }
+        }));
+      }
+      if (onRefresh) await onRefresh();
+    } catch (err) {
+      setJtSyncFeedback({
+        type: 'error',
+        message: `Email notification failed: ${err.message}`,
+      });
+    } finally {
+      setIsSendingDeliveryEmail(null);
     }
   };
 
@@ -698,8 +834,8 @@ const AdminOrdersTab = ({
         let data = {};
         try {
           data = text ? JSON.parse(text) : {};
-        } catch(e) {}
-        
+        } catch (e) { }
+
         if (res.ok && data.success) {
           const modifierInfo = {
             name: currentAdmin?.name || currentAdmin?.email?.split('@')[0] || 'Administrator',
@@ -1158,6 +1294,15 @@ const AdminOrdersTab = ({
             <span>Export CSV</span>
           </button>
           <button
+            onClick={handleSyncAllJtOrders}
+            disabled={isSyncingAllJt || isLoading}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#DA291C] hover:bg-[#b52015] text-white text-xs font-semibold rounded-xl shadow-xs transition-all disabled:opacity-50 cursor-pointer"
+            title="Poll J&T Express tracking API for active shipments and notify customers if out for delivery"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncingAllJt ? 'animate-spin' : ''}`} />
+            <span>{isSyncingAllJt ? 'Syncing J&T...' : 'Sync All J&T'}</span>
+          </button>
+          <button
             onClick={onRefresh}
             disabled={isLoading}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-xl border border-slate-200/80 shadow-xs transition-all disabled:opacity-50"
@@ -1168,16 +1313,44 @@ const AdminOrdersTab = ({
         </div>
       </div>
 
+      {/* J&T Express Live Sync Feedback Banner */}
+      {jtSyncFeedback && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className={`p-3.5 rounded-xl border flex items-center justify-between text-xs ${jtSyncFeedback.type === 'success'
+            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+            : 'bg-rose-50 text-rose-800 border-rose-200'
+            }`}
+        >
+          <div className="flex items-center gap-2">
+            {jtSyncFeedback.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+            ) : (
+              <AlertTriangle className="w-4 h-4 text-rose-600 flex-shrink-0" />
+            )}
+            <div>
+              <strong className="font-semibold">[J&T Express Courier Tracking]</strong> {jtSyncFeedback.message}
+            </div>
+          </div>
+          <button
+            onClick={() => setJtSyncFeedback(null)}
+            className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </motion.div>
+      )}
+
       {/* Shipment Feedback Banner */}
       {shipmentFeedback && (
         <motion.div
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
-          className={`p-3.5 rounded-xl border flex items-center justify-between text-xs ${
-            shipmentFeedback.type === 'success'
-              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-              : 'bg-rose-50 text-rose-800 border-rose-200'
-          }`}
+          className={`p-3.5 rounded-xl border flex items-center justify-between text-xs ${shipmentFeedback.type === 'success'
+            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+            : 'bg-rose-50 text-rose-800 border-rose-200'
+            }`}
         >
           <div className="flex items-center gap-2">
             {shipmentFeedback.type === 'success' ? (
@@ -1222,17 +1395,15 @@ const AdminOrdersTab = ({
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-3.5 py-2 text-xs font-semibold whitespace-nowrap transition-all rounded-xl cursor-pointer flex items-center gap-2 border ${
-                isActive
-                  ? 'bg-blue-600 text-white border-blue-600 shadow-xs shadow-blue-600/20'
-                  : 'bg-white text-slate-600 border-slate-200/80 hover:bg-slate-50 hover:text-slate-900'
-              }`}
+              className={`px-3.5 py-2 text-xs font-semibold whitespace-nowrap transition-all rounded-xl cursor-pointer flex items-center gap-2 border ${isActive
+                ? 'bg-blue-600 text-white border-blue-600 shadow-xs shadow-blue-600/20'
+                : 'bg-white text-slate-600 border-slate-200/80 hover:bg-slate-50 hover:text-slate-900'
+                }`}
             >
               <span>{tab.label}</span>
               <span
-                className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
-                  isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-                }`}
+                className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                  }`}
               >
                 {tab.count}
               </span>
@@ -1253,17 +1424,15 @@ const AdminOrdersTab = ({
             <button
               type="button"
               onClick={() => setToShipSubTab('AWAITING_SHIPMENT')}
-              className={`px-3.5 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-2 border ${
-                toShipSubTab === 'AWAITING_SHIPMENT'
-                  ? 'bg-teal-600 text-white border-teal-600 shadow-xs shadow-teal-600/20'
-                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-              }`}
+              className={`px-3.5 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-2 border ${toShipSubTab === 'AWAITING_SHIPMENT'
+                ? 'bg-teal-600 text-white border-teal-600 shadow-xs shadow-teal-600/20'
+                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                }`}
             >
               <span>Awaiting shipment</span>
               <span
-                className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
-                  toShipSubTab === 'AWAITING_SHIPMENT' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-                }`}
+                className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${toShipSubTab === 'AWAITING_SHIPMENT' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                  }`}
               >
                 {awaitingShipmentCount}
               </span>
@@ -1272,17 +1441,15 @@ const AdminOrdersTab = ({
             <button
               type="button"
               onClick={() => setToShipSubTab('AWAITING_COLLECTION')}
-              className={`px-3.5 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-2 border ${
-                toShipSubTab === 'AWAITING_COLLECTION'
-                  ? 'bg-teal-600 text-white border-teal-600 shadow-xs shadow-teal-600/20'
-                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-              }`}
+              className={`px-3.5 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-2 border ${toShipSubTab === 'AWAITING_COLLECTION'
+                ? 'bg-teal-600 text-white border-teal-600 shadow-xs shadow-teal-600/20'
+                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                }`}
             >
               <span>Awaiting collection</span>
               <span
-                className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
-                  toShipSubTab === 'AWAITING_COLLECTION' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-                }`}
+                className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${toShipSubTab === 'AWAITING_COLLECTION' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                  }`}
               >
                 {awaitingCollectionCount}
               </span>
@@ -1453,141 +1620,139 @@ const AdminOrdersTab = ({
                     />
                     <div className="space-y-1">
                       <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
-                      <span className="font-sans font-bold text-sm text-slate-900">
-                        {order.order_reference}
-                      </span>
+                        <span className="font-sans font-bold text-sm text-slate-900">
+                          {order.order_reference}
+                        </span>
 
-                      {/* Flag Indicator Badge if set */}
-                      {parsedNote.flag !== 'none' && (() => {
-                        const flagMeta = FLAG_OPTIONS.find((f) => f.id === parsedNote.flag);
-                        return (
-                          <button
-                            type="button"
-                            onClick={() => setNoteModalOrder(order)}
-                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-bold cursor-pointer transition-all ${
-                              flagMeta?.bgColor || 'bg-slate-100'
-                            } ${flagMeta?.borderColor || 'border-slate-300'} text-slate-800 hover:shadow-xs`}
-                            title={parsedNote.note ? `Note: "${parsedNote.note}" (Click to edit)` : 'Click to edit note'}
-                          >
-                            <Bookmark className={`w-3 h-3 ${flagMeta?.iconColor || 'text-slate-500'}`} />
-                            <span>{flagMeta?.label || 'Flag'}</span>
-                            {parsedNote.note && (
-                              <span className="font-normal truncate max-w-[140px] text-slate-600">
-                                "{parsedNote.note}"
-                              </span>
-                            )}
-                          </button>
-                        );
-                      })()}
+                        {/* Flag Indicator Badge if set */}
+                        {parsedNote.flag !== 'none' && (() => {
+                          const flagMeta = FLAG_OPTIONS.find((f) => f.id === parsedNote.flag);
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => setNoteModalOrder(order)}
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-bold cursor-pointer transition-all ${flagMeta?.bgColor || 'bg-slate-100'
+                                } ${flagMeta?.borderColor || 'border-slate-300'} text-slate-800 hover:shadow-xs`}
+                              title={parsedNote.note ? `Note: "${parsedNote.note}" (Click to edit)` : 'Click to edit note'}
+                            >
+                              <Bookmark className={`w-3 h-3 ${flagMeta?.iconColor || 'text-slate-500'}`} />
+                              <span>{flagMeta?.label || 'Flag'}</span>
+                              {parsedNote.note && (
+                                <span className="font-normal truncate max-w-[140px] text-slate-600">
+                                  "{parsedNote.note}"
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })()}
 
-                      {/* Fulfillment Stage / Status Badge */}
-                      {isInToShip ? (
-                        <span
-                          className={`text-[10px] uppercase font-black px-2.5 py-0.5 rounded-full border ${
-                            fulfillmentStage === 'AWAITING_COLLECTION'
+                        {/* Fulfillment Stage / Status Badge */}
+                        {isInToShip ? (
+                          <span
+                            className={`text-[10px] uppercase font-black px-2.5 py-0.5 rounded-full border ${fulfillmentStage === 'AWAITING_COLLECTION'
                               ? 'bg-teal-50 text-teal-800 border-teal-300'
                               : 'bg-amber-50 text-amber-800 border-amber-300'
-                          }`}
-                        >
-                          {fulfillmentStage === 'AWAITING_COLLECTION' ? 'Awaiting collection' : 'Awaiting shipment'}
-                        </span>
-                      ) : (
-                        <span
-                          className={`text-[10px] uppercase font-bold px-2.5 py-0.5 rounded-full border ${getStatusBadgeClass(
-                            order.status
-                          )}`}
-                        >
-                          {order.status || 'PENDING'}
-                        </span>
-                      )}
-
-                      {/* Customer Cancelled Tag */}
-                      {(order.status || '').toUpperCase() === 'CANCELLED' && (
-                        <span className="text-[10px] uppercase font-bold px-2 py-0.5 bg-rose-100 text-rose-800 border border-rose-300 rounded-full flex items-center gap-1">
-                          <User className="w-3 h-3 text-rose-600" />
-                          <span>{order.cancelled_by === 'CUSTOMER' || (order.admin_notes || '').includes('[Customer Cancelled]') ? 'Cancelled by Client' : 'Cancelled by Staff'}</span>
-                        </span>
-                      )}
-
-                      {/* Payment Status Tag */}
-                      {order.payment_status === 'REFUND_PENDING' ? (
-                        <span className="text-[10px] uppercase font-black px-2 py-0.5 bg-amber-500 text-white rounded-full flex items-center gap-1 shadow-xs animate-pulse">
-                          <AlertTriangle className="w-3 h-3" />
-                          <span>REFUND REQUIRED</span>
-                        </span>
-                      ) : order.payment_status === 'REFUNDED' ? (
-                        <span className="text-[10px] uppercase font-bold px-2 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-full flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                          <span>REFUNDED</span>
-                        </span>
-                      ) : order.payment_status === 'CANCELLED' ? (
-                        <span className="text-[10px] uppercase font-medium px-2 py-0.5 bg-slate-100 text-slate-600 border border-slate-300 rounded-full">
-                          VOIDED
-                        </span>
-                      ) : isCod ? (
-                        <span className="text-[10px] uppercase font-bold px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-300 rounded-full">
-                          COD (₱{(Number(order.total_amount) || 0).toLocaleString()})
-                        </span>
-                      ) : isPaid ? (
-                        <span className="text-[10px] uppercase font-bold px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full">
-                          PAID
-                        </span>
-                      ) : (
-                        <span className="text-[10px] uppercase font-bold px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full">
-                          PENDING PAYMENT
-                        </span>
-                      )}
-
-                      {/* Courier Dispatch Status Tag */}
-                      {hasTracking ? (
-                        <span className="text-[10px] font-bold px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-full flex items-center gap-1">
-                          <Truck className="w-3 h-3 text-blue-600" />
-                          <span>{order.courier_name || 'J&T Express'}: {order.tracking_number}</span>
-                        </span>
-                      ) : (isPaid || isCod) ? (
-                        <span className="text-[10px] font-bold px-2 py-0.5 bg-purple-50 text-purple-700 border border-purple-200 rounded-full flex items-center gap-1">
-                          <Clock className="w-3 h-3 text-purple-600" />
-                          <span>Ready for J&T Dispatch</span>
-                        </span>
-                      ) : null}
-                    </div>
-
-                    <p className="text-xs text-slate-500">
-                      Placed on {formatDate(order.created_at)} • Customer:{' '}
-                      <strong className="text-slate-800">{order.customer_name}</strong>
-                      {order.customer_phone ? ` (${order.customer_phone})` : ''}
-                      {order.customer_email ? ` • ${order.customer_email}` : ''}
-                    </p>
-
-                    {/* Cancellation Reason Callout if Cancelled */}
-                    {(order.status || '').toUpperCase() === 'CANCELLED' && (order.cancellation_reason || (order.admin_notes || '').includes('[Customer Cancelled]')) && (
-                      <div className="mt-1 flex items-center gap-1.5 text-xs text-rose-800 bg-rose-50 border border-rose-200/90 rounded-lg px-2.5 py-1">
-                        <Ban className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-                        <span>
-                          <strong>Cancellation Reason:</strong>{' '}
-                          {order.cancellation_reason || 'Client requested cancellation while awaiting shipment.'}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Last touched by indicator */}
-                    {order.last_touched_by && (
-                      <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px] text-slate-500">
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
-                          <UserCheck className="w-3 h-3 text-indigo-600 shrink-0" />
-                          <span>Last touched by: <strong className="text-slate-900 font-semibold">{order.last_touched_by.name || order.last_touched_by.email}</strong> ({order.last_touched_by.role || 'Staff'})</span>
-                        </span>
-                        <span className="text-slate-400">•</span>
-                        <span className="text-slate-500">{formatTimeAgo(order.last_touched_by.timestamp) || formatDate(order.last_touched_by.timestamp)}</span>
-                        {order.last_touched_by.action && (
-                          <>
-                            <span className="text-slate-300">•</span>
-                            <span className="text-slate-500 italic">"{order.last_touched_by.action}"</span>
-                          </>
+                              }`}
+                          >
+                            {fulfillmentStage === 'AWAITING_COLLECTION' ? 'Awaiting collection' : 'Awaiting shipment'}
+                          </span>
+                        ) : (
+                          <span
+                            className={`text-[10px] uppercase font-bold px-2.5 py-0.5 rounded-full border ${getStatusBadgeClass(
+                              order.status
+                            )}`}
+                          >
+                            {order.status || 'PENDING'}
+                          </span>
                         )}
+
+                        {/* Customer Cancelled Tag */}
+                        {(order.status || '').toUpperCase() === 'CANCELLED' && (
+                          <span className="text-[10px] uppercase font-bold px-2 py-0.5 bg-rose-100 text-rose-800 border border-rose-300 rounded-full flex items-center gap-1">
+                            <User className="w-3 h-3 text-rose-600" />
+                            <span>{order.cancelled_by === 'CUSTOMER' || (order.admin_notes || '').includes('[Customer Cancelled]') ? 'Cancelled by Client' : 'Cancelled by Staff'}</span>
+                          </span>
+                        )}
+
+                        {/* Payment Status Tag */}
+                        {order.payment_status === 'REFUND_PENDING' ? (
+                          <span className="text-[10px] uppercase font-black px-2 py-0.5 bg-amber-500 text-white rounded-full flex items-center gap-1 shadow-xs animate-pulse">
+                            <AlertTriangle className="w-3 h-3" />
+                            <span>REFUND REQUIRED</span>
+                          </span>
+                        ) : order.payment_status === 'REFUNDED' ? (
+                          <span className="text-[10px] uppercase font-bold px-2 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-full flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                            <span>REFUNDED</span>
+                          </span>
+                        ) : order.payment_status === 'CANCELLED' ? (
+                          <span className="text-[10px] uppercase font-medium px-2 py-0.5 bg-slate-100 text-slate-600 border border-slate-300 rounded-full">
+                            VOIDED
+                          </span>
+                        ) : isCod ? (
+                          <span className="text-[10px] uppercase font-bold px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-300 rounded-full">
+                            COD (₱{(Number(order.total_amount) || 0).toLocaleString()})
+                          </span>
+                        ) : isPaid ? (
+                          <span className="text-[10px] uppercase font-bold px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full">
+                            PAID
+                          </span>
+                        ) : (
+                          <span className="text-[10px] uppercase font-bold px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full">
+                            PENDING PAYMENT
+                          </span>
+                        )}
+
+                        {/* Courier Dispatch Status Tag */}
+                        {hasTracking ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-full flex items-center gap-1">
+                            <Truck className="w-3 h-3 text-blue-600" />
+                            <span>{order.courier_name || 'J&T Express'}: {order.tracking_number}</span>
+                          </span>
+                        ) : (isPaid || isCod) ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 bg-purple-50 text-purple-700 border border-purple-200 rounded-full flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-purple-600" />
+                            <span>Ready for J&T Dispatch</span>
+                          </span>
+                        ) : null}
                       </div>
-                    )}
-                  </div>
+
+                      <p className="text-xs text-slate-500">
+                        Placed on {formatDate(order.created_at)} • Customer:{' '}
+                        <strong className="text-slate-800">{order.customer_name}</strong>
+                        {order.customer_phone ? ` (${order.customer_phone})` : ''}
+                        {order.customer_email ? ` • ${order.customer_email}` : ''}
+                      </p>
+
+                      {/* Cancellation Reason Callout if Cancelled */}
+                      {(order.status || '').toUpperCase() === 'CANCELLED' && (order.cancellation_reason || (order.admin_notes || '').includes('[Customer Cancelled]')) && (
+                        <div className="mt-1 flex items-center gap-1.5 text-xs text-rose-800 bg-rose-50 border border-rose-200/90 rounded-lg px-2.5 py-1">
+                          <Ban className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                          <span>
+                            <strong>Cancellation Reason:</strong>{' '}
+                            {order.cancellation_reason || 'Client requested cancellation while awaiting shipment.'}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Last touched by indicator */}
+                      {order.last_touched_by && (
+                        <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px] text-slate-500">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
+                            <UserCheck className="w-3 h-3 text-indigo-600 shrink-0" />
+                            <span>Last touched by: <strong className="text-slate-900 font-semibold">{order.last_touched_by.name || order.last_touched_by.email}</strong> ({order.last_touched_by.role || 'Staff'})</span>
+                          </span>
+                          <span className="text-slate-400">•</span>
+                          <span className="text-slate-500">{formatTimeAgo(order.last_touched_by.timestamp) || formatDate(order.last_touched_by.timestamp)}</span>
+                          {order.last_touched_by.action && (
+                            <>
+                              <span className="text-slate-300">•</span>
+                              <span className="text-slate-500 italic">"{order.last_touched_by.action}"</span>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div className="flex flex-wrap items-center justify-between lg:justify-end gap-2.5 sm:gap-4">
@@ -1822,7 +1987,7 @@ const AdminOrdersTab = ({
                 {/* Bottom Row: Quick Status Updater & Tracking Number Management */}
                 <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs bg-slate-50/60 p-3 rounded-xl">
                   {/* Status Dropdown */}
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="font-semibold text-[11px] text-slate-600">
                       Status:
                     </span>
@@ -1841,6 +2006,28 @@ const AdminOrdersTab = ({
                     {isUpdatingStatus === order.id && (
                       <span className="text-[10px] text-blue-600 font-semibold animate-pulse">Updating...</span>
                     )}
+
+                    {/* Out for Delivery Email Badge / Quick Dispatch Button */}
+                    {order.shipment_payload?.out_for_delivery_notified_at ? (
+                      <span
+                        className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full inline-flex items-center gap-1 shadow-2xs"
+                        title={`Customer notified via official email at ${new Date(order.shipment_payload.out_for_delivery_notified_at).toLocaleTimeString()}`}
+                      >
+                        <Mail className="w-2.5 h-2.5 text-emerald-600" />
+                        <span>Email Sent</span>
+                      </span>
+                    ) : order.status === 'TO_DELIVER' ? (
+                      <button
+                        type="button"
+                        onClick={() => handleSendDeliveryEmailManually(order)}
+                        disabled={isSendingDeliveryEmail === order.id}
+                        className="text-[10px] font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 px-2 py-0.5 rounded-full inline-flex items-center gap-1 cursor-pointer disabled:opacity-50 transition-colors shadow-2xs"
+                        title="Dispatch Out for Delivery email to customer"
+                      >
+                        <Mail className="w-2.5 h-2.5 text-teal-600" />
+                        <span>{isSendingDeliveryEmail === order.id ? 'Sending...' : 'Notify Email'}</span>
+                      </button>
+                    ) : null}
                   </div>
 
                   {/* Tracking Number Input / Link */}
@@ -1886,15 +2073,28 @@ const AdminOrdersTab = ({
                         </button>
 
                         {order.tracking_number && (
-                          <button
-                            type="button"
-                            onClick={() => setSelectedWaybillOrder(order)}
-                            className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 inline-flex items-center gap-1 border-l border-slate-200 pl-2 ml-1 cursor-pointer"
-                            title="View & Print Air Waybill (AWB)"
-                          >
-                            <FileText className="w-3 h-3 text-blue-500" />
-                            <span>Waybill</span>
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleSyncSingleOrder(order)}
+                              disabled={syncingOrderId === order.id}
+                              className="text-[11px] font-semibold text-rose-600 hover:text-rose-700 inline-flex items-center gap-1 border-l border-slate-200 pl-2 ml-1 cursor-pointer disabled:opacity-50"
+                              title="Sync parcel status live with J&T Express tracking scans"
+                            >
+                              <RefreshCw className={`w-3 h-3 ${syncingOrderId === order.id ? 'animate-spin text-rose-600' : ''}`} />
+                              <span>{syncingOrderId === order.id ? 'Syncing...' : 'Sync J&T'}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setSelectedWaybillOrder(order)}
+                              className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 inline-flex items-center gap-1 border-l border-slate-200 pl-2 ml-1 cursor-pointer"
+                              title="View & Print Air Waybill (AWB)"
+                            >
+                              <FileText className="w-3 h-3 text-blue-500" />
+                              <span>Waybill</span>
+                            </button>
+                          </>
                         )}
                       </div>
                     )}
@@ -1959,7 +2159,7 @@ const AdminOrdersTab = ({
               <div className="flex items-center justify-between pb-4 border-b border-slate-100">
                 <div>
                   <span className="text-[10px] uppercase tracking-wider text-blue-600 font-bold">
-                    Order Manifest
+                    Order Code
                   </span>
                   <h2 className="font-sans text-xl font-bold text-slate-900">
                     {selectedOrder.order_reference}
@@ -1989,15 +2189,14 @@ const AdminOrdersTab = ({
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-slate-700">Payment:</span>
                     <span
-                      className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${
-                        selectedOrder.payment_status === 'PAID'
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                          : selectedOrder.payment_status === 'REFUND_PENDING'
+                      className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${selectedOrder.payment_status === 'PAID'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : selectedOrder.payment_status === 'REFUND_PENDING'
                           ? 'bg-amber-500 text-white border-amber-600 font-extrabold animate-pulse'
                           : selectedOrder.payment_status === 'REFUNDED'
-                          ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                          : 'bg-amber-50 text-amber-700 border-amber-200'
-                      }`}
+                            ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                            : 'bg-amber-50 text-amber-700 border-amber-200'
+                        }`}
                     >
                       {selectedOrder.payment_status || 'PENDING'}
                     </span>
@@ -2222,75 +2421,172 @@ const AdminOrdersTab = ({
                   </pre>
                 )}
 
-                {/* Interactive Delivery Progression Simulator */}
-                <div className="pt-2 border-t border-blue-200/60">
-                  <span className="text-[10px] uppercase font-bold text-slate-600 block mb-1.5">
-                    Advance Courier Delivery Stage (Click to Simulate / Update):
-                  </span>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        await handleStatusChange(selectedOrder, 'SHIPPED');
-                        setSelectedOrder((prev) => ({ ...prev, status: 'SHIPPED' }));
-                      }}
-                      className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 ${
-                        selectedOrder.status === 'SHIPPED'
+                {/* Live Courier Tracking & Notification Status Panel */}
+                <div className="pt-3 border-t border-slate-200/80 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200/80">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-red-700 bg-red-100/70 border border-red-200 px-2 py-0.5 rounded">
+                          J&T Express Courier Tracking
+                        </span>
+                        <span className="text-xs font-bold text-slate-800">
+                          {selectedOrder.tracking_number || 'Awaiting Dispatch'}
+                        </span>
+                      </div>
+                      {selectedOrder.courier_last_description && (
+                        <p className="text-[11px] text-slate-600 mt-1">
+                          Latest Scan: <strong>{selectedOrder.courier_last_description}</strong>
+                        </p>
+                      )}
+                    </div>
+
+                    {selectedOrder.tracking_number && (
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleSyncSingleOrder(selectedOrder)}
+                          disabled={syncingOrderId === selectedOrder.id}
+                          className="px-2.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg text-slate-800 text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-2xs"
+                          title="Query J&T trace API now"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 ${syncingOrderId === selectedOrder.id ? 'animate-spin text-red-600' : 'text-slate-600'}`} />
+                          <span>{syncingOrderId === selectedOrder.id ? 'Syncing...' : 'Sync J&T'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAdminTrackingOrder(selectedOrder)}
+                          className="px-2.5 py-1.5 bg-[#DA291C] hover:bg-[#b01e14] text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                        >
+                          <Truck className="w-3.5 h-3.5" />
+                          <span>Track Package</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Customer Out for Delivery Email Status Card */}
+                  {selectedOrder.shipment_payload?.out_for_delivery_notified_at ? (
+                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs space-y-1">
+                      <div className="flex items-center gap-1.5 font-bold text-emerald-900">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span>Out for Delivery Email Sent to Customer</span>
+                      </div>
+                      <p className="text-emerald-800 text-[11px]">
+                        Notified <strong>{selectedOrder.shipment_payload.out_for_delivery_recipient || selectedOrder.customer_email}</strong> on{' '}
+                        {new Date(selectedOrder.shipment_payload.out_for_delivery_notified_at).toLocaleString()} informing them that their Aura parcel is arriving today.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
+                      <div>
+                        <div className="flex items-center gap-1.5 font-semibold text-blue-950">
+                          <Mail className="w-3.5 h-3.5 text-blue-600" />
+                          <span>Customer Delivery Email Notification</span>
+                        </div>
+                        <p className="text-blue-800/80 text-[11px] mt-0.5">
+                          {selectedOrder.customer_email
+                            ? `Will be dispatched automatically to ${selectedOrder.customer_email} when parcel reaches "Out for Delivery".`
+                            : 'No customer email address on file for this order.'}
+                        </p>
+                      </div>
+                      {selectedOrder.customer_email && (
+                        <button
+                          type="button"
+                          onClick={() => handleSendDeliveryEmailManually(selectedOrder)}
+                          disabled={isSendingDeliveryEmail === selectedOrder.id}
+                          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shrink-0 shadow-2xs"
+                        >
+                          <Mail className="w-3.5 h-3.5" />
+                          <span>{isSendingDeliveryEmail === selectedOrder.id ? 'Sending...' : 'Send Delivery Email'}</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Demo Simulator Mode (For Sandbox Testing) */}
+                  <div className="p-3 bg-amber-50/60 border border-amber-200 rounded-xl space-y-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] uppercase font-bold text-amber-800 bg-amber-200/80 px-2 py-0.5 rounded border border-amber-300">
+                          Demo Simulator Mode
+                        </span>
+                        <span className="text-[11px] font-medium text-slate-600">
+                          Test delivery stage transitions & email triggers
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      In production, order status automatically synchronizes with J&T Express tracking scans. Clicking <strong>Out for Delivery</strong> below will test-advance the status and trigger an official notification email to the customer.
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await handleStatusChange(selectedOrder, 'SHIPPED');
+                          setSelectedOrder((prev) => ({ ...prev, status: 'SHIPPED' }));
+                        }}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 ${selectedOrder.status === 'SHIPPED'
                           ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
                           : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                      }`}
-                    >
-                      <Truck className="w-3 h-3" />
-                      <span>1. In Transit</span>
-                    </button>
+                          }`}
+                      >
+                        <Truck className="w-3 h-3" />
+                        <span>1. In Transit</span>
+                      </button>
 
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        await handleStatusChange(selectedOrder, 'TO_DELIVER');
-                        setSelectedOrder((prev) => ({ ...prev, status: 'TO_DELIVER' }));
-                      }}
-                      className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 ${
-                        selectedOrder.status === 'TO_DELIVER'
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await handleStatusChange(selectedOrder, 'TO_DELIVER');
+                          setSelectedOrder((prev) => ({
+                            ...prev,
+                            status: 'TO_DELIVER',
+                            shipment_payload: {
+                              ...(prev.shipment_payload || {}),
+                              out_for_delivery_notified_at: new Date().toISOString(),
+                              out_for_delivery_recipient: prev.customer_email,
+                            },
+                          }));
+                        }}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 ${selectedOrder.status === 'TO_DELIVER'
                           ? 'bg-teal-600 text-white border-teal-600 shadow-xs'
                           : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                      }`}
-                    >
-                      <Clock className="w-3 h-3" />
-                      <span>2. Out for Delivery</span>
-                    </button>
+                          }`}
+                      >
+                        <Clock className="w-3 h-3" />
+                        <span>2. Out for Delivery</span>
+                      </button>
 
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        await handleStatusChange(selectedOrder, 'DELIVERED');
-                        setSelectedOrder((prev) => ({ ...prev, status: 'DELIVERED' }));
-                      }}
-                      className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 ${
-                        selectedOrder.status === 'DELIVERED'
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await handleStatusChange(selectedOrder, 'DELIVERED');
+                          setSelectedOrder((prev) => ({ ...prev, status: 'DELIVERED' }));
+                        }}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 ${selectedOrder.status === 'DELIVERED'
                           ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
                           : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                      }`}
-                    >
-                      <CheckCircle2 className="w-3 h-3" />
-                      <span>3. Delivered</span>
-                    </button>
+                          }`}
+                      >
+                        <CheckCircle2 className="w-3 h-3" />
+                        <span>3. Delivered</span>
+                      </button>
 
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        await handleStatusChange(selectedOrder, 'TO_SHIP');
-                        setSelectedOrder((prev) => ({ ...prev, status: 'TO_SHIP' }));
-                      }}
-                      className={`px-2.5 py-1.5 text-xs font-semibold rounded-lg border transition-all cursor-pointer ${
-                        selectedOrder.status === 'TO_SHIP'
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await handleStatusChange(selectedOrder, 'TO_SHIP');
+                          setSelectedOrder((prev) => ({ ...prev, status: 'TO_SHIP' }));
+                        }}
+                        className={`px-2.5 py-1.5 text-xs font-semibold rounded-lg border transition-all cursor-pointer ${selectedOrder.status === 'TO_SHIP'
                           ? 'bg-purple-600 text-white border-purple-600'
                           : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
-                      }`}
-                      title="Reset to To Ship"
-                    >
-                      <span>Reset</span>
-                    </button>
+                          }`}
+                        title="Reset to To Ship"
+                      >
+                        <span>Reset</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2567,11 +2863,10 @@ const AdminOrdersTab = ({
 
                 {/* Cash on Delivery (COD) Collection Notice */}
                 <div
-                  className={`p-3.5 rounded-2xl border flex items-center justify-between ${
-                    dispatchModalOrder.payment_method === 'COD'
-                      ? 'bg-amber-50/70 border-amber-300 text-amber-900'
-                      : 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
-                  }`}
+                  className={`p-3.5 rounded-2xl border flex items-center justify-between ${dispatchModalOrder.payment_method === 'COD'
+                    ? 'bg-amber-50/70 border-amber-300 text-amber-900'
+                    : 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
+                    }`}
                 >
                   <div className="space-y-0.5">
                     <div className="flex items-center gap-1.5 font-bold">
@@ -2686,9 +2981,9 @@ const AdminOrdersTab = ({
                   const city = ord.shipping_address?.city || 'Metro Manila';
                   const sortCode = city.toLowerCase().includes('makati') ? 'MNL-MAK-01'
                     : city.toLowerCase().includes('quezon') ? 'MNL-QC-02'
-                    : city.toLowerCase().includes('cebu') ? 'CEB-HUB-01'
-                    : city.toLowerCase().includes('davao') ? 'DVO-HUB-01'
-                    : 'MNL-HUB-01';
+                      : city.toLowerCase().includes('cebu') ? 'CEB-HUB-01'
+                        : city.toLowerCase().includes('davao') ? 'DVO-HUB-01'
+                          : 'MNL-HUB-01';
 
                   return (
                     <div

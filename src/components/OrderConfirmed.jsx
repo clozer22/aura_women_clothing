@@ -100,7 +100,7 @@ export default function OrderConfirmed({ order, onContinueShopping, onViewOrders
               return;
             }
           }
-        } catch (vErr) {}
+        } catch (vErr) { }
 
         const { data, error } = await supabase
           .from('orders')
@@ -150,7 +150,7 @@ export default function OrderConfirmed({ order, onContinueShopping, onViewOrders
           trackPurchase(activeOrder);
           sessionStorage.setItem(dedupeKey, '1');
         }
-      } catch (e) {}
+      } catch (e) { }
     }
   }, [activeOrder?.order_reference]);
 
@@ -226,17 +226,17 @@ export default function OrderConfirmed({ order, onContinueShopping, onViewOrders
             {liveOrder?.payment_method === 'COD'
               ? 'ORDER PLACED & BOOKED!'
               : liveOrder?.payment_status === 'PAID'
-              ? 'ORDER CONFIRMED!'
-              : 'ORDER RECEIVED'}
+                ? 'ORDER CONFIRMED!'
+                : 'ORDER RECEIVED'}
           </h1>
           <p className="text-xs sm:text-sm text-[#705B56] leading-relaxed max-w-md mx-auto">
             {liveOrder?.payment_method === 'COD' ? (
               <>
-                Thank you for ordering with <span className="font-bold text-[#2C1E1B]">Aura Studio</span>. Your Cash on Delivery order is booked with our courier. Please prepare exact cash of <span className="font-bold text-[#2C1E1B]">₱{(Number(liveOrder.total_amount) || 0).toLocaleString()}</span> upon rider arrival.
+                Thank you for ordering with <span className="font-bold text-[#2C1E1B]">Aura</span>. Your Cash on Delivery order is booked with our courier. Please prepare exact cash of <span className="font-bold text-[#2C1E1B]">₱{(Number(liveOrder.total_amount) || 0).toLocaleString()}</span> upon rider arrival.
               </>
             ) : liveOrder?.payment_status === 'PAID' ? (
               <>
-                Thank you for choosing <span className="font-bold text-[#2C1E1B]">Aura Studio</span>. Your payment has been securely verified and your order is being prepared at our Manila Studio.
+                Thank you for choosing <span className="font-bold text-[#2C1E1B]">Aura</span>. Your payment has been securely verified and your order is being processed.
               </>
             ) : isVerifying ? (
               <>
@@ -244,7 +244,7 @@ export default function OrderConfirmed({ order, onContinueShopping, onViewOrders
               </>
             ) : (
               <>
-                Thank you for choosing <span className="font-bold text-[#2C1E1B]">Aura Studio</span>. Your order has been placed. If you have already completed payment, our system will finalize confirmation shortly.
+                Thank you for choosing <span className="font-bold text-[#2C1E1B]">Aura</span>. Your order has been placed. If you have already completed payment, our system will finalize confirmation shortly.
               </>
             )}
           </p>

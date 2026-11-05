@@ -22,8 +22,8 @@ export default function QuickViewModal({ product, onClose, onBuyNow, onOpenWishl
   const rawSizes = typeof product.sizes === 'string'
     ? product.sizes.split(',').map((s) => s.trim()).filter(Boolean)
     : Array.isArray(product.sizes)
-    ? product.sizes
-    : ['Standard'];
+      ? product.sizes
+      : ['Standard'];
 
   const [selectedSize, setSelectedSize] = useState(rawSizes[0] || 'Standard');
   const [isWishlisted, setIsWishlisted] = useState(isInWishlist(product.id));
@@ -53,11 +53,10 @@ export default function QuickViewModal({ product, onClose, onBuyNow, onOpenWishl
           key={idx}
           type="button"
           onClick={() => setSelectedSize(cleanSize)}
-          className={`px-4 py-2 border text-xs font-semibold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
-            isSelected
-              ? 'bg-[#2C1E1B] text-white border-[#2C1E1B]'
-              : 'bg-white text-[#705B56] border-[#E8DCD7] hover:border-[#B86B60]'
-          }`}
+          className={`px-4 py-2 border text-xs font-semibold uppercase tracking-wider transition-all duration-200 cursor-pointer ${isSelected
+            ? 'bg-[#2C1E1B] text-white border-[#2C1E1B]'
+            : 'bg-white text-[#705B56] border-[#E8DCD7] hover:border-[#B86B60]'
+            }`}
         >
           {cleanSize}
         </button>
@@ -196,7 +195,7 @@ export default function QuickViewModal({ product, onClose, onBuyNow, onOpenWishl
                   {product.descriptionLabel || 'Description'}
                 </h4>
                 <div
-                  className="text-xs sm:text-sm text-[#705B56] font-brand font-normal leading-relaxed whitespace-pre-wrap product-description-html"
+                  className="text-xs sm:text-sm text-[#705B56] font-brand font-normal leading-relaxed text-justify whitespace-pre-wrap product-description-html"
                   dangerouslySetInnerHTML={{ __html: product.description || '' }}
                 />
               </div>
@@ -248,11 +247,10 @@ export default function QuickViewModal({ product, onClose, onBuyNow, onOpenWishl
                 type="button"
                 disabled={isSoldOut}
                 onClick={handleBuyNow}
-                className={`w-full py-4 px-6 font-brand rounded-none text-xs font-bold uppercase tracking-[0.2em] transition-all duration-300 shadow-md flex items-center justify-center gap-2 ${
-                  isSoldOut
-                    ? 'bg-[#E8DCD7] text-[#9E8E89] cursor-not-allowed shadow-none'
-                    : 'bg-[#2C1E1B] hover:bg-[#B86B60] text-white cursor-pointer'
-                }`}
+                className={`w-full py-4 px-6 font-brand rounded-none text-xs font-bold uppercase tracking-[0.2em] transition-all duration-300 shadow-md flex items-center justify-center gap-2 border-2 ${isSoldOut
+                  ? 'bg-[#E8DCD7] text-[#9E8E89] border-[#E8DCD7] cursor-not-allowed shadow-none'
+                  : 'bg-[#B86B60] hover:bg-transparent border-[#B86B60] text-white hover:text-[#B86B60] cursor-pointer'
+                  }`}
               >
                 <span>{isSoldOut ? 'Sold Out' : 'Buy Now'}</span>
                 {!isSoldOut && <ArrowRight className="w-4 h-4" />}
@@ -262,21 +260,20 @@ export default function QuickViewModal({ product, onClose, onBuyNow, onOpenWishl
               <button
                 type="button"
                 onClick={handleToggleWishlist}
-                className={`w-full py-3.5 px-6 rounded-none text-xs font-semibold uppercase tracking-[0.18em] transition-all flex items-center justify-center gap-2 border cursor-pointer ${
-                  isWishlisted
-                    ? 'bg-[#FAF0EC] border-[#B86B60] text-[#B86B60]'
-                    : isSoldOut
+                className={`w-full py-3.5 px-6 rounded-none text-xs font-semibold uppercase tracking-[0.18em] transition-all flex items-center justify-center gap-2 border cursor-pointer ${isWishlisted
+                  ? 'bg-[#FAF0EC] border-[#B86B60] text-[#B86B60]'
+                  : isSoldOut
                     ? 'bg-[#FAF5F2] border-[#E8DCD7] text-[#705B56] hover:border-[#2C1E1B] hover:text-[#2C1E1B]'
                     : 'bg-white border-[#2C1E1B] text-[#2C1E1B] hover:border-[#B86B60] hover:text-[#B86B60]'
-                }`}
+                  }`}
               >
-                <Heart className={`w-4 h-4 ${isWishlisted ? 'fill-[#B86B60] text-[#B86B60]' : ''}`} />
+                <Heart className={`w-4 h-4 ${isWishlisted ? 'fill-[#B86B60] text-white' : ''}`} />
                 <span>
                   {isWishlisted
                     ? 'In Your Bag'
                     : isSoldOut
-                    ? 'Save to Bag (Sold Out)'
-                    : 'Add to Bag'}
+                      ? 'Save to Bag (Sold Out)'
+                      : 'Add to Bag'}
                 </span>
               </button>
             </div>

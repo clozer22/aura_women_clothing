@@ -188,7 +188,7 @@ export default function CustomerAuthModal({
         try {
           await resendEmailOtp(cleanEmail);
           setResendCooldown(60);
-        } catch (e) {}
+        } catch (e) { }
         setMode('verify_otp');
         setSuccessMsg(`Your account is not verified yet. We just sent an 8-digit verification code to ${cleanEmail}.`);
         setIsLoading(false);
@@ -287,7 +287,7 @@ export default function CustomerAuthModal({
       await signUpWithEmail({ email: cleanEmail, password, fullName: cleanName });
       try {
         trackLead('Customer Sign Up', { email: cleanEmail });
-      } catch (e) {}
+      } catch (e) { }
       setMode('verify_otp');
       setResendCooldown(60);
       setSuccessMsg(`Verification code sent to ${cleanEmail}`);
@@ -381,21 +381,21 @@ export default function CustomerAuthModal({
           {/* Modal Header */}
           <div className="text-center mb-6">
             <span className="text-[10px] font-brand uppercase tracking-[0.25em] text-[#B86B60] font-bold block mb-1">
-              AURA ATELIER CLIENT ACCOUNT
+              YOUR ACCOUNT
             </span>
             <h2 className="font-brand text-2xl font-normal text-[#2C1E1B]">
               {mode === 'verify_otp'
                 ? 'Verify Your Email'
                 : mode === 'signup'
-                ? 'Create Your Account'
-                : 'Welcome Back'}
+                  ? 'Create Your Account'
+                  : 'Welcome Back'}
             </h2>
             <p className="text-xs text-[#705B56] mt-1 font-sans">
               {mode === 'verify_otp'
                 ? `Enter the 8-digit verification code sent to ${email}`
                 : mode === 'signup'
-                ? 'Sign up to track orders, save wishlists, and checkout faster.'
-                : 'Sign in to access your order history and saved items.'}
+                  ? 'Sign up to track orders, save wishlists, and checkout faster.'
+                  : 'Sign in to access your order history and saved items.'}
             </p>
           </div>
 
@@ -433,11 +433,10 @@ export default function CustomerAuthModal({
                   setMode('signin');
                   setErrorMsg('');
                 }}
-                className={`flex-1 pb-3 text-xs uppercase tracking-[0.2em] font-bold text-center border-b-2 transition-all cursor-pointer ${
-                  mode === 'signin'
-                    ? 'border-[#2C1E1B] text-[#2C1E1B]'
-                    : 'border-transparent text-[#A38E88] hover:text-[#2C1E1B]'
-                }`}
+                className={`flex-1 pb-3 text-xs uppercase tracking-[0.2em] font-bold text-center border-b-2 transition-all cursor-pointer ${mode === 'signin'
+                  ? 'border-[#2C1E1B] text-[#2C1E1B]'
+                  : 'border-transparent text-[#A38E88] hover:text-[#2C1E1B]'
+                  }`}
               >
                 Sign In
               </button>
@@ -447,11 +446,10 @@ export default function CustomerAuthModal({
                   setMode('signup');
                   setErrorMsg('');
                 }}
-                className={`flex-1 pb-3 text-xs uppercase tracking-[0.2em] font-bold text-center border-b-2 transition-all cursor-pointer ${
-                  mode === 'signup'
-                    ? 'border-[#2C1E1B] text-[#2C1E1B]'
-                    : 'border-transparent text-[#A38E88] hover:text-[#2C1E1B]'
-                }`}
+                className={`flex-1 pb-3 text-xs uppercase tracking-[0.2em] font-bold text-center border-b-2 transition-all cursor-pointer ${mode === 'signup'
+                  ? 'border-[#2C1E1B] text-[#2C1E1B]'
+                  : 'border-transparent text-[#A38E88] hover:text-[#2C1E1B]'
+                  }`}
               >
                 Create Account
               </button>

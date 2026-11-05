@@ -16,7 +16,7 @@ export const CHAT_CATEGORIES = [
     id: 'ORDER_TRACKING',
     label: 'Order Status & J&T Tracking',
     shortLabel: 'Order Tracking',
-    description: 'Delivery checkpoints, rider updates, tracking numbers',
+    description: '',
     badgeClass: 'bg-blue-50 text-blue-700 border-blue-200',
     iconColor: 'text-blue-500',
   },
@@ -24,23 +24,15 @@ export const CHAT_CATEGORIES = [
     id: 'SIZING_PRODUCT',
     label: 'Product Sizing & Fit Advice',
     shortLabel: 'Sizing & Fit',
-    description: 'Bust/waist/hip measurements, garment cuts, styling advice',
+    description: '',
     badgeClass: 'bg-indigo-50 text-indigo-700 border-indigo-200',
     iconColor: 'text-indigo-500',
-  },
-  {
-    id: 'PAYMENT_BILLING',
-    label: 'Payment & Billing Verification',
-    shortLabel: 'Payments',
-    description: 'GCash, Maya, Credit Card, or Cash on Delivery verification',
-    badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    iconColor: 'text-emerald-500',
   },
   {
     id: 'GENERAL_INQUIRY',
     label: 'General Atelier Inquiries',
     shortLabel: 'General',
-    description: 'Other inquiries, bespoke orders, atelier salon appointments',
+    description: '',
     badgeClass: 'bg-amber-50 text-amber-800 border-amber-200',
     iconColor: 'text-amber-500',
   },
@@ -180,7 +172,7 @@ export async function createChatTicket({
       userStorageKey,
       JSON.stringify({ id: ticket.id, ticket_number: ticket.ticket_number, customer_email: cleanEmail, customer_id: customerId })
     );
-  } catch (e) {}
+  } catch (e) { }
 
   return { ticket, firstMessage };
 }

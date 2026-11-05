@@ -16,8 +16,22 @@ import {
   LogOut,
   ExternalLink,
   Sparkles,
+  Crown,
+  Tag,
+  Copy,
+  Check,
+  Gift,
+  Award,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabaseClient';
+import {
+  TIER_KEYS,
+  DEFAULT_TIER_CONFIG,
+  getCustomerTierBenefits,
+  calculateCustomerTier,
+  getTierProgress,
+} from '../lib/customerRanking';
 import {
   getRegions,
   getProvinces,
@@ -28,7 +42,12 @@ import {
 export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, initialTab = 'profile' }) {
   const { user, profile, role, updatePassword, updateProfileData, signOut } = useAuth();
 
-  const [activeTab, setActiveTab] = useState(initialTab); // 'profile' | 'security' | 'address' | 'orders'
+  const [activeTab, setActiveTab] = useState(initialTab); // 'profile' | 'vip' | 'security' | 'address' | 'orders'
+
+  // VIP Customer Ranking States
+  const [totalItemsOrdered, setTotalItemsOrdered] = useState(0);
+  const [tierBenefits, setTierBenefits] = useState(getCustomerTierBenefits);
+  const [copiedVoucher, setCopiedVoucher] = useState(false);
 
   // Profile Form State
   const [fullName, setFullName] = useState(profile?.full_name || user?.user_metadata?.full_name || '');
@@ -76,11 +95,55 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
       if (saved) {
         setAddressData(JSON.parse(saved));
       }
-    } catch (e) {}
+    } catch (e) { }
 
     // Load Philippine Regions
     getRegions().then((data) => setRegions(data || []));
-  }, []);
+
+    // Load customer ranking order data
+    async function loadCustomerRanking() {
+      if (!user) return;
+      try {
+        const { data, error } = await supabase
+          .from('orders')
+          .select('id, items, items_count, status, payment_status')
+          .or(`user_id.eq.${user.id},customer_email.eq.${user.email}`);
+
+        if (!error && Array.isArray(data)) {
+          let itemsCount = 0;
+          data.forEach(ord => {
+            if (Array.isArray(ord.items) && ord.items.length > 0) {
+              itemsCount += ord.items.reduce((s, it) => s + (Number(it?.quantity) || 1), 0);
+            } else {
+              itemsCount += (Number(ord.items_count) || 1);
+            }
+          });
+          setTotalItemsOrdered(itemsCount);
+        }
+      } catch (err) {
+        console.warn('Customer ranking orders fetch notice:', err);
+      }
+    }
+    loadCustomerRanking();
+
+    // Listen for tier benefits update from Admin
+    const handleTierUpdated = (e) => {
+      if (e.detail) setTierBenefits(e.detail);
+    };
+    window.addEventListener('aura_tier_benefits_updated', handleTierUpdated);
+    return () => window.removeEventListener('aura_tier_benefits_updated', handleTierUpdated);
+  }, [user]);
+
+  const currentTier = calculateCustomerTier(totalItemsOrdered);
+  const tierProgress = getTierProgress(totalItemsOrdered);
+  const currentTierConfig = tierBenefits[currentTier] || DEFAULT_TIER_CONFIG[currentTier];
+
+  const handleCopyVoucher = (code) => {
+    if (!code) return;
+    navigator.clipboard.writeText(code);
+    setCopiedVoucher(code);
+    setTimeout(() => setCopiedVoucher(false), 2000);
+  };
 
   // Update dependent provinces
   useEffect(() => {
@@ -215,13 +278,10 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
             className="text-xs uppercase font-brand font-semibold tracking-[0.2em] text-[#705B56] hover:text-[#2C1E1B] flex items-center gap-2 transition-colors cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>Return to Boutique</span>
+            <span>Back</span>
           </button>
 
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#FAF0EC] border border-[#E8DCD7] text-[10px] uppercase font-bold tracking-[0.2em] text-[#B86B60]">
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Role: {role?.toUpperCase()}</span>
-          </div>
+
         </div>
 
         {/* Customer Header Banner */}
@@ -232,7 +292,7 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
 
           <div className="flex-1 text-center sm:text-left">
             <span className="text-[10px] font-brand uppercase tracking-[0.25em] text-[#B86B60] font-bold block mb-1">
-              AURA ATELIER CLIENT ACCOUNT
+              YOUR ACCOUNT
             </span>
             <h1 className="font-brand text-3xl text-[#2C1E1B] tracking-wide">
               {fullName || 'Atelier Client'}
@@ -296,24 +356,37 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
           {/* Tab 1: Profile */}
           <button
             onClick={() => setActiveTab('profile')}
-            className={`py-3.5 px-5 text-xs uppercase tracking-[0.2em] font-brand font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer flex-shrink-0 ${
-              activeTab === 'profile'
-                ? 'border-[#2C1E1B] text-[#2C1E1B] bg-white'
-                : 'border-transparent text-[#705B56] hover:text-[#2C1E1B]'
-            }`}
+            className={`py-3.5 px-5 text-xs uppercase tracking-[0.2em] font-brand font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer flex-shrink-0 ${activeTab === 'profile'
+              ? 'border-[#2C1E1B] text-[#2C1E1B] bg-white'
+              : 'border-transparent text-[#705B56] hover:text-[#2C1E1B]'
+              }`}
           >
             <User className="w-4 h-4" />
             <span>Client Profile</span>
           </button>
 
-          {/* Tab 2: Security & Password */}
+          {/* Tab 2: VIP Ranking & Privileges */}
+          <button
+            onClick={() => setActiveTab('vip')}
+            className={`py-3.5 px-5 text-xs uppercase tracking-[0.2em] font-brand font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer flex-shrink-0 ${activeTab === 'vip'
+              ? 'border-[#2C1E1B] text-[#2C1E1B] bg-white'
+              : 'border-transparent text-[#705B56] hover:text-[#2C1E1B]'
+              }`}
+          >
+            <Crown className="w-4 h-4 text-amber-600" />
+            <span>VIP Privileges</span>
+            <span className="text-[10px] px-1.5 py-0.2 bg-amber-50 text-amber-800 border border-amber-200/60 rounded-full font-sans font-bold">
+              {currentTier}
+            </span>
+          </button>
+
+          {/* Tab 3: Security & Password */}
           <button
             onClick={() => setActiveTab('security')}
-            className={`py-3.5 px-5 text-xs uppercase tracking-[0.2em] font-brand font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer flex-shrink-0 relative ${
-              activeTab === 'security'
-                ? 'border-[#2C1E1B] text-[#2C1E1B] bg-white'
-                : 'border-transparent text-[#705B56] hover:text-[#2C1E1B]'
-            }`}
+            className={`py-3.5 px-5 text-xs uppercase tracking-[0.2em] font-brand font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer flex-shrink-0 relative ${activeTab === 'security'
+              ? 'border-[#2C1E1B] text-[#2C1E1B] bg-white'
+              : 'border-transparent text-[#705B56] hover:text-[#2C1E1B]'
+              }`}
           >
             <KeyRound className="w-4 h-4" />
             <span>Security & Password</span>
@@ -325,11 +398,10 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
           {/* Tab 3: Shipping Address */}
           <button
             onClick={() => setActiveTab('address')}
-            className={`py-3.5 px-5 text-xs uppercase tracking-[0.2em] font-brand font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer flex-shrink-0 ${
-              activeTab === 'address'
-                ? 'border-[#2C1E1B] text-[#2C1E1B] bg-white'
-                : 'border-transparent text-[#705B56] hover:text-[#2C1E1B]'
-            }`}
+            className={`py-3.5 px-5 text-xs uppercase tracking-[0.2em] font-brand font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer flex-shrink-0 ${activeTab === 'address'
+              ? 'border-[#2C1E1B] text-[#2C1E1B] bg-white'
+              : 'border-transparent text-[#705B56] hover:text-[#2C1E1B]'
+              }`}
           >
             <MapPin className="w-4 h-4" />
             <span>Delivery Address</span>
@@ -348,10 +420,101 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
 
         {/* TAB 1: CLIENT PROFILE */}
         {activeTab === 'profile' && (
-          <div className="bg-white border border-[#E8DCD7] p-6 sm:p-8 shadow-sm">
-            <h2 className="text-sm font-brand font-bold uppercase tracking-[0.2em] text-[#2C1E1B] pb-3 border-b border-[#E8DCD7] mb-6">
-              Personal Information
-            </h2>
+          <div className="space-y-6">
+            {/* VIP TIER OVERVIEW CARD */}
+            <div className="bg-gradient-to-br from-[#FAF5F2] via-white to-[#F5ECE8] border border-[#E8DCD7] p-6 sm:p-7 shadow-xs relative overflow-hidden">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-start gap-4">
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 border ${
+                    currentTier === TIER_KEYS.ROYAL
+                      ? 'bg-amber-100 text-amber-800 border-amber-300'
+                      : currentTier === TIER_KEYS.ICON
+                      ? 'bg-purple-100 text-purple-700 border-purple-200'
+                      : 'bg-rose-50 text-rose-700 border-rose-200'
+                  }`}>
+                    {currentTier === TIER_KEYS.ROYAL && <Crown className="w-6 h-6 text-amber-600" />}
+                    {currentTier === TIER_KEYS.ICON && <ShieldCheck className="w-6 h-6 text-purple-600" />}
+                    {currentTier === TIER_KEYS.MUSE && <Sparkles className="w-6 h-6 text-[#9E6D5F]" />}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] uppercase font-bold tracking-[0.2em] text-[#A38E88]">
+                        Customer Ranking
+                      </span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${currentTierConfig?.pillClass || 'bg-slate-100'}`}>
+                        {currentTier}
+                      </span>
+                    </div>
+                    <h3 className="text-lg font-brand font-bold text-[#2C1E1B] mt-0.5">
+                      {currentTier} • <span className="font-normal italic text-xs text-[#705B56]">{currentTierConfig?.tagline}</span>
+                    </h3>
+                    <p className="text-xs text-[#705B56] mt-1">
+                      You have ordered <strong className="text-[#2C1E1B] font-mono">{totalItemsOrdered} {totalItemsOrdered === 1 ? 'item' : 'items'}</strong> from the AURA Atelier.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Exclusive Voucher Snippet */}
+                {currentTierConfig?.voucherCode && (
+                  <div className="bg-white border border-[#E8DCD7] p-3 rounded-none flex items-center justify-between sm:justify-start gap-3 shadow-xs">
+                    <div>
+                      <span className="text-[9px] uppercase font-bold tracking-widest text-[#A38E88] block">
+                        Tier Voucher ({currentTierConfig.voucherDiscount})
+                      </span>
+                      <span className="text-sm font-mono font-bold tracking-wider text-[#2C1E1B]">
+                        {currentTierConfig.voucherCode}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyVoucher(currentTierConfig.voucherCode)}
+                      className="px-3 py-1.5 bg-[#2C1E1B] hover:bg-[#B86B60] text-white text-[10px] font-bold uppercase tracking-wider transition-colors flex items-center gap-1 cursor-pointer"
+                    >
+                      {copiedVoucher === currentTierConfig.voucherCode ? (
+                        <>
+                          <Check className="w-3 h-3 text-emerald-400" />
+                          <span>Copied</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3 h-3" />
+                          <span>Copy</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Progress to next tier */}
+              <div className="mt-5 pt-4 border-t border-[#E8DCD7]">
+                <div className="flex items-center justify-between text-xs mb-1.5">
+                  <span className="text-[#705B56] text-[11px] font-medium">
+                    {tierProgress.isMaxTier ? (
+                      <span className="text-amber-800 font-bold flex items-center gap-1">
+                        <Crown className="w-3.5 h-3.5" /> Highest Atelier Sovereign Status
+                      </span>
+                    ) : (
+                      tierProgress.message
+                    )}
+                  </span>
+                  <span className="font-mono text-xs font-bold text-[#2C1E1B]">
+                    {tierProgress.progress}%
+                  </span>
+                </div>
+                <div className="w-full h-2 bg-[#E8DCD7]/60 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-[#9E6D5F] via-purple-600 to-amber-500 rounded-full transition-all duration-700"
+                    style={{ width: `${tierProgress.progress}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white border border-[#E8DCD7] p-6 sm:p-8 shadow-sm">
+              <h2 className="text-sm font-brand font-bold uppercase tracking-[0.2em] text-[#2C1E1B] pb-3 border-b border-[#E8DCD7] mb-6">
+                Personal Information
+              </h2>
 
             <form onSubmit={handleUpdateProfile} className="space-y-6">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -408,10 +571,17 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
 
                 <div>
                   <label className="block text-[11px] uppercase font-bold tracking-wider text-[#705B56] mb-2">
-                    Client Role Level
+                    Ranking Status
                   </label>
-                  <div className="py-3 px-3.5 bg-[#FAF5F2] border border-[#E8DCD7] text-xs text-[#2C1E1B] font-bold uppercase tracking-wider">
-                    {role?.toUpperCase()}
+                  <div className="py-3 px-3.5 bg-[#FAF5F2] border border-[#E8DCD7] text-xs text-[#2C1E1B] font-bold uppercase tracking-wider flex items-center justify-between">
+                    <span>{currentTier}</span>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('vip')}
+                      className="text-[10px] text-amber-700 hover:text-amber-900 underline font-sans font-bold capitalize cursor-pointer"
+                    >
+                      View Privileges
+                    </button>
                   </div>
                 </div>
               </div>
@@ -427,9 +597,261 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
               </div>
             </form>
           </div>
+        </div>
         )}
 
-        {/* TAB 2: SECURITY & PASSWORD */}
+        {/* TAB 2: VIP RANKINGS & PRIVILEGES */}
+        {activeTab === 'vip' && (
+          <div className="space-y-8 animate-fade-in-up">
+            {/* VIP Header Banner */}
+            <div className="bg-gradient-to-br from-[#2C1E1B] via-[#3E2C28] to-[#1F1513] text-white p-7 sm:p-9 shadow-md relative overflow-hidden">
+              <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+                <div>
+                  <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/10 backdrop-blur-xs rounded-full text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300 border border-white/10 mb-3">
+                    <Crown className="w-3.5 h-3.5 text-amber-400" />
+                    <span>AURA VIP Client Privileges</span>
+                  </div>
+                  <h2 className="text-xl sm:text-2xl font-brand font-bold tracking-wide text-white">
+                    Customer Ranking & Exclusive Rewards
+                  </h2>
+                  <p className="text-xs text-[#D5C2BC] max-w-xl mt-2 leading-relaxed">
+                    Every garment acquired at AURA advances your ranking. Unlock private capsules, tier discount vouchers, and complimentary express delivery tailored to your patron tier.
+                  </p>
+                </div>
+
+                {/* Standing Summary */}
+                <div className="bg-white/10 backdrop-blur-md p-4 rounded-xl border border-white/15 text-center min-w-[180px]">
+                  <span className="text-[9px] uppercase font-bold tracking-widest text-[#D5C2BC] block">
+                    Your Current Status
+                  </span>
+                  <span className="text-lg font-brand font-bold text-amber-300 block mt-0.5">
+                    {currentTier}
+                  </span>
+                  <span className="text-[11px] text-white/80 font-mono block mt-1">
+                    {totalItemsOrdered} {totalItemsOrdered === 1 ? 'item ordered' : 'items ordered'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Progress Line */}
+              <div className="mt-6 pt-5 border-t border-white/10 relative z-10">
+                <div className="flex items-center justify-between text-xs mb-2 text-white/90">
+                  <span className="text-[11px]">
+                    {tierProgress.message}
+                  </span>
+                  <span className="font-mono text-xs font-bold text-amber-300">
+                    {tierProgress.progress}%
+                  </span>
+                </div>
+                <div className="w-full h-2 bg-white/15 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-rose-300 via-purple-400 to-amber-400 rounded-full transition-all duration-700"
+                    style={{ width: `${tierProgress.progress}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* 3 TIERS COMPARISON GRID */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* TIER 1: AURA MUSE */}
+              {(() => {
+                const cfg = tierBenefits[TIER_KEYS.MUSE] || DEFAULT_TIER_CONFIG[TIER_KEYS.MUSE];
+                const isActive = currentTier === TIER_KEYS.MUSE;
+                return (
+                  <div className={`bg-white border transition-all flex flex-col justify-between p-6 sm:p-7 shadow-xs relative ${
+                    isActive ? 'border-[#9E6D5F] ring-2 ring-[#9E6D5F]/20' : 'border-[#E8DCD7]'
+                  }`}>
+                    {isActive && (
+                      <span className="absolute -top-3 left-6 px-3 py-0.5 bg-[#9E6D5F] text-white text-[10px] uppercase font-bold tracking-widest shadow-xs">
+                        Active Tier
+                      </span>
+                    )}
+                    <div>
+                      <div className="w-10 h-10 rounded-full bg-[#FDF7F5] border border-[#E8DCD7] text-[#9E6D5F] flex items-center justify-center mb-4">
+                        <Sparkles className="w-5 h-5" />
+                      </div>
+                      <span className="text-[10px] uppercase font-bold tracking-widest text-[#A38E88] block">
+                        Tier 1 • {cfg.thresholdLabel || '5 items or below'}
+                      </span>
+                      <h3 className="text-lg font-brand font-bold text-[#2C1E1B] mt-0.5">
+                        {TIER_KEYS.MUSE}
+                      </h3>
+                      <p className="text-xs italic text-[#705B56] mt-0.5">
+                        {cfg.tagline}
+                      </p>
+
+                      {/* Voucher Card */}
+                      {cfg.voucherCode && (
+                        <div className="mt-4 p-3 bg-[#FAF5F2] border border-[#E8DCD7] flex items-center justify-between">
+                          <div>
+                            <span className="text-[9px] uppercase font-bold tracking-wider text-[#A38E88] block">
+                              Voucher ({cfg.voucherDiscount})
+                            </span>
+                            <span className="text-xs font-mono font-bold text-[#2C1E1B]">
+                              {cfg.voucherCode}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyVoucher(cfg.voucherCode)}
+                            className="px-2.5 py-1 bg-[#2C1E1B] hover:bg-[#B86B60] text-white text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer"
+                          >
+                            {copiedVoucher === cfg.voucherCode ? 'Copied' : 'Copy'}
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Perks */}
+                      <ul className="mt-5 space-y-2.5 text-xs text-[#2C1E1B]">
+                        {(cfg.benefits || []).map((b, i) => (
+                          <li key={i} className="flex items-start gap-2">
+                            <Check className="w-3.5 h-3.5 text-[#9E6D5F] flex-shrink-0 mt-0.5" />
+                            <span className="leading-snug">{b}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* TIER 2: AURA ICON */}
+              {(() => {
+                const cfg = tierBenefits[TIER_KEYS.ICON] || DEFAULT_TIER_CONFIG[TIER_KEYS.ICON];
+                const isActive = currentTier === TIER_KEYS.ICON;
+                return (
+                  <div className={`bg-white border transition-all flex flex-col justify-between p-6 sm:p-7 shadow-xs relative ${
+                    isActive ? 'border-purple-600 ring-2 ring-purple-500/20' : 'border-[#E8DCD7]'
+                  }`}>
+                    {isActive && (
+                      <span className="absolute -top-3 left-6 px-3 py-0.5 bg-purple-700 text-white text-[10px] uppercase font-bold tracking-widest shadow-xs">
+                        Active Tier
+                      </span>
+                    )}
+                    <div>
+                      <div className="w-10 h-10 rounded-full bg-purple-50 border border-purple-200 text-purple-700 flex items-center justify-center mb-4">
+                        <ShieldCheck className="w-5 h-5" />
+                      </div>
+                      <span className="text-[10px] uppercase font-bold tracking-widest text-[#A38E88] block">
+                        Tier 2 • {cfg.thresholdLabel || '6–15 items'}
+                      </span>
+                      <h3 className="text-lg font-brand font-bold text-[#2C1E1B] mt-0.5">
+                        {TIER_KEYS.ICON}
+                      </h3>
+                      <p className="text-xs italic text-[#705B56] mt-0.5">
+                        {cfg.tagline}
+                      </p>
+
+                      {/* Voucher Card */}
+                      {cfg.voucherCode && (
+                        <div className="mt-4 p-3 bg-purple-50/50 border border-purple-200/70 flex items-center justify-between">
+                          <div>
+                            <span className="text-[9px] uppercase font-bold tracking-wider text-purple-600 block">
+                              Voucher ({cfg.voucherDiscount})
+                            </span>
+                            <span className="text-xs font-mono font-bold text-[#2C1E1B]">
+                              {cfg.voucherCode}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyVoucher(cfg.voucherCode)}
+                            className="px-2.5 py-1 bg-purple-700 hover:bg-purple-800 text-white text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer"
+                          >
+                            {copiedVoucher === cfg.voucherCode ? 'Copied' : 'Copy'}
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Perks */}
+                      <ul className="mt-5 space-y-2.5 text-xs text-[#2C1E1B]">
+                        {(cfg.benefits || []).map((b, i) => (
+                          <li key={i} className="flex items-start gap-2">
+                            <Check className="w-3.5 h-3.5 text-purple-600 flex-shrink-0 mt-0.5" />
+                            <span className="leading-snug">{b}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* TIER 3: AURA ROYAL */}
+              {(() => {
+                const cfg = tierBenefits[TIER_KEYS.ROYAL] || DEFAULT_TIER_CONFIG[TIER_KEYS.ROYAL];
+                const isActive = currentTier === TIER_KEYS.ROYAL;
+                return (
+                  <div className={`bg-white border transition-all flex flex-col justify-between p-6 sm:p-7 shadow-xs relative ${
+                    isActive ? 'border-amber-500 ring-2 ring-amber-400/30' : 'border-[#E8DCD7]'
+                  }`}>
+                    {isActive && (
+                      <span className="absolute -top-3 left-6 px-3 py-0.5 bg-amber-600 text-white text-[10px] uppercase font-bold tracking-widest shadow-xs">
+                        Active Tier
+                      </span>
+                    )}
+                    <div>
+                      <div className="w-10 h-10 rounded-full bg-amber-50 border border-amber-300 text-amber-700 flex items-center justify-center mb-4">
+                        <Crown className="w-5 h-5 text-amber-600" />
+                      </div>
+                      <span className="text-[10px] uppercase font-bold tracking-widest text-amber-700 block">
+                        Tier 3 • {cfg.thresholdLabel || 'More than 15 items'}
+                      </span>
+                      <h3 className="text-lg font-brand font-bold text-[#2C1E1B] mt-0.5 flex items-center gap-1.5">
+                        <span>{TIER_KEYS.ROYAL}</span>
+                        <Crown className="w-4 h-4 text-amber-600" />
+                      </h3>
+                      <p className="text-xs italic text-[#705B56] mt-0.5">
+                        {cfg.tagline}
+                      </p>
+
+                      {/* Voucher Card */}
+                      {cfg.voucherCode && (
+                        <div className="mt-4 p-3 bg-amber-50/70 border border-amber-300/80 flex items-center justify-between">
+                          <div>
+                            <span className="text-[9px] uppercase font-bold tracking-wider text-amber-800 block">
+                              Voucher ({cfg.voucherDiscount})
+                            </span>
+                            <span className="text-xs font-mono font-bold text-[#2C1E1B]">
+                              {cfg.voucherCode}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyVoucher(cfg.voucherCode)}
+                            className="px-2.5 py-1 bg-amber-700 hover:bg-amber-800 text-white text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer"
+                          >
+                            {copiedVoucher === cfg.voucherCode ? 'Copied' : 'Copy'}
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Perks */}
+                      <ul className="mt-5 space-y-2.5 text-xs text-[#2C1E1B]">
+                        {(cfg.benefits || []).map((b, i) => (
+                          <li key={i} className="flex items-start gap-2">
+                            <Check className="w-3.5 h-3.5 text-amber-600 flex-shrink-0 mt-0.5" />
+                            <span className="leading-snug">{b}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Note on Admin Managed Perks */}
+            <div className="bg-[#FAF5F2] border border-[#E8DCD7] p-5 text-center">
+              <p className="text-xs text-[#705B56] leading-relaxed max-w-xl mx-auto">
+                <strong className="text-[#2C1E1B]">Atelier Privileges Note:</strong> Benefits and exclusive vouchers are curated and granted by the AURA Administration based on items ordered. To redeem a voucher, enter the code in checkout.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: SECURITY & PASSWORD */}
         {activeTab === 'security' && (
           <div className="bg-white border border-[#E8DCD7] p-6 sm:p-8 shadow-sm">
             <h2 className="text-sm font-brand font-bold uppercase tracking-[0.2em] text-[#2C1E1B] pb-3 border-b border-[#E8DCD7] mb-6">

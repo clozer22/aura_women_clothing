@@ -14,6 +14,7 @@ import AdminStaffTab from './admin/AdminStaffTab';
 import AdminCustomersTab from './admin/AdminCustomersTab';
 import AdminPromotionsTab from './admin/AdminPromotionsTab';
 import AdminChatTab from './admin/AdminChatTab';
+import AdminFinanceTab from './admin/AdminFinanceTab';
 import AdminProductModal from './admin/AdminProductModal';
 import AdminBulkModal from './admin/AdminBulkModal';
 import { fetchSiteVisitorStats } from '../lib/visitorTracking';
@@ -109,7 +110,7 @@ export default function AdminPortal({
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   // Persistent Tab & Navigation states
-  const VALID_ADMIN_TABS = ['dashboard', 'products', 'orders', 'customers', 'promotions', 'reviews', 'customize', 'profile', 'staff', 'messages'];
+  const VALID_ADMIN_TABS = ['dashboard', 'products', 'orders', 'finance', 'customers', 'promotions', 'reviews', 'customize', 'profile', 'staff', 'messages'];
 
   const getInitialActiveTab = () => {
     try {
@@ -167,7 +168,7 @@ export default function AdminPortal({
 
   // Granular page permissions state
   const [unreadChatCount, setUnreadChatCount] = useState(0);
-  const [permissions, setPermissions] = useState(['dashboard', 'products', 'orders', 'messages', 'reviews', 'customize', 'profile']);
+  const [permissions, setPermissions] = useState(['dashboard', 'products', 'orders', 'finance', 'messages', 'reviews', 'customize', 'profile']);
 
   const hasPermission = useCallback((tabKey) => {
     if (adminRole === 'Super Admin') return true;
@@ -185,7 +186,7 @@ export default function AdminPortal({
         url.searchParams.set('tab', activeTab);
         window.history.replaceState({}, '', url.toString());
       }
-    } catch (e) {}
+    } catch (e) { }
   }, [activeTab]);
 
   // Handle browser back and forward navigation
@@ -197,7 +198,7 @@ export default function AdminPortal({
         if (tabFromUrl && VALID_ADMIN_TABS.includes(tabFromUrl) && hasPermission(tabFromUrl)) {
           setActiveTab(tabFromUrl);
         }
-      } catch (e) {}
+      } catch (e) { }
     };
 
     window.addEventListener('popstate', handlePopState);
@@ -213,7 +214,7 @@ export default function AdminPortal({
       const url = new URL(window.location.href);
       url.searchParams.set('tab', tab);
       window.history.replaceState({}, '', url.toString());
-    } catch (e) {}
+    } catch (e) { }
 
     startTabTransition(() => {
       setActiveTab(tab);
@@ -233,7 +234,7 @@ export default function AdminPortal({
         sessionStorage.setItem('aura_admin_order_subfilter', subfilter);
       }
       window.history.replaceState({}, '', url.toString());
-    } catch (e) {}
+    } catch (e) { }
 
     if (subfilter) {
       setOrderFilterTab(subfilter);
@@ -294,7 +295,7 @@ export default function AdminPortal({
   const [editingProductId, setEditingProductId] = useState(null);
   const [newProduct, setNewProduct] = useState({
     name: '',
-    category: 'Suits & Coats',
+    category: 'Tops',
     mainCategory: 'top',
     subType: '',
     price: '',
@@ -353,7 +354,7 @@ export default function AdminPortal({
       const next = [newNotif, ...prev.slice(0, 49)];
       try {
         localStorage.setItem('aura_admin_notifications', JSON.stringify(next));
-      } catch (e) {}
+      } catch (e) { }
       return next;
     });
   };
@@ -363,7 +364,7 @@ export default function AdminPortal({
       const next = prev.map((n) => ({ ...n, read: true }));
       try {
         localStorage.setItem('aura_admin_notifications', JSON.stringify(next));
-      } catch (e) {}
+      } catch (e) { }
       return next;
     });
   };
@@ -372,7 +373,7 @@ export default function AdminPortal({
     setAdminNotifications([]);
     try {
       localStorage.removeItem('aura_admin_notifications');
-    } catch (e) {}
+    } catch (e) { }
   };
 
   const markNotificationAsRead = (id) => {
@@ -380,7 +381,7 @@ export default function AdminPortal({
       const next = prev.map((n) => (n.id === id ? { ...n, read: true } : n));
       try {
         localStorage.setItem('aura_admin_notifications', JSON.stringify(next));
-      } catch (e) {}
+      } catch (e) { }
       return next;
     });
   };
@@ -747,7 +748,7 @@ export default function AdminPortal({
           bio: profData.bio || 'Bespoke designer commanding elegance for the modern profile.',
           email: session.user.email,
           role: profData.role || adminRole,
-          permissions: profData.permissions || ['dashboard', 'products', 'orders', 'reviews', 'customize', 'profile'],
+          permissions: profData.permissions || ['dashboard', 'products', 'orders', 'finance', 'reviews', 'customize', 'profile'],
           is_active: profData.is_active !== false,
         };
         setProfile(profObj);
@@ -767,7 +768,7 @@ export default function AdminPortal({
           bio: 'Bespoke designer commanding elegance for the modern profile.',
           email: session.user.email,
           role: adminRole,
-          permissions: ['dashboard', 'products', 'orders', 'reviews', 'customize', 'profile'],
+          permissions: ['dashboard', 'products', 'orders', 'finance', 'reviews', 'customize', 'profile'],
           is_active: true,
         };
         setProfile(defaultProf);
@@ -1095,6 +1096,22 @@ export default function AdminPortal({
         return next;
       });
       triggerNotification('success', 'Status Updated', `Order fulfillment set to ${newStatus}.`);
+
+      // If status changed to Out for Delivery (TO_DELIVER), notify customer via official Atelier email
+      if (newStatus === 'TO_DELIVER' && existingOrder?.customer_email) {
+        fetch('/api/notify-delivery', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orderId: existingOrder.id, orderReference: existingOrder.order_reference }),
+        })
+          .then((r) => r.json())
+          .then((data) => {
+            if (data.success && !data.emailResult?.skipped) {
+              triggerNotification('info', 'Customer Notified', `Out for delivery email dispatched to ${existingOrder.customer_email}.`);
+            }
+          })
+          .catch((e) => console.warn('Delivery email dispatch note:', e.message));
+      }
     } catch (err) {
       triggerNotification('error', 'Update Failed', err.message);
     }
@@ -1241,7 +1258,7 @@ export default function AdminPortal({
             if (nextData) {
               setPageToCache(nextCacheKey, nextData, total);
             }
-          }).catch(() => {});
+          }).catch(() => { });
         }
       }
     } catch (err) {
@@ -1278,9 +1295,9 @@ export default function AdminPortal({
     }
   }, [session?.user?.id, isAdmin]);
 
-  // Re-fetch orders whenever admin switches to orders or dashboard tab
+  // Re-fetch orders whenever admin switches to orders, dashboard, or finance tab
   useEffect(() => {
-    if (session && isAdmin && (activeTab === 'orders' || activeTab === 'dashboard')) {
+    if (session && isAdmin && (activeTab === 'orders' || activeTab === 'dashboard' || activeTab === 'finance')) {
       fetchDashboardStats();
     }
   }, [activeTab]);
@@ -1446,7 +1463,7 @@ export default function AdminPortal({
     const productObj = {
       name: newProduct.name,
       subtitle: 'Atelier Runway Collection',
-      category: newProduct.mainCategory === 'top' ? 'Suits & Coats' : 'Tailored Pants',
+      category: newProduct.mainCategory === 'top' ? 'Tops' : 'Bottoms',
       mainCategory: newProduct.mainCategory,
       subType: newProduct.subType,
       price: Number(newProduct.price) || 0,
@@ -1521,7 +1538,7 @@ export default function AdminPortal({
       // Reset Form
       setNewProduct({
         name: '',
-        category: 'Suits & Coats',
+        category: 'Tops',
         mainCategory: 'top',
         subType: '',
         price: '',
@@ -1576,7 +1593,7 @@ export default function AdminPortal({
     setEditingProductId(null);
     setNewProduct({
       name: '',
-      category: 'Suits & Coats',
+      category: 'Tops',
       mainCategory: 'top',
       subType: '',
       price: '',
@@ -1600,7 +1617,7 @@ export default function AdminPortal({
     setEditingProductId(product.id);
     setNewProduct({
       name: product.name,
-      category: product.category || 'Suits & Coats',
+      category: product.category || (product.mainCategory === 'bottom' ? 'Bottoms' : 'Tops'),
       mainCategory: product.mainCategory || 'top',
       subType: product.subType || '',
       price: product.price || '',
@@ -1998,11 +2015,10 @@ export default function AdminPortal({
               id="admin-notification-bell-btn"
               type="button"
               onClick={() => setIsNotifDropdownOpen((prev) => !prev)}
-              className={`relative p-2 rounded-xl transition-all cursor-pointer ${
-                isNotifDropdownOpen
+              className={`relative p-2 rounded-xl transition-all cursor-pointer ${isNotifDropdownOpen
                   ? 'bg-blue-50 text-blue-600'
                   : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
-              }`}
+                }`}
               title="Notifications"
               aria-label="View notifications"
             >
@@ -2081,17 +2097,15 @@ export default function AdminPortal({
                             setIsNotifDropdownOpen(false);
                             handleTabChange('orders');
                           }}
-                          className={`p-3.5 flex items-start gap-3 hover:bg-slate-50 transition-colors cursor-pointer text-left relative ${
-                            !notif.read ? 'bg-blue-50/40' : ''
-                          }`}
+                          className={`p-3.5 flex items-start gap-3 hover:bg-slate-50 transition-colors cursor-pointer text-left relative ${!notif.read ? 'bg-blue-50/40' : ''
+                            }`}
                         >
-                          <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                            notif.type === 'order'
+                          <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 ${notif.type === 'order'
                               ? 'bg-emerald-100 text-emerald-700'
                               : notif.type === 'stock'
-                              ? 'bg-amber-100 text-amber-700'
-                              : 'bg-blue-100 text-blue-700'
-                          }`}>
+                                ? 'bg-amber-100 text-amber-700'
+                                : 'bg-blue-100 text-blue-700'
+                            }`}>
                             <ShoppingBag className="w-4 h-4" />
                           </div>
                           <div className="flex-1 min-w-0">
@@ -2273,6 +2287,19 @@ export default function AdminPortal({
                               ) : (
                                 activeTab === 'orders' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />
                               )}
+                            </button>
+                          )}
+
+                          {hasPermission('orders') && (
+                            <button
+                              onClick={() => { handleTabChange('finance'); setIsMobileDrawerOpen(false); }}
+                              className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'finance' ? 'bg-blue-600 text-white font-semibold' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <DollarSign className="w-4 h-4 text-emerald-400" />
+                                <span>Finance</span>
+                              </div>
+                              {activeTab === 'finance' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />}
                             </button>
                           )}
 
@@ -2518,6 +2545,20 @@ export default function AdminPortal({
 
                     {hasPermission('orders') && (
                       <button
+                        onClick={() => handleTabChange('finance')}
+                        className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'finance' ? 'bg-blue-600 text-white font-semibold shadow-xs shadow-blue-600/30' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                        title="Finance, Xendit & COD Sales Tracking"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <DollarSign className="w-4 h-4 text-emerald-400 opacity-90" />
+                          <span>Finance</span>
+                        </div>
+                        {activeTab === 'finance' && <ChevronRight className="w-3.5 h-3.5 opacity-80" />}
+                      </button>
+                    )}
+
+                    {hasPermission('orders') && (
+                      <button
                         onClick={() => handleTabChange('customers')}
                         className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium text-left flex items-center justify-between transition-all ${activeTab === 'customers' ? 'bg-blue-600 text-white font-semibold shadow-xs shadow-blue-600/30' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
                         title="Customer CRM & Lifetime Value"
@@ -2666,135 +2707,143 @@ export default function AdminPortal({
         {/* Main Panel Content Area */}
         <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto max-h-[calc(100vh-57px)] bg-[#F4F6F9] overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
 
-        {/* TAB CONTENTS */}
-        {activeTab === 'dashboard' && (
-          <AdminDashboardTab
-            dashboardStats={dashboardStats}
-            orderCounts={orderCounts}
-            visitorStats={visitorStats}
-            averageReviewRating={averageReviewRating}
-            totalReviewsCount={customerReviews.length}
-            isLoadingStats={isLoadingStats}
-            onRefresh={fetchDashboardStats}
-            onAddProduct={handleOpenAddProduct}
-            onNavigateTab={handleNavigateTab}
-            onEditProduct={handleEditProductClick}
-            hasPermission={hasPermission}
-          />
-        )}
+          {/* TAB CONTENTS */}
+          {activeTab === 'dashboard' && (
+            <AdminDashboardTab
+              dashboardStats={dashboardStats}
+              orderCounts={orderCounts}
+              visitorStats={visitorStats}
+              averageReviewRating={averageReviewRating}
+              totalReviewsCount={customerReviews.length}
+              isLoadingStats={isLoadingStats}
+              onRefresh={fetchDashboardStats}
+              onAddProduct={handleOpenAddProduct}
+              onNavigateTab={handleNavigateTab}
+              onEditProduct={handleEditProductClick}
+              hasPermission={hasPermission}
+            />
+          )}
 
-        {activeTab === 'products' && (
-          <AdminProductsTab
-            productList={productList}
-            totalProductsCount={totalProductsCount}
-            currentPage={currentPage}
-            pageSize={pageSize}
-            totalPages={totalPages}
-            searchQuery={searchQuery}
-            categoryFilter={categoryFilter}
-            featuredCount={featuredCount}
-            selectedProductIds={selectedProductIds}
-            isLoadingProducts={isLoadingProducts}
-            onSearchChange={handleSearchChange}
-            onCategoryChange={handleCategoryChange}
-            onAddProduct={handleOpenAddProduct}
-            onEditProduct={handleEditProductClick}
-            onDeleteProduct={handleDeleteProduct}
-            onToggleFeatured={handleToggleFeatured}
-            onSelectAllFiltered={handleSelectAllFiltered}
-            onToggleSelectProduct={handleToggleSelectProduct}
-            onOpenBulkModal={() => {
-              setBulkSizeChart('');
-              setIsBulkModalOpen(true);
-            }}
-            onDeleteSelected={handleDeleteSelected}
-            onPageChange={handlePageChange}
-          />
-        )}
+          {activeTab === 'products' && (
+            <AdminProductsTab
+              productList={productList}
+              totalProductsCount={totalProductsCount}
+              currentPage={currentPage}
+              pageSize={pageSize}
+              totalPages={totalPages}
+              searchQuery={searchQuery}
+              categoryFilter={categoryFilter}
+              featuredCount={featuredCount}
+              selectedProductIds={selectedProductIds}
+              isLoadingProducts={isLoadingProducts}
+              onSearchChange={handleSearchChange}
+              onCategoryChange={handleCategoryChange}
+              onAddProduct={handleOpenAddProduct}
+              onEditProduct={handleEditProductClick}
+              onDeleteProduct={handleDeleteProduct}
+              onToggleFeatured={handleToggleFeatured}
+              onSelectAllFiltered={handleSelectAllFiltered}
+              onToggleSelectProduct={handleToggleSelectProduct}
+              onOpenBulkModal={() => {
+                setBulkSizeChart('');
+                setIsBulkModalOpen(true);
+              }}
+              onDeleteSelected={handleDeleteSelected}
+              onPageChange={handlePageChange}
+            />
+          )}
 
-        {activeTab === 'orders' && (
-          <AdminOrdersTab
-            orders={ordersList}
-            orderCounts={orderCounts}
-            isLoading={isLoadingOrders}
-            onRefresh={fetchDashboardStats}
-            onUpdateOrderStatus={handleUpdateOrderStatus}
-            onUpdateOrderTracking={handleUpdateOrderTracking}
-            initialFilterTab={orderFilterTab}
-            currentAdmin={{
-              name: profile.name || session?.user?.email?.split('@')[0] || 'Administrator',
-              email: session?.user?.email || '',
-              role: adminRole,
-            }}
-          />
-        )}
+          {activeTab === 'orders' && (
+            <AdminOrdersTab
+              orders={ordersList}
+              orderCounts={orderCounts}
+              isLoading={isLoadingOrders}
+              onRefresh={fetchDashboardStats}
+              onUpdateOrderStatus={handleUpdateOrderStatus}
+              onUpdateOrderTracking={handleUpdateOrderTracking}
+              initialFilterTab={orderFilterTab}
+              currentAdmin={{
+                name: profile.name || session?.user?.email?.split('@')[0] || 'Administrator',
+                email: session?.user?.email || '',
+                role: adminRole,
+              }}
+            />
+          )}
 
-        {activeTab === 'customers' && (
-          <AdminCustomersTab
-            orders={ordersList}
-          />
-        )}
+          {activeTab === 'finance' && (
+            <AdminFinanceTab
+              orders={ordersList}
+              isLoading={isLoadingOrders}
+              onRefresh={fetchDashboardStats}
+            />
+          )}
 
-        {activeTab === 'promotions' && (
-          <AdminPromotionsTab />
-        )}
+          {activeTab === 'customers' && (
+            <AdminCustomersTab
+              orders={ordersList}
+            />
+          )}
 
-        {activeTab === 'reviews' && (
-          <AdminReviewsTab
-            reviews={customerReviews}
-            isLoading={isLoadingReviews}
-            onRefresh={fetchDashboardStats}
-            onDeleteReview={handleDeleteReview}
-          />
-        )}
+          {activeTab === 'promotions' && (
+            <AdminPromotionsTab />
+          )}
 
-        {activeTab === 'customize' && (
-          <AdminCustomizerTab
-            localHeroConfig={localHeroConfig}
-            setLocalHeroConfig={setLocalHeroConfig}
-            isUploadingPoster={isUploadingPoster}
-            isUploadingAboutMedia={isUploadingAboutMedia}
-            isSavingTheme={isSavingTheme}
-            onMediaUpload={handleMediaUpload}
-            onApplyCustomizations={handleApplyCustomizations}
-          />
-        )}
+          {activeTab === 'reviews' && (
+            <AdminReviewsTab
+              reviews={customerReviews}
+              isLoading={isLoadingReviews}
+              onRefresh={fetchDashboardStats}
+              onDeleteReview={handleDeleteReview}
+            />
+          )}
 
-        {activeTab === 'profile' && (
-          <AdminProfileTab
-            profile={profile}
-            editProfileForm={editProfileForm}
-            setEditProfileForm={setEditProfileForm}
-            isEditingProfile={isEditingProfile}
-            setIsEditingProfile={setIsEditingProfile}
-            isLoadingProfile={isLoadingProfile}
-            isUploadingAvatar={isUploadingAvatar}
-            adminRole={adminRole}
-            userEmail={session?.user?.email}
-            onAvatarUpload={handleAvatarUpload}
-            onUpdateProfile={handleUpdateProfile}
-          />
-        )}
+          {activeTab === 'customize' && (
+            <AdminCustomizerTab
+              localHeroConfig={localHeroConfig}
+              setLocalHeroConfig={setLocalHeroConfig}
+              isUploadingPoster={isUploadingPoster}
+              isUploadingAboutMedia={isUploadingAboutMedia}
+              isSavingTheme={isSavingTheme}
+              onMediaUpload={handleMediaUpload}
+              onApplyCustomizations={handleApplyCustomizations}
+            />
+          )}
 
-        {activeTab === 'messages' && hasPermission('messages') && (
-          <AdminChatTab
-            currentAdmin={{
-              name: profile.name || session?.user?.email?.split('@')[0] || 'Administrator',
-              email: session?.user?.email || '',
-              role: adminRole,
-            }}
-          />
-        )}
+          {activeTab === 'profile' && (
+            <AdminProfileTab
+              profile={profile}
+              editProfileForm={editProfileForm}
+              setEditProfileForm={setEditProfileForm}
+              isEditingProfile={isEditingProfile}
+              setIsEditingProfile={setIsEditingProfile}
+              isLoadingProfile={isLoadingProfile}
+              isUploadingAvatar={isUploadingAvatar}
+              adminRole={adminRole}
+              userEmail={session?.user?.email}
+              onAvatarUpload={handleAvatarUpload}
+              onUpdateProfile={handleUpdateProfile}
+            />
+          )}
 
-        {activeTab === 'staff' && adminRole === 'Super Admin' && (
-          <AdminStaffTab
-            currentAdminEmail={session?.user?.email || ''}
-            currentAdminRole={adminRole}
-            adminSession={session}
-            onNotification={triggerNotification}
-          />
-        )}
-      </main>
+          {activeTab === 'messages' && hasPermission('messages') && (
+            <AdminChatTab
+              currentAdmin={{
+                name: profile.name || session?.user?.email?.split('@')[0] || 'Administrator',
+                email: session?.user?.email || '',
+                role: adminRole,
+              }}
+            />
+          )}
+
+          {activeTab === 'staff' && adminRole === 'Super Admin' && (
+            <AdminStaffTab
+              currentAdminEmail={session?.user?.email || ''}
+              currentAdminRole={adminRole}
+              adminSession={session}
+              onNotification={triggerNotification}
+            />
+          )}
+        </main>
       </div>
 
       {/* MODALS */}

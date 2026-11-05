@@ -140,7 +140,7 @@ export default function OrderDetailPage({
             if (savedLast && savedLast.order_reference === activeRef && isMounted) {
               setOrder(savedLast);
             }
-          } catch (e) {}
+          } catch (e) { }
         }
       } catch (err) {
         console.warn('Error fetching order details:', err.message);
@@ -466,7 +466,7 @@ export default function OrderDetailPage({
             <ArrowLeft className="w-4 h-4" />
             <span>Back to Orders</span>
           </button>
-          <span className="text-[11px] font-mono text-[#705B56]">
+          <span className="text-[11px]  text-[#705B56]">
             Placed: {formatDate(order.created_at)}
           </span>
         </div>
@@ -476,7 +476,7 @@ export default function OrderDetailPage({
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#E8DCD7]">
             <div>
               <span className="text-[10px] font-bold uppercase tracking-[0.25em] text-[#B86B60] block mb-1">
-                Order Ledger Details
+                Order Details
               </span>
               <h1 className="font-brand text-2xl sm:text-3xl font-bold tracking-tight text-[#2C1E1B]">
                 {order.order_reference}
@@ -489,30 +489,29 @@ export default function OrderDetailPage({
                 {badge.label}
               </span>
 
-              <span className={`inline-flex items-center gap-1 px-3 py-1.5 border text-xs font-semibold uppercase tracking-wider ${
-                order.payment_status === 'PAID'
-                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                  : order.payment_status === 'REFUND_PENDING'
+              <span className={`inline-flex items-center gap-1 px-3 py-1.5 border text-xs font-semibold uppercase tracking-wider ${order.payment_status === 'PAID'
+                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                : order.payment_status === 'REFUND_PENDING'
                   ? 'bg-amber-50 text-amber-800 border-amber-300 font-bold'
                   : order.payment_status === 'REFUNDED'
-                  ? 'bg-orange-50 text-orange-900 border-orange-300 font-bold'
-                  : order.payment_status === 'CANCELLED'
-                  ? 'bg-neutral-100 text-neutral-600 border-neutral-300'
-                  : order.payment_method === 'COD'
-                  ? 'bg-amber-50 text-amber-800 border-amber-200'
-                  : 'bg-amber-50 text-amber-800 border-amber-200'
-              }`}>
+                    ? 'bg-orange-50 text-orange-900 border-orange-300 font-bold'
+                    : order.payment_status === 'CANCELLED'
+                      ? 'bg-neutral-100 text-neutral-600 border-neutral-300'
+                      : order.payment_method === 'COD'
+                        ? 'bg-amber-50 text-amber-800 border-amber-200'
+                        : 'bg-amber-50 text-amber-800 border-amber-200'
+                }`}>
                 {order.payment_status === 'PAID'
                   ? 'Paid'
                   : order.payment_status === 'REFUND_PENDING'
-                  ? 'Refund Pending'
-                  : order.payment_status === 'REFUNDED'
-                  ? 'Refunded'
-                  : order.payment_status === 'CANCELLED'
-                  ? 'Voided'
-                  : order.payment_method === 'COD'
-                  ? 'COD • Unpaid'
-                  : 'Payment Pending'}
+                    ? 'Refund Pending'
+                    : order.payment_status === 'REFUNDED'
+                      ? 'Refunded'
+                      : order.payment_status === 'CANCELLED'
+                        ? 'Voided'
+                        : order.payment_method === 'COD'
+                          ? 'COD • Unpaid'
+                          : 'Payment Pending'}
               </span>
             </div>
           </div>
@@ -597,11 +596,11 @@ export default function OrderDetailPage({
                   className="px-4 py-2.5 bg-[#DA291C] hover:bg-[#b01e14] text-white text-xs font-bold uppercase tracking-wider transition-colors inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
                 >
                   <Truck className="w-3.5 h-3.5" />
-                  <span>Live J&T Tracking</span>
+                  <span>Track My Order</span>
                 </button>
               )}
 
-              {order.waybill_url && (order.status || '').toUpperCase() !== 'CANCELLED' && (
+              {/* {order.waybill_url && (order.status || '').toUpperCase() !== 'CANCELLED' && (
                 <a
                   href={order.waybill_url}
                   target="_blank"
@@ -611,7 +610,7 @@ export default function OrderDetailPage({
                   <ExternalLink className="w-3.5 h-3.5" />
                   <span>Official Waybill</span>
                 </a>
-              )}
+              )} */}
 
               {/* Cancel Order Action (Available while awaiting shipment) */}
               {isCancellable && (order.status || '').toUpperCase() !== 'CANCELLED' && (
@@ -634,44 +633,41 @@ export default function OrderDetailPage({
                 Fulfillment Journey
               </p>
               <div className="grid grid-cols-4 gap-2 text-center text-xs">
-              <div className="flex flex-col items-center">
-                <div className="w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs mb-1.5 shadow-xs">
-                  ✓
+                <div className="flex flex-col items-center">
+                  <div className="w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs mb-1.5 shadow-xs">
+                    ✓
+                  </div>
+                  <span className="font-bold text-[#2C1E1B] text-[11px]">Placed</span>
                 </div>
-                <span className="font-bold text-[#2C1E1B] text-[11px]">Placed</span>
-              </div>
-              <div className="flex flex-col items-center">
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs mb-1.5 shadow-xs ${
-                  ['SHIPPED', 'TO_DELIVER', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'].includes((order.status || '').toUpperCase())
+                <div className="flex flex-col items-center">
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs mb-1.5 shadow-xs ${['SHIPPED', 'TO_DELIVER', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'].includes((order.status || '').toUpperCase())
                     ? 'bg-emerald-600 text-white'
                     : 'bg-[#FAF0EC] border border-[#B86B60] text-[#B86B60]'
-                }`}>
-                  {['SHIPPED', 'TO_DELIVER', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'].includes((order.status || '').toUpperCase()) ? '✓' : '2'}
+                    }`}>
+                    {['SHIPPED', 'TO_DELIVER', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'].includes((order.status || '').toUpperCase()) ? '✓' : '2'}
+                  </div>
+                  <span className="font-bold text-[#2C1E1B] text-[11px]">Packed</span>
                 </div>
-                <span className="font-bold text-[#2C1E1B] text-[11px]">Packed</span>
-              </div>
-              <div className="flex flex-col items-center">
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs mb-1.5 shadow-xs ${
-                  ['TO_DELIVER', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'].includes((order.status || '').toUpperCase())
+                <div className="flex flex-col items-center">
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs mb-1.5 shadow-xs ${['TO_DELIVER', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'].includes((order.status || '').toUpperCase())
                     ? 'bg-emerald-600 text-white'
                     : 'bg-slate-100 text-slate-400 border border-slate-200'
-                }`}>
-                  {['TO_DELIVER', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'].includes((order.status || '').toUpperCase()) ? '✓' : '3'}
+                    }`}>
+                    {['TO_DELIVER', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'].includes((order.status || '').toUpperCase()) ? '✓' : '3'}
+                  </div>
+                  <span className="font-bold text-[#2C1E1B] text-[11px]">In Transit</span>
                 </div>
-                <span className="font-bold text-[#2C1E1B] text-[11px]">In Transit</span>
-              </div>
-              <div className="flex flex-col items-center">
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs mb-1.5 shadow-xs ${
-                  isDelivered
+                <div className="flex flex-col items-center">
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs mb-1.5 shadow-xs ${isDelivered
                     ? 'bg-emerald-600 text-white'
                     : 'bg-slate-100 text-slate-400 border border-slate-200'
-                }`}>
-                  {isDelivered ? '✓' : '4'}
+                    }`}>
+                    {isDelivered ? '✓' : '4'}
+                  </div>
+                  <span className="font-bold text-[#2C1E1B] text-[11px]">Delivered</span>
                 </div>
-                <span className="font-bold text-[#2C1E1B] text-[11px]">Delivered</span>
               </div>
             </div>
-          </div>
           )}
         </div>
 
@@ -745,7 +741,6 @@ export default function OrderDetailPage({
         <div className="bg-white border border-[#E8DCD7] shadow-xs">
           <div className="p-6 border-b border-[#E8DCD7] bg-slate-50/50">
             <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-[#B86B60]" />
               <h2 className="font-brand text-lg font-bold text-[#2C1E1B]">
                 Purchased Garments {isDelivered ? '& Client Feedback' : ''}
               </h2>
@@ -911,11 +906,10 @@ export default function OrderDetailPage({
                                     aria-label={`Rate ${star} star`}
                                   >
                                     <Star
-                                      className={`w-6 h-6 transition-colors ${
-                                        isFilled
-                                          ? 'fill-amber-400 text-amber-400'
-                                          : 'text-slate-300 hover:text-amber-200'
-                                      }`}
+                                      className={`w-6 h-6 transition-colors ${isFilled
+                                        ? 'fill-amber-400 text-amber-400'
+                                        : 'text-slate-300 hover:text-amber-200'
+                                        }`}
                                     />
                                   </button>
                                 );
@@ -938,11 +932,10 @@ export default function OrderDetailPage({
                                 key={opt.id}
                                 type="button"
                                 onClick={() => handleFormChange(pId, 'fit', opt.id)}
-                                className={`px-3 py-1.5 text-xs font-semibold uppercase tracking-wider transition-all border cursor-pointer ${
-                                  form.fit === opt.id
-                                    ? 'bg-[#2C1E1B] text-white border-[#2C1E1B]'
-                                    : 'bg-white text-[#705B56] border-[#E8DCD7] hover:border-[#B86B60]'
-                                }`}
+                                className={`px-3 py-1.5 text-xs font-semibold uppercase tracking-wider transition-all border cursor-pointer ${form.fit === opt.id
+                                  ? 'bg-[#2C1E1B] text-white border-[#2C1E1B]'
+                                  : 'bg-white text-[#705B56] border-[#E8DCD7] hover:border-[#B86B60]'
+                                  }`}
                               >
                                 {opt.label}
                               </button>

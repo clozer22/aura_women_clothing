@@ -56,7 +56,7 @@ export const DEFAULT_ABOUT_AURA_HOTSPOTS: LookbookHotspot[] = [
     id: 'spot-m1-top',
     x: 13.8,
     y: 39.5,
-    productId: 'aura-custom-1788969600915', // AURA Camilla Top in Pastel Pink
+    productId: 'aura-custom-1787406715498', // AURA Aurora Top in Pastel Pink
     label: 'Model 1 Top',
   },
   {
@@ -235,10 +235,22 @@ export const ShopTheLook: React.FC<ShopTheLookProps> = ({
         return n.includes('amelia') && n.includes('black');
       }) || null;
     }
-    if (idStr.includes('1788971174359') || idStr.includes('1788969600915')) {
+    if (idStr.includes('1787406715498')) {
       return catalogProducts.find((p) => {
         const n = (p.name || p.title || '').toLowerCase();
-        return (n.includes('amelia') || n.includes('camilla') || n.includes('aurora')) && n.includes('pink');
+        return n.includes('aurora') && n.includes('pink');
+      }) || null;
+    }
+    if (idStr.includes('1788971174359')) {
+      return catalogProducts.find((p) => {
+        const n = (p.name || p.title || '').toLowerCase();
+        return n.includes('amelia') && n.includes('pink');
+      }) || null;
+    }
+    if (idStr.includes('1788969600915')) {
+      return catalogProducts.find((p) => {
+        const n = (p.name || p.title || '').toLowerCase();
+        return n.includes('camilla') && n.includes('pink');
       }) || null;
     }
 
@@ -428,11 +440,13 @@ export const ShopTheLook: React.FC<ShopTheLookProps> = ({
 
                           {/* Right Product Details */}
                           <div className="flex flex-col justify-center min-w-0 pr-1 flex-1">
-                            {product.category && (
-                              <span className="text-[9px] uppercase tracking-[0.2em] font-semibold text-[#B86B60] mb-0.5 block truncate">
-                                {product.category}
-                              </span>
-                            )}
+                            <span className="text-[9px] uppercase tracking-[0.2em] font-semibold text-[#B86B60] mb-0.5 block truncate">
+                              {(() => {
+                                const cat = (product.category || '').toLowerCase();
+                                const main = (product.mainCategory || '').toLowerCase();
+                                return cat.includes('bottom') || cat.includes('pant') || cat.includes('skirt') || main === 'bottom' ? 'Bottoms' : 'Tops';
+                              })()}
+                            </span>
 
                             <h4 className="text-xs sm:text-[13px] font-brand font-medium uppercase tracking-wider text-[#2C1E1B] leading-snug line-clamp-2 group-hover:text-[#B86B60] transition-colors">
                               {title}

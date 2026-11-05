@@ -318,23 +318,56 @@ export default function CheckoutPage({
 
   const handleApplyPromo = async () => {
     if (!promoCodeInput.trim()) return;
+    const cleanCode = promoCodeInput.trim().toUpperCase();
     setIsApplyingPromo(true);
     setPromoError('');
     try {
-      const { data, error } = await supabase
-        .from('promotions')
-        .select('*')
-        .eq('code', promoCodeInput.trim().toUpperCase())
-        .single();
+      // 1. Check Supabase promotions table
+      let promoData = null;
+      try {
+        const { data, error } = await supabase
+          .from('promotions')
+          .select('*')
+          .eq('code', cleanCode)
+          .single();
+        if (!error && data) {
+          promoData = data;
+        }
+      } catch (e) {
+        // Fallback to local
+      }
+
+      // 2. Fallback to VIP Tier Vouchers and Local Custom Vouchers
+      if (!promoData) {
+        if (cleanCode === 'MUSE10') {
+          promoData = { code: 'MUSE10', promo_type: 'voucher', discount_type: 'percentage', discount_value: 10, is_active: true };
+        } else if (cleanCode === 'ICON15') {
+          promoData = { code: 'ICON15', promo_type: 'voucher', discount_type: 'percentage', discount_value: 15, is_active: true };
+        } else if (cleanCode === 'ROYAL20') {
+          promoData = { code: 'ROYAL20', promo_type: 'voucher', discount_type: 'percentage', discount_value: 20, is_active: true };
+        } else if (cleanCode === 'AURA100') {
+          promoData = { code: 'AURA100', promo_type: 'voucher', discount_type: 'fixed', discount_value: 100, min_order_value: 800, is_active: true };
+        } else if (cleanCode === 'WELCOME50') {
+          promoData = { code: 'WELCOME50', promo_type: 'voucher', discount_type: 'fixed', discount_value: 50, min_order_value: 500, is_active: true };
+        } else {
+          try {
+            const rawVouchers = localStorage.getItem('aura_custom_vouchers');
+            if (rawVouchers) {
+              const list = JSON.parse(rawVouchers);
+              const found = list.find(v => v.code?.toUpperCase() === cleanCode);
+              if (found) promoData = found;
+            }
+          } catch (e) {}
+        }
+      }
+
+      if (!promoData) throw new Error("Invalid voucher or promo code.");
+      if (!promoData.is_active) throw new Error("This voucher or promo code is no longer active.");
+      if (promoData.expires_at && new Date(promoData.expires_at) < new Date()) throw new Error("This voucher or promo code has expired.");
+      if (promoData.usage_limit && promoData.times_used >= promoData.usage_limit) throw new Error("This voucher has reached its usage limit.");
+      if (promoData.min_order_value && subtotal < promoData.min_order_value) throw new Error(`Minimum order value of ₱${promoData.min_order_value} required.`);
       
-      if (error || !data) throw new Error("Invalid promo code.");
-      
-      if (!data.is_active) throw new Error("This promo code is no longer active.");
-      if (data.expires_at && new Date(data.expires_at) < new Date()) throw new Error("This promo code has expired.");
-      if (data.usage_limit && data.times_used >= data.usage_limit) throw new Error("This promo code has reached its usage limit.");
-      if (data.min_order_value && subtotal < data.min_order_value) throw new Error(`Minimum order value of ₱${data.min_order_value} required.`);
-      
-      setAppliedPromo(data);
+      setAppliedPromo(promoData);
       setPromoCodeInput('');
     } catch (err) {
       setPromoError(err.message);
@@ -1326,13 +1359,13 @@ export default function CheckoutPage({
                 })}
               </div>
 
-              {/* Promo Code Input */}
+              {/* Promo / Voucher Code Input */}
               <div className="pt-4 border-t border-[#E8DCD7]">
                 {appliedPromo ? (
                   <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 p-3 text-xs">
                     <div className="flex items-center gap-2 text-emerald-800">
                       <CheckCircle2 className="w-4 h-4" />
-                      <span className="font-bold">Promo {appliedPromo.code} applied!</span>
+                      <span className="font-bold">Voucher {appliedPromo.code} applied!</span>
                     </div>
                     <button 
                       onClick={() => setAppliedPromo(null)}
@@ -1344,21 +1377,21 @@ export default function CheckoutPage({
                 ) : (
                   <div>
                     <label className="block text-[10px] uppercase tracking-wider font-bold text-[#705B56] mb-1.5">
-                      Gift Card or Discount Code
+                      Voucher, Gift Card or Promo Code
                     </label>
                     <div className="flex gap-2">
                       <input 
                         type="text" 
                         value={promoCodeInput}
                         onChange={(e) => setPromoCodeInput(e.target.value)}
-                        placeholder="Enter code" 
-                        className="flex-1 px-3 py-2 border border-[#E8DCD7] bg-[#FAF5F2] text-xs focus:outline-none focus:border-[#2C1E1B] rounded-none"
+                        placeholder="Enter voucher code (e.g. MUSE10, ICON15)" 
+                        className="flex-1 px-3 py-2 border border-[#E8DCD7] bg-[#FAF5F2] text-xs focus:outline-none focus:border-[#2C1E1B] rounded-none uppercase"
                       />
                       <button 
                         type="button"
                         onClick={handleApplyPromo}
                         disabled={isApplyingPromo || !promoCodeInput.trim()}
-                        className="px-4 py-2 bg-[#2C1E1B] text-white text-[10px] uppercase font-bold tracking-widest disabled:opacity-50"
+                        className="px-4 py-2 bg-[#2C1E1B] text-white text-[10px] uppercase font-bold tracking-widest disabled:opacity-50 cursor-pointer"
                       >
                         {isApplyingPromo ? '...' : 'Apply'}
                       </button>

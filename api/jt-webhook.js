@@ -1,5 +1,6 @@
 import { getSupabaseServerClient } from './_lib/supabaseServer.js';
 import { ensureServerEnv } from './_lib/envHelper.js';
+import { sendOutForDeliveryEmail } from './_lib/emailService.js';
 
 export default async function handler(req, res) {
   // CORS Preflight & Headers
@@ -96,6 +97,7 @@ export default async function handler(req, res) {
         if (newStatus) {
           const updatePayload = {
             status: newStatus,
+            shipment_status: newStatus,
             courier_last_scan: scanType,
             courier_last_description: desc,
             updated_at: new Date().toISOString(),
@@ -112,19 +114,52 @@ export default async function handler(req, res) {
           } catch (_) {}
 
           try {
-            const { data } = await supabase
+            // Find existing order to check email status and send notification
+            const { data: matchedOrders } = await supabase
               .from('orders')
-              .update(updatePayload)
-              .eq('tracking_number', billcode)
-              .select('order_reference, status');
+              .select('*')
+              .eq('tracking_number', billcode);
 
-            if (data?.length) {
-              updatedOrders.push({ billcode, newStatus, references: data.map((d) => d.order_reference) });
+            if (matchedOrders?.length) {
+              for (const ord of matchedOrders) {
+                let payload = ord.shipment_payload || {};
+                let emailSent = false;
+
+                if (newStatus === 'TO_DELIVER' && !payload.out_for_delivery_notified_at) {
+                  try {
+                    const emailRes = await sendOutForDeliveryEmail(ord);
+                    if (emailRes.success && !emailRes.skipped) {
+                      emailSent = true;
+                      payload = {
+                        ...payload,
+                        out_for_delivery_notified_at: new Date().toISOString(),
+                        out_for_delivery_recipient: ord.customer_email,
+                      };
+                    }
+                  } catch (emErr) {
+                    console.error('[J&T Webhook] Delivery email failed:', emErr.message);
+                  }
+                }
+
+                const fullUpdate = {
+                  ...updatePayload,
+                  shipment_payload: payload,
+                };
+
+                await supabase.from('orders').update(fullUpdate).eq('id', ord.id);
+                updatedOrders.push({
+                  billcode,
+                  newStatus,
+                  reference: ord.order_reference,
+                  emailNotified: emailSent,
+                });
+              }
             } else {
               updatedOrders.push({ billcode, newStatus });
             }
-          } catch (_) {
-            updatedOrders.push({ billcode, newStatus });
+          } catch (upErr) {
+            console.error('[J&T Webhook] Update error:', upErr.message);
+            updatedOrders.push({ billcode, newStatus, error: upErr.message });
           }
         }
       }

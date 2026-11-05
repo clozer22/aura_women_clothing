@@ -124,8 +124,8 @@ export default function ProductDetailPage({
       const rawSizes = typeof product.sizes === 'string'
         ? product.sizes.split(',').map((s) => s.trim()).filter(Boolean)
         : Array.isArray(product.sizes)
-        ? product.sizes
-        : ['Standard'];
+          ? product.sizes
+          : ['Standard'];
       setSelectedSize(rawSizes[0] || 'Standard');
     }
   }, [product?.id]);
@@ -315,7 +315,7 @@ export default function ProductDetailPage({
           text: `Check out the ${product?.name} at Aura Official Atelier`,
           url: window.location.href,
         })
-        .catch(() => {});
+        .catch(() => { });
     } else {
       navigator.clipboard.writeText(window.location.href);
       setShareToast(true);
@@ -397,11 +397,15 @@ export default function ProductDetailPage({
               className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-[#2C1E1B] hover:text-[#B86B60] transition-colors cursor-pointer"
             >
               <ArrowLeft className="w-4 h-4" />
-              <span>Back to Collection</span>
+              <span>Back to Shop</span>
             </button>
             <span className="text-[#D1C2BD]">/</span>
             <span className="hidden sm:inline uppercase tracking-wider text-[#705B56]">
-              {product.category || 'Atelier'}
+              {(() => {
+                const cat = (product.category || '').toLowerCase();
+                const main = (product.mainCategory || '').toLowerCase();
+                return cat.includes('bottom') || cat.includes('pant') || cat.includes('skirt') || main === 'bottom' ? 'Bottoms' : 'Tops';
+              })()}
             </span>
             <span className="hidden sm:inline text-[#D1C2BD]">/</span>
             <span className="font-semibold text-[#2C1E1B] truncate max-w-xs sm:max-w-md">
@@ -493,7 +497,11 @@ export default function ProductDetailPage({
               {/* Category / Subtype */}
               <div className="flex items-center gap-2">
                 <span className="text-[11px] font-brand uppercase tracking-[0.22em] text-[#B86B60] font-bold">
-                  {product.category || 'Atelier Collection'}
+                  {(() => {
+                    const cat = (product.category || '').toLowerCase();
+                    const main = (product.mainCategory || '').toLowerCase();
+                    return cat.includes('bottom') || cat.includes('pant') || cat.includes('skirt') || main === 'bottom' ? 'Bottoms' : 'Tops';
+                  })()}
                 </span>
                 {product.isBestSeller && (
                   <span className="text-[10px] font-brand uppercase tracking-wider font-bold bg-[#FAF0EC] text-[#B86B60] border border-[#E8DCD7] px-2 py-0.5">
@@ -519,11 +527,10 @@ export default function ProductDetailPage({
                     {[1, 2, 3, 4, 5].map((s) => (
                       <Star
                         key={s}
-                        className={`w-3.5 h-3.5 ${
-                          s <= Math.round(Number(reviewStats.avgRating))
-                            ? 'fill-amber-400 text-amber-400'
-                            : 'text-gray-300'
-                        }`}
+                        className={`w-3.5 h-3.5 ${s <= Math.round(Number(reviewStats.avgRating))
+                          ? 'fill-amber-400 text-amber-400'
+                          : 'text-gray-300'
+                          }`}
                       />
                     ))}
                   </div>
@@ -566,45 +573,35 @@ export default function ProductDetailPage({
                 )}
               </div>
 
-              {/* Description Section with Desktop/Responsive Read More */}
-              <div className="space-y-2 pt-2">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs uppercase font-brand tracking-[0.25em] font-bold text-[#2C1E1B]">
-                    {product.descriptionLabel || 'Garment Silhouette & Notes'}
-                  </h4>
-                </div>
+              {/* Description Section with Justified Format and Toggle Button (Hidden by default) */}
+              {product.description && (
+                <div className="space-y-2 pt-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs uppercase font-brand tracking-[0.25em] font-bold text-[#2C1E1B]">
+                      {product.descriptionLabel || 'Garment Silhouette & Notes'}
+                    </h4>
+                  </div>
 
-                <div className="relative">
-                  <div
-                    className={`text-xs sm:text-sm text-[#705B56] leading-relaxed whitespace-pre-wrap product-description-html transition-all duration-300 ${
-                      !isDescriptionExpanded && isLongDescription
-                        ? 'max-h-20 overflow-hidden'
-                        : ''
-                    }`}
-                    dangerouslySetInnerHTML={{ __html: product.description || '' }}
-                  />
-
-                  {/* Gradient fade overlay when collapsed */}
-                  {!isDescriptionExpanded && isLongDescription && (
-                    <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-[#FAF5F2] via-[#FAF5F2]/80 to-transparent pointer-events-none" />
+                  {isDescriptionExpanded && (
+                    <div
+                      className="text-xs sm:text-sm text-[#705B56] leading-relaxed text-justify whitespace-pre-wrap product-description-html pt-1"
+                      dangerouslySetInnerHTML={{ __html: product.description || '' }}
+                    />
                   )}
-                </div>
 
-                {isLongDescription && (
                   <button
                     type="button"
                     onClick={() => setIsDescriptionExpanded((prev) => !prev)}
-                    className="inline-flex items-center gap-1 text-[11px] font-brand uppercase tracking-wider font-bold text-[#B86B60] hover:text-[#2C1E1B] transition-colors cursor-pointer pt-0.5"
+                    className="inline-flex items-center gap-1.5 text-[11px] font-brand uppercase tracking-wider font-bold text-[#B86B60] hover:text-[#2C1E1B] transition-colors cursor-pointer pt-0.5"
                   >
-                    <span>{isDescriptionExpanded ? 'Read less' : 'Read more..'}</span>
+                    <span>{isDescriptionExpanded ? 'Hide description' : 'Read description'}</span>
                     <ChevronDown
-                      className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                        isDescriptionExpanded ? 'rotate-180' : ''
-                      }`}
+                      className={`w-3.5 h-3.5 transition-transform duration-200 ${isDescriptionExpanded ? 'rotate-180' : ''
+                        }`}
                     />
                   </button>
-                )}
-              </div>
+                </div>
+              )}
 
               {/* Atelier Details / Feature Highlights */}
               <div className="p-4 bg-white border border-[#E8DCD7] space-y-2 text-xs">
@@ -657,11 +654,10 @@ export default function ProductDetailPage({
                         key={idx}
                         type="button"
                         onClick={() => setSelectedSize(sz)}
-                        className={`px-4 py-2.5 border text-xs font-semibold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
-                          isSelected
-                            ? 'bg-[#2C1E1B] text-white border-[#2C1E1B] shadow-sm'
-                            : 'bg-white text-[#705B56] border-[#E8DCD7] hover:border-[#B86B60] hover:text-[#2C1E1B]'
-                        }`}
+                        className={`px-4 py-2.5 border text-xs font-semibold uppercase tracking-wider transition-all duration-200 cursor-pointer ${isSelected
+                          ? 'bg-[#2C1E1B] text-white border-[#2C1E1B] shadow-sm'
+                          : 'bg-white text-[#705B56] border-[#E8DCD7] hover:border-[#B86B60] hover:text-[#2C1E1B]'
+                          }`}
                       >
                         {sz}
                       </button>
@@ -730,11 +726,10 @@ export default function ProductDetailPage({
                 type="button"
                 disabled={isSoldOut}
                 onClick={handleBuyNow}
-                className={`w-full py-4 px-6 font-brand rounded-none text-xs font-bold uppercase tracking-[0.2em] transition-all duration-300 shadow-md flex items-center justify-center gap-2 ${
-                  isSoldOut
-                    ? 'bg-[#E8DCD7] text-[#9E8E89] cursor-not-allowed shadow-none'
-                    : 'bg-[#2C1E1B] hover:bg-[#B86B60] text-white cursor-pointer'
-                }`}
+                className={`w-full py-4 px-6 font-brand rounded-none text-xs font-bold uppercase tracking-[0.2em] transition-all duration-300 shadow-md flex items-center justify-center gap-2 border-2 ${isSoldOut
+                  ? 'bg-[#E8DCD7] text-[#9E8E89] border-[#E8DCD7] cursor-not-allowed shadow-none'
+                  : 'bg-[#B86B60] hover:bg-transparent border-[#B86B60] text-white hover:text-[#B86B60] cursor-pointer'
+                  }`}
               >
                 <span>{isSoldOut ? 'Sold Out' : 'Buy Now'}</span>
                 {!isSoldOut && <ArrowRight className="w-4 h-4" />}
@@ -743,21 +738,20 @@ export default function ProductDetailPage({
               <button
                 type="button"
                 onClick={handleToggleWishlist}
-                className={`w-full py-3.5 px-6 rounded-none text-xs font-semibold uppercase tracking-[0.18em] transition-all flex items-center justify-center gap-2 border cursor-pointer ${
-                  isWishlisted
-                    ? 'bg-[#FAF0EC] border-[#B86B60] text-[#B86B60]'
-                    : isSoldOut
+                className={`w-full py-3.5 px-6 rounded-none text-xs font-semibold uppercase tracking-[0.18em] transition-all flex items-center justify-center gap-2 border cursor-pointer ${isWishlisted
+                  ? 'bg-[#FAF0EC] border-[#B86B60] text-[#B86B60]'
+                  : isSoldOut
                     ? 'bg-[#FAF5F2] border-[#E8DCD7] text-[#705B56] hover:border-[#2C1E1B] hover:text-[#2C1E1B]'
                     : 'bg-white border-[#2C1E1B] text-[#2C1E1B] hover:border-[#B86B60] hover:text-[#B86B60]'
-                }`}
+                  }`}
               >
                 <Heart className={`w-4 h-4 ${isWishlisted ? 'fill-[#B86B60] text-[#B86B60]' : ''}`} />
                 <span>
                   {isWishlisted
                     ? 'In Your Bag'
                     : isSoldOut
-                    ? 'Save to Bag (Sold Out)'
-                    : 'Add to Bag'}
+                      ? 'Save to Bag (Sold Out)'
+                      : 'Add to Bag'}
                 </span>
               </button>
             </div>
@@ -810,11 +804,10 @@ export default function ProductDetailPage({
                 {[1, 2, 3, 4, 5].map((s) => (
                   <Star
                     key={s}
-                    className={`w-4 h-4 ${
-                      s <= Math.round(Number(reviewStats.avgRating))
-                        ? 'fill-amber-400 text-amber-400'
-                        : 'text-gray-300'
-                    }`}
+                    className={`w-4 h-4 ${s <= Math.round(Number(reviewStats.avgRating))
+                      ? 'fill-amber-400 text-amber-400'
+                      : 'text-gray-300'
+                      }`}
                   />
                 ))}
               </div>
@@ -875,11 +868,10 @@ export default function ProductDetailPage({
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveStarFilter(tab.id)}
-                className={`px-3.5 py-1.5 text-xs font-brand uppercase tracking-wider font-semibold border transition-all cursor-pointer ${
-                  activeStarFilter === tab.id
-                    ? 'bg-[#2C1E1B] text-white border-[#2C1E1B] shadow-sm'
-                    : 'bg-white text-[#705B56] border-[#E8DCD7] hover:border-[#B86B60] hover:text-[#2C1E1B]'
-                }`}
+                className={`px-3.5 py-1.5 text-xs font-brand uppercase tracking-wider font-semibold border transition-all cursor-pointer ${activeStarFilter === tab.id
+                  ? 'bg-[#2C1E1B] text-white border-[#2C1E1B] shadow-sm'
+                  : 'bg-white text-[#705B56] border-[#E8DCD7] hover:border-[#B86B60] hover:text-[#2C1E1B]'
+                  }`}
               >
                 {tab.label}
               </button>
@@ -917,10 +909,10 @@ export default function ProductDetailPage({
               filteredReviews.map((rev) => {
                 const dateStr = rev.created_at
                   ? new Date(rev.created_at).toLocaleDateString('en-US', {
-                      month: 'long',
-                      day: 'numeric',
-                      year: 'numeric',
-                    })
+                    month: 'long',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })
                   : 'Recent Review';
 
                 return (
@@ -954,11 +946,10 @@ export default function ProductDetailPage({
                         {[1, 2, 3, 4, 5].map((s) => (
                           <Star
                             key={s}
-                            className={`w-3.5 h-3.5 ${
-                              s <= (rev.rating || 5)
-                                ? 'fill-amber-400 text-amber-400'
-                                : 'text-gray-200'
-                            }`}
+                            className={`w-3.5 h-3.5 ${s <= (rev.rating || 5)
+                              ? 'fill-amber-400 text-amber-400'
+                              : 'text-gray-200'
+                              }`}
                           />
                         ))}
                       </div>
@@ -1040,10 +1031,9 @@ export default function ProductDetailPage({
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-[11px] font-brand uppercase tracking-[0.22em] text-[#B86B60] font-bold block mb-1">
-                  Atelier Curation
                 </span>
                 <h3 className="font-editorial text-2xl sm:text-3xl text-[#2C1E1B]">
-                  Complete The Atelier Look
+                  Shop The Look
                 </h3>
               </div>
               <button
@@ -1109,9 +1099,8 @@ export default function ProductDetailPage({
               className="relative z-10 bg-white p-4 sm:p-6 max-w-md w-full max-h-[85vh] overflow-y-auto flex flex-col items-center shadow-2xl border border-[#E8DCD7]"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="w-full flex items-center justify-between pb-3 mb-2 border-b border-[#E8DCD7]">
+              <div className="w-full flex items-center justify-between pb-3 mb-2 ">
                 <span className="text-[11px] font-brand uppercase tracking-wider font-bold text-[#B86B60]">
-                  Atelier Sizing Guide
                 </span>
                 <button
                   onClick={() => setShowSizeChart(false)}
@@ -1219,11 +1208,10 @@ export default function ProductDetailPage({
                       key={idx}
                       type="button"
                       onClick={() => setSelectedSize(sz)}
-                      className={`px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider border transition-all cursor-pointer flex-shrink-0 ${
-                        isSelected
-                          ? 'bg-[#2C1E1B] text-white border-[#2C1E1B] shadow-sm'
-                          : 'bg-white text-[#705B56] border-[#E8DCD7] active:border-[#2C1E1B]'
-                      }`}
+                      className={`px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider border transition-all cursor-pointer flex-shrink-0 ${isSelected
+                        ? 'bg-[#2C1E1B] text-white border-[#2C1E1B] shadow-sm'
+                        : 'bg-white text-[#705B56] border-[#E8DCD7] active:border-[#2C1E1B]'
+                        }`}
                     >
                       {sz}
                     </button>
@@ -1263,11 +1251,10 @@ export default function ProductDetailPage({
             <button
               type="button"
               onClick={handleQuickHeartToggle}
-              className={`p-2.5 border transition-colors flex-shrink-0 cursor-pointer ${
-                isWishlisted
-                  ? 'border-[#B86B60] bg-[#FAF0EC] text-[#B86B60]'
-                  : 'border-[#E8DCD7] bg-[#FAF7F4] text-[#705B56] hover:text-[#2C1E1B]'
-              }`}
+              className={`p-2.5 border transition-colors flex-shrink-0 cursor-pointer ${isWishlisted
+                ? 'border-[#B86B60] bg-[#FAF0EC] text-[#B86B60]'
+                : 'border-[#E8DCD7] bg-[#FAF7F4] text-[#705B56] hover:text-[#2C1E1B]'
+                }`}
               aria-label={isWishlisted ? 'Remove from Bag' : 'Save to Bag'}
               title={isWishlisted ? 'In Your Bag' : 'Save to Bag'}
             >
@@ -1279,13 +1266,12 @@ export default function ProductDetailPage({
               type="button"
               disabled={isSoldOut}
               onClick={handleToggleWishlist}
-              className={`flex-1 py-3 px-2 border text-[11px] font-brand font-bold uppercase tracking-wider transition-all flex items-center justify-center text-center cursor-pointer ${
-                isSoldOut
-                  ? 'bg-[#E8DCD7] border-[#E8DCD7] text-[#9E8E89] cursor-not-allowed'
-                  : isWishlisted
+              className={`flex-1 py-3 px-2 border text-[11px] font-brand font-bold uppercase tracking-wider transition-all flex items-center justify-center text-center cursor-pointer ${isSoldOut
+                ? 'bg-[#E8DCD7] border-[#E8DCD7] text-[#9E8E89] cursor-not-allowed'
+                : isWishlisted
                   ? 'bg-[#FAF0EC] border-[#B86B60] text-[#B86B60]'
                   : 'bg-white border-[#2C1E1B] text-[#2C1E1B] hover:bg-[#FAF7F4] active:scale-[0.98]'
-              }`}
+                }`}
             >
               {isSoldOut ? 'Sold Out' : isWishlisted ? 'In Bag' : 'Add to Bag'}
             </button>
@@ -1295,11 +1281,10 @@ export default function ProductDetailPage({
               type="button"
               disabled={isSoldOut}
               onClick={handleBuyNow}
-              className={`flex-1 py-3 px-2 text-[11px] font-brand font-bold uppercase tracking-wider transition-all flex items-center justify-center text-center shadow-sm cursor-pointer ${
-                isSoldOut
-                  ? 'bg-[#E8DCD7] text-[#9E8E89] cursor-not-allowed shadow-none'
-                  : 'bg-[#2C1E1B] hover:bg-[#B86B60] text-white active:scale-[0.98]'
-              }`}
+              className={`flex-1 py-3 px-2 text-[11px] font-brand font-bold uppercase tracking-wider transition-all flex items-center justify-center text-center shadow-sm cursor-pointer border-2 ${isSoldOut
+                ? 'bg-[#E8DCD7] text-[#9E8E89] border-[#E8DCD7] cursor-not-allowed shadow-none'
+                : 'bg-[#B86B60] hover:bg-transparent border-[#B86B60] text-white hover:text-[#B86B60] active:scale-[0.98]'
+                }`}
             >
               {isSoldOut ? 'Sold Out' : 'Buy Now'}
             </button>
