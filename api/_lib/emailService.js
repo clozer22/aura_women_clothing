@@ -65,7 +65,7 @@ export async function sendEmail({
 
         if (step === 0 && code === '220') {
           step = 1;
-          sendCmd('EHLO localhost');
+          sendCmd('EHLO gmail.com');
         } else if (step === 1 && code === '250') {
           step = 2;
           sendCmd('AUTH LOGIN');
@@ -86,15 +86,40 @@ export async function sendEmail({
           sendCmd('DATA');
         } else if (step === 7 && code === '354') {
           step = 8;
+          const boundary = `----=_Part_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+          const messageId = `<${Date.now()}.${Math.random().toString(36).slice(2)}@gmail.com>`;
+          const dateHeader = new Date().toUTCString();
+
+          const plainTextContent = text || (html ? html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : '');
+          const htmlContent = html || `<p>${(text || '').replace(/\n/g, '<br/>')}</p>`;
+
           const mime = [
             `From: ${sender}`,
             `To: ${to}`,
+            `Reply-To: ${sender}`,
+            `Date: ${dateHeader}`,
+            `Message-ID: ${messageId}`,
             `Subject: =?UTF-8?B?${Buffer.from(subject).toString('base64')}?=`,
             'MIME-Version: 1.0',
+            `Content-Type: multipart/alternative; boundary="${boundary}"`,
+            'Auto-Submitted: auto-generated',
+            'X-Auto-Response-Suppress: All',
+            'X-Mailer: Aura Atelier Notification Engine',
+            '',
+            `--${boundary}`,
+            'Content-Type: text/plain; charset=UTF-8',
+            'Content-Transfer-Encoding: base64',
+            '',
+            Buffer.from(plainTextContent).toString('base64'),
+            '',
+            `--${boundary}`,
             'Content-Type: text/html; charset=UTF-8',
             'Content-Transfer-Encoding: base64',
             '',
-            Buffer.from(html || text || '').toString('base64'),
+            Buffer.from(htmlContent).toString('base64'),
+            '',
+            `--${boundary}--`,
+            '',
             '.',
           ].join('\r\n');
           socket.write(mime + '\r\n');
@@ -199,9 +224,15 @@ export async function sendOutForDeliveryEmail(order) {
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Your Aura Order is Out for Delivery</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your Aura Order is Out for Delivery Today</title>
 </head>
 <body style="margin: 0; padding: 0; background-color: #FAF5F2; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #2C1E1B;">
+  <!-- Inbox Hidden Preheader Preview -->
+  <div style="display: none; max-height: 0px; overflow: hidden; font-size: 1px; line-height: 1px; color: #FAF5F2; opacity: 0; mso-hide: all;">
+    Your handcrafted Aura garments for order #${orderRef} are officially out for doorstep delivery today via ${courierName}.
+  </div>
+
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #FAF5F2; padding: 30px 15px;">
     <tr>
       <td align="center">
@@ -219,10 +250,10 @@ export async function sendOutForDeliveryEmail(order) {
           <tr>
             <td style="padding: 36px 32px 20px 32px; text-align: center;">
               <div style="display: inline-block; background-color: #FAF0EC; color: #B86B60; font-size: 11px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; padding: 6px 14px; border: 1px solid #E8DCD7; margin-bottom: 16px;">
-                ✦ Out for Delivery Today
+                Out for Delivery Today
               </div>
               <h1 style="font-size: 22px; line-height: 1.3; font-weight: 600; color: #2C1E1B; margin: 0 0 12px 0;">
-                Your Package is with the Delivery Rider, ${customerName}!
+                Your Package is with the Delivery Rider, ${customerName}
               </h1>
               <p style="font-size: 14px; line-height: 1.6; color: #705B56; margin: 0;">
                 Great news! Your handcrafted Aura garments are officially out for doorstep delivery today via <strong>${courierName}</strong>.
@@ -302,8 +333,9 @@ export async function sendOutForDeliveryEmail(order) {
           <!-- Footer -->
           <tr>
             <td style="background-color: #FAF5F2; padding: 24px 32px; text-align: center; border-top: 1px solid #E8DCD7; font-size: 11px; color: #8A736E; line-height: 1.6;">
-              Need help with your order? Reach our Concierge team anytime via our live storefront chat or email us at <a href="mailto:auraofficialph@gmail.com" style="color: #B86B60; text-decoration: underline;">auraofficialph@gmail.com</a>.<br />
-              © ${new Date().getFullYear()} Aura Women's Clothing. Official Atelier Philippines.
+              This is an automated transactional update regarding your Aura Atelier order #${orderRef}.<br />
+              Need help? Reach our Concierge team anytime via our live storefront chat or email <a href="mailto:auraofficialph@gmail.com" style="color: #B86B60; text-decoration: underline;">auraofficialph@gmail.com</a>.<br />
+              Aura Women's Clothing · Salcedo Village, Makati City, Metro Manila, 1227 Philippines.
             </td>
           </tr>
 
@@ -315,12 +347,39 @@ export async function sendOutForDeliveryEmail(order) {
 </html>
   `.trim();
 
+  const plainText = [
+    `AURA WOMEN'S CLOTHING - ORDER OUT FOR DELIVERY TODAY`,
+    `====================================================`,
+    ``,
+    `Hello ${customerName},`,
+    ``,
+    `Great news! Your handcrafted Aura garments are officially out for doorstep delivery today via ${courierName}.`,
+    ``,
+    `ORDER SUMMARY:`,
+    `- Order Reference: ${orderRef}`,
+    trackingNumber ? `- Waybill Tracking: ${trackingNumber}` : null,
+    `- Delivery Destination: ${addressText}`,
+    `- Payment: ${isCod ? `₱${totalAmount} (Cash on Delivery)` : `₱${totalAmount} (Paid Online)`}`,
+    `- Track Live: ${trackingUrl}`,
+    ``,
+    `RIDER DOORSTEP NOTICE:`,
+    `Please keep your phone active (${order.customer_phone || 'your contact number'}). The delivery rider will call or send an SMS prior to arriving at your address.`,
+    isCod ? `Please prepare the exact amount of ₱${totalAmount} for the rider.` : `No additional payment is needed upon delivery.`,
+    ``,
+    `Need help with your order?`,
+    `Contact our Concierge team via storefront live chat or email auraofficialph@gmail.com.`,
+    ``,
+    `Aura Women's Clothing · Salcedo Village, Makati City, Metro Manila, 1227 Philippines`,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
   try {
     const result = await sendEmail({
       to: recipientEmail,
-      subject: `Your Aura Order #${orderRef} is Out for Delivery Today! ✦`,
+      subject: `Your Aura Order #${orderRef} is out for delivery today`,
       html,
-      text: `Hello ${customerName},\n\nYour Aura order #${orderRef} is out for delivery today with ${courierName}! Tracking number: ${trackingNumber || 'Available in account'}.\n\nPlease ensure someone is available at ${addressText} to receive your package.\n\nTrack your order: ${trackingUrl}\n\nAura Women's Clothing Atelier`,
+      text: plainText,
     });
 
     console.log(`[Email] Out for Delivery email successfully sent to ${recipientEmail} for order ${orderRef}`);

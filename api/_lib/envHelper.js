@@ -7,10 +7,6 @@ import path from 'path';
  * In local dev (Vite or Node), this safely reads from local .env if missing.
  */
 export function ensureServerEnv() {
-  if (process.env.XENDIT_SECRET_KEY && process.env.VITE_SUPABASE_URL) {
-    return;
-  }
-
   try {
     const envPath = path.resolve(process.cwd(), '.env');
     if (fs.existsSync(envPath)) {
