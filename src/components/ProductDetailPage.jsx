@@ -34,6 +34,8 @@ import {
 } from '../lib/wishlistManager';
 import { trackViewContent } from '../lib/metaPixel';
 import { supabase } from '../lib/supabaseClient';
+import { maskReviewerName } from '../lib/reviewImageService';
+import { getProductDiscountPercent, sortProductsWithDiscountsFirst } from '../lib/discountHelper';
 
 const isVideoUrl = (url) => url && (url.startsWith('data:video/') || url.match(/\.(mp4|mov|webm)($|\?)/i));
 
@@ -307,19 +309,46 @@ export default function ProductDetailPage({
     }
   };
 
-  const handleShare = () => {
-    if (navigator.share) {
-      navigator
-        .share({
-          title: product?.name || 'Aura Women Clothing',
-          text: `Check out the ${product?.name} at Aura Official Atelier`,
-          url: window.location.href,
-        })
-        .catch(() => { });
-    } else {
-      navigator.clipboard.writeText(window.location.href);
-      setShareToast(true);
-      setTimeout(() => setShareToast(false), 2500);
+  const handleShare = async () => {
+    const prodId = product?.id || productId || '';
+    const shareUrl = `${window.location.origin}/product?id=${encodeURIComponent(prodId)}`;
+    const shareData = {
+      title: product?.name || "Aura Women's Clothing",
+      text: `Discover ${product?.name || 'this atelier piece'} at Aura Official Atelier`,
+      url: shareUrl,
+    };
+
+    let shared = false;
+    if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
+      try {
+        if (navigator.canShare(shareData)) {
+          await navigator.share(shareData);
+          shared = true;
+        }
+      } catch (err) {
+        // Fallback to clipboard copy if user dismissed native share sheet or it failed
+      }
+    }
+
+    if (!shared) {
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(shareUrl);
+        } else {
+          const textArea = document.createElement('textarea');
+          textArea.value = shareUrl;
+          textArea.style.position = 'fixed';
+          textArea.style.opacity = '0';
+          document.body.appendChild(textArea);
+          textArea.select();
+          document.execCommand('copy');
+          document.body.removeChild(textArea);
+        }
+        setShareToast(true);
+        setTimeout(() => setShareToast(false), 2800);
+      } catch (copyErr) {
+        console.warn('Share copy error:', copyErr);
+      }
     }
   };
 
@@ -330,12 +359,11 @@ export default function ProductDetailPage({
     }
   };
 
-  // Related products (exclude current)
+  // Related products (exclude current, with discounted items on top)
   const relatedProducts = useMemo(() => {
     if (!allProducts || allProducts.length === 0 || !product) return [];
-    return allProducts
-      .filter((p) => p.id !== product.id)
-      .slice(0, 4);
+    const pool = allProducts.filter((p) => p.id !== product.id);
+    return sortProductsWithDiscountsFirst(pool).slice(0, 4);
   }, [allProducts, product?.id]);
 
   if (isLoadingProduct) {
@@ -455,9 +483,7 @@ export default function ProductDetailPage({
 
               {/* Watermark / Brand Stamp */}
               <div className="absolute top-4 left-4 z-10 pointer-events-none">
-                <span className="text-[10px] uppercase font-brand tracking-[0.25em] font-bold bg-white/90 text-[#2C1E1B] px-2.5 py-1 border border-[#E8DCD7] backdrop-blur-sm shadow-sm">
-                  Aura Official Atelier
-                </span>
+
               </div>
 
               {/* Expand View Icon */}
@@ -561,16 +587,24 @@ export default function ProductDetailPage({
                 <span className="font-hero text-3xl sm:text-4xl text-[#2C1E1B] font-bold">
                   ₱{Number(product.price)?.toLocaleString()}
                 </span>
-                {product.originalPrice && Number(product.originalPrice) > Number(product.price) && (
-                  <span className="font-hero text-lg text-[#A38E88] line-through">
-                    ₱{Number(product.originalPrice)?.toLocaleString()}
-                  </span>
-                )}
-                {product.discountBadge && (
-                  <span className="text-[10px] font-brand uppercase tracking-wider font-bold bg-[#B86B60] text-white px-2.5 py-0.5">
-                    {product.discountBadge}
-                  </span>
-                )}
+                {(() => {
+                  const disc = getProductDiscountPercent(product);
+                  const orig = product.originalPrice || (disc > 0 ? Math.round(product.price / (1 - disc / 100)) : null);
+                  return (
+                    <>
+                      {orig && Number(orig) > Number(product.price) && (
+                        <span className="font-hero text-lg text-[#A38E88] line-through">
+                          ₱{Number(orig)?.toLocaleString()}
+                        </span>
+                      )}
+                      {disc > 0 && (
+                        <span className="text-[11px] font-brand uppercase tracking-wider font-bold bg-[#FFE4E6] text-[#BE123C] border border-[#FECDD3] px-2.5 py-0.5 shadow-2xs">
+                          {disc}% OFF
+                        </span>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
 
               {/* Description Section with Justified Format and Toggle Button (Hidden by default) */}
@@ -728,7 +762,7 @@ export default function ProductDetailPage({
                 onClick={handleBuyNow}
                 className={`w-full py-4 px-6 font-brand rounded-none text-xs font-bold uppercase tracking-[0.2em] transition-all duration-300 shadow-md flex items-center justify-center gap-2 border-2 ${isSoldOut
                   ? 'bg-[#E8DCD7] text-[#9E8E89] border-[#E8DCD7] cursor-not-allowed shadow-none'
-                  : 'bg-[#B86B60] hover:bg-transparent border-[#B86B60] text-white hover:text-[#B86B60] cursor-pointer'
+                  : 'bg-black hover:bg-transparent border-black text-white hover:text-black cursor-pointer'
                   }`}
               >
                 <span>{isSoldOut ? 'Sold Out' : 'Buy Now'}</span>
@@ -926,7 +960,9 @@ export default function ProductDetailPage({
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-[#FAF5F2]">
                       <div className="flex items-center gap-2.5">
                         <span className="font-brand font-bold text-sm text-[#2C1E1B]">
-                          {rev.user_name || 'Verified Buyer'}
+                          {rev.is_anonymous
+                            ? maskReviewerName(rev.user_name)
+                            : (rev.user_name || 'Verified Buyer')}
                         </span>
 
                         {rev.is_verified_purchase && (
@@ -1046,35 +1082,51 @@ export default function ProductDetailPage({
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
-              {relatedProducts.map((item) => (
-                <div
-                  key={item.id}
-                  onClick={() => {
-                    if (onSelectProduct) {
-                      onSelectProduct(item);
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
-                    }
-                  }}
-                  className="bg-white border border-[#E8DCD7] p-3 shadow-sm hover:border-[#B86B60] transition-all cursor-pointer group flex flex-col justify-between"
-                >
-                  <div className="w-full aspect-[3/4] bg-[#FAF5F2] overflow-hidden mb-3">
-                    <img
-                      src={item.image}
-                      alt={item.name}
-                      loading="lazy"
-                      className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
-                    />
+              {relatedProducts.map((item) => {
+                const itemDisc = getProductDiscountPercent(item);
+                const itemOrig = item.originalPrice || (itemDisc > 0 ? Math.round(item.price / (1 - itemDisc / 100)) : null);
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => {
+                      if (onSelectProduct) {
+                        onSelectProduct(item);
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                      }
+                    }}
+                    className="bg-white border border-[#E8DCD7] p-3 shadow-sm hover:border-[#B86B60] transition-all cursor-pointer group flex flex-col justify-between relative"
+                  >
+                    <div className="w-full aspect-[3/4] bg-[#FAF5F2] overflow-hidden mb-3 relative">
+                      {itemDisc > 0 && (
+                        <span className="absolute top-2 left-2 z-10 px-1.5 py-0.5 text-[9px] font-bold tracking-wider uppercase bg-[#FFE4E6] text-[#BE123C] border border-[#FECDD3] rounded-none shadow-2xs">
+                          {itemDisc}% OFF
+                        </span>
+                      )}
+                      <img
+                        src={item.image}
+                        alt={item.name}
+                        loading="lazy"
+                        className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="font-brand font-semibold text-xs text-[#2C1E1B] line-clamp-1 group-hover:text-[#B86B60] transition-colors">
+                        {item.name}
+                      </p>
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="font-hero text-xs font-bold text-[#2C1E1B]">
+                          ₱{Number(item.price)?.toLocaleString()}
+                        </span>
+                        {itemDisc > 0 && itemOrig && (
+                          <span className="text-[10px] text-gray-400 line-through">
+                            ₱{Number(itemOrig)?.toLocaleString()}
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <div className="space-y-1">
-                    <p className="font-brand font-semibold text-xs text-[#2C1E1B] line-clamp-1 group-hover:text-[#B86B60] transition-colors">
-                      {item.name}
-                    </p>
-                    <p className="font-hero text-xs font-bold text-[#2C1E1B]">
-                      ₱{Number(item.price)?.toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

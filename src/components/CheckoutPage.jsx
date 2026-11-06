@@ -60,6 +60,8 @@ export default function CheckoutPage({
   });
 
   const [formErrors, setFormErrors] = useState({});
+  const [savedAddresses, setSavedAddresses] = useState(null);
+  const [selectedAddressKey, setSelectedAddressKey] = useState(null);
 
   // Dynamic Address Dropdown Options
   const [regions, setRegions] = useState([]);
@@ -145,6 +147,12 @@ export default function CheckoutPage({
   // Load saved profile / address from localStorage on mount & report InitiateCheckout to Meta Pixel
   useEffect(() => {
     try {
+      const multi = localStorage.getItem('aura_saved_addresses');
+      if (multi) {
+        const parsedMulti = JSON.parse(multi);
+        setSavedAddresses(parsedMulti);
+        setSelectedAddressKey(parsedMulti.defaultKey || 'address1');
+      }
       const saved = localStorage.getItem('aura_saved_shipping_address');
       if (saved) {
         const parsed = JSON.parse(saved);
@@ -162,6 +170,44 @@ export default function CheckoutPage({
       } catch (err) {}
     }
   }, []);
+
+  const selectSavedAddress = async (key) => {
+    if (!savedAddresses) return;
+    const addr = key === 'address2' ? savedAddresses.address2 : savedAddresses.address1;
+    if (!addr) return;
+
+    setSelectedAddressKey(key);
+    setFormData((prev) => ({
+      ...prev,
+      street: addr.street || '',
+      regionCode: addr.regionCode || '',
+      regionName: addr.regionName || '',
+      provinceCode: addr.provinceCode || '',
+      provinceName: addr.provinceName || '',
+      cityCode: addr.cityCode || '',
+      cityName: addr.cityName || '',
+      barangayCode: addr.barangayCode || '',
+      barangayName: addr.barangayName || '',
+      zipCode: addr.zipCode || '',
+    }));
+
+    if (addr.regionCode) {
+      const provs = await getProvinces(addr.regionCode);
+      setProvinces(provs || []);
+      if (addr.regionCode === '130000000') {
+        const ncrCities = await getCities('NCR_MANILA', addr.regionCode);
+        setCities(ncrCities || []);
+      }
+    }
+    if (addr.provinceCode) {
+      const cts = await getCities(addr.provinceCode);
+      setCities(cts || []);
+    }
+    if (addr.cityCode) {
+      const brgys = await getBarangays(addr.cityCode);
+      setBarangays(brgys || []);
+    }
+  };
 
   // Pre-fill logged-in customer info (email is strictly locked to authenticated user)
   useEffect(() => {
@@ -756,6 +802,77 @@ export default function CheckoutPage({
                       </span>
                     </div>
                   </div>
+
+                  {/* Saved Delivery Addresses Switcher */}
+                  {savedAddresses?.address1 && savedAddresses?.address2 && (
+                    <div className="p-3 bg-[#FAF5F2] border border-[#E8DCD7] space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-brand font-bold uppercase tracking-wider text-[#705B56]">
+                          Deliver To Saved Address:
+                        </span>
+                        <span className="text-[10px] text-[#B86B60] font-semibold">
+                          From Profile
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => selectSavedAddress('address1')}
+                          className={`p-2.5 text-left text-xs border transition-all cursor-pointer ${
+                            selectedAddressKey === 'address1'
+                              ? 'bg-[#2C1E1B] text-white border-[#2C1E1B] shadow-2xs'
+                              : 'bg-white text-[#705B56] border-[#E8DCD7] hover:border-[#B86B60]'
+                          }`}
+                        >
+                          <div className="font-bold flex items-center justify-between">
+                            <span>Address 1 (Primary)</span>
+                            {savedAddresses.defaultKey === 'address1' && (
+                              <span
+                                className={`text-[9px] font-mono uppercase px-1 py-0.5 ${
+                                  selectedAddressKey === 'address1'
+                                    ? 'bg-white/20 text-white'
+                                    : 'bg-emerald-100 text-emerald-800'
+                                }`}
+                              >
+                                Default
+                              </span>
+                            )}
+                          </div>
+                          <div className="truncate text-[11px] opacity-80 mt-0.5">
+                            {savedAddresses.address1.street || 'Address 1'}
+                          </div>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => selectSavedAddress('address2')}
+                          className={`p-2.5 text-left text-xs border transition-all cursor-pointer ${
+                            selectedAddressKey === 'address2'
+                              ? 'bg-[#2C1E1B] text-white border-[#2C1E1B] shadow-2xs'
+                              : 'bg-white text-[#705B56] border-[#E8DCD7] hover:border-[#B86B60]'
+                          }`}
+                        >
+                          <div className="font-bold flex items-center justify-between">
+                            <span>Address 2 (Secondary)</span>
+                            {savedAddresses.defaultKey === 'address2' && (
+                              <span
+                                className={`text-[9px] font-mono uppercase px-1 py-0.5 ${
+                                  selectedAddressKey === 'address2'
+                                    ? 'bg-white/20 text-white'
+                                    : 'bg-emerald-100 text-emerald-800'
+                                }`}
+                              >
+                                Default
+                              </span>
+                            )}
+                          </div>
+                          <div className="truncate text-[11px] opacity-80 mt-0.5">
+                            {savedAddresses.address2.street || 'Address 2'}
+                          </div>
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Street Address */}
                   <div>

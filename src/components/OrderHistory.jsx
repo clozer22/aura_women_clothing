@@ -17,12 +17,13 @@ import {
   RotateCcw,
   AlertCircle,
   Camera,
-  ZoomIn
+  ZoomIn,
+  EyeOff
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import TrackingModal from './TrackingModal';
-import { uploadReviewImages, MAX_REVIEW_IMAGES } from '../lib/reviewImageService';
+import { uploadReviewImages, MAX_REVIEW_IMAGES, maskReviewerName } from '../lib/reviewImageService';
 
 export default function OrderHistory({ onBackToShop, onSelectOrder }) {
   const { user } = useAuth();
@@ -53,6 +54,7 @@ export default function OrderHistory({ onBackToShop, onSelectOrder }) {
   const [reviewFit, setReviewFit] = useState('True to size');
   const [reviewTags, setReviewTags] = useState([]);
   const [reviewImages, setReviewImages] = useState([]);
+  const [isReviewAnonymous, setIsReviewAnonymous] = useState(false);
   const [lightboxImg, setLightboxImg] = useState(null);
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [reviewSuccessMessage, setReviewSuccessMessage] = useState(null);
@@ -214,12 +216,14 @@ export default function OrderHistory({ onBackToShop, onSelectOrder }) {
       setReviewFit(existing.fit_feedback || 'True to size');
       setReviewTags(existing.tags || []);
       setReviewImages(Array.isArray(existing.images) ? [...existing.images] : []);
+      setIsReviewAnonymous(existing.is_anonymous ?? false);
     } else {
       setReviewRating(5);
       setReviewComment('');
       setReviewFit('True to size');
       setReviewTags(['True to size', 'Luxurious fabric']);
       setReviewImages([]);
+      setIsReviewAnonymous(false);
     }
   };
 
@@ -283,6 +287,7 @@ export default function OrderHistory({ onBackToShop, onSelectOrder }) {
       fit_feedback: (reviewFit || '').replace(/<[^>]*>?/gm, '').trim().slice(0, 50),
       tags: Array.isArray(reviewTags) ? reviewTags.map((t) => String(t).replace(/<[^>]*>?/gm, '').trim().slice(0, 30)) : [],
       images: finalImages,
+      is_anonymous: isReviewAnonymous,
       is_verified_purchase: true,
       updated_at: new Date().toISOString()
     };
@@ -906,6 +911,46 @@ export default function OrderHistory({ onBackToShop, onSelectOrder }) {
                         </label>
                       </div>
                     )}
+                  </div>
+
+                  {/* Anonymity / Mask Name Switch */}
+                  <div className="flex items-center justify-between p-3.5 bg-[#FAF5F2] border border-[#E8DCD7]">
+                    <div className="flex items-center gap-2.5">
+                      <EyeOff className="w-4 h-4 text-[#705B56]" />
+                      <div>
+                        <span className="text-xs font-brand font-bold uppercase tracking-wider text-[#2C1E1B] block">
+                          Post as Anonymous
+                        </span>
+                        <span className="text-[11px] text-[#705B56]">
+                          {isReviewAnonymous
+                            ? `Name masked with asterisks: ${maskReviewerName(
+                                user?.user_metadata?.full_name ||
+                                  user?.user_metadata?.name ||
+                                  user?.email?.split('@')[0] ||
+                                  reviewModal.order?.customer_name ||
+                                  'Verified Buyer'
+                              )}`
+                            : `Name displayed publicly as: ${
+                                user?.user_metadata?.full_name ||
+                                  user?.user_metadata?.name ||
+                                  user?.email?.split('@')[0] ||
+                                  reviewModal.order?.customer_name ||
+                                  'Verified Buyer'
+                              }`}
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsReviewAnonymous(!isReviewAnonymous)}
+                      role="switch"
+                      aria-checked={isReviewAnonymous}
+                      className={`w-11 h-6 rounded-full transition-colors p-0.5 flex items-center cursor-pointer shrink-0 ${
+                        isReviewAnonymous ? 'bg-[#2C1E1B] justify-end' : 'bg-[#D1C2BD] justify-start'
+                      }`}
+                    >
+                      <div className="w-5 h-5 rounded-full bg-white shadow-xs" />
+                    </button>
                   </div>
 
                   {/* Submit & Cancel Buttons */}

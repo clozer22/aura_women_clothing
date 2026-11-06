@@ -299,6 +299,9 @@ export default function AdminPortal({
     mainCategory: 'top',
     subType: '',
     price: '',
+    originalPrice: '',
+    discountPercent: '',
+    discountBadge: '',
     qty: '',
     colorsRaw: '',
     sizes: 'XXS-XS, S-M, L, XL',
@@ -1461,13 +1464,33 @@ export default function AdminPortal({
         hex: getHexForColorName(c)
       }));
 
+    const regularPrice = Number(newProduct.originalPrice) || Number(newProduct.price) || 0;
+    const discountPct = Math.max(0, Math.min(99, Number(newProduct.discountPercent) || 0));
+
+    let finalSellingPrice = Number(newProduct.price) || regularPrice;
+    let finalOriginalPrice = null;
+    let finalDiscountBadge = null;
+
+    if (discountPct > 0) {
+      finalOriginalPrice = regularPrice;
+      finalSellingPrice = Math.round(regularPrice * (1 - discountPct / 100));
+      finalDiscountBadge = `${discountPct}% OFF`;
+    } else if (newProduct.originalPrice && Number(newProduct.originalPrice) > finalSellingPrice) {
+      finalOriginalPrice = Number(newProduct.originalPrice);
+      const computedPct = Math.round(((finalOriginalPrice - finalSellingPrice) / finalOriginalPrice) * 100);
+      finalDiscountBadge = `${computedPct}% OFF`;
+    }
+
     const productObj = {
       name: newProduct.name,
       subtitle: 'Atelier Runway Collection',
       category: newProduct.mainCategory === 'top' ? 'Tops' : 'Bottoms',
       mainCategory: newProduct.mainCategory,
       subType: newProduct.subType,
-      price: Number(newProduct.price) || 0,
+      price: finalSellingPrice,
+      originalPrice: finalOriginalPrice,
+      discountPercent: discountPct,
+      discountBadge: finalDiscountBadge,
       qty: Number(newProduct.qty) || 0,
       colors: colorsList,
       sizes: newProduct.sizes,
@@ -1484,8 +1507,11 @@ export default function AdminPortal({
 
     try {
       if (editingProductId) {
-        // Edit mode (Update)
         const existingProd = productList.find(p => p.id === editingProductId) || {};
+        const wasOutOfStock = Number(existingProd.qty ?? 0) <= 0;
+        const newStockQty = Number(productObj.qty ?? 0);
+        const isNowInStock = wasOutOfStock && newStockQty > 0;
+
         const updatePayload = {
           ...productObj,
           rating: Number(existingProd.rating) || 5.0,
@@ -1508,6 +1534,32 @@ export default function AdminPortal({
         };
         setProductList(productList.map(p => p.id === editingProductId ? updatedObj : p));
         triggerNotification('success', 'Garment Updated', 'Product updated successfully!');
+
+        // Dispatch back-in-stock email alert to customers who have this sold-out item in their bag
+        if (isNowInStock) {
+          fetch('/api/notify-restock', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              productId: editingProductId,
+              productName: productObj.name,
+              productImage: productObj.image,
+              productPrice: productObj.price,
+              newQty: newStockQty,
+            }),
+          })
+            .then((r) => r.json())
+            .then((res) => {
+              if (res.success && res.notifiedCount > 0) {
+                triggerNotification(
+                  'info',
+                  'Restock Email Dispatched',
+                  `Emailed ${res.notifiedCount} customer(s) who saved this garment in their cart.`
+                );
+              }
+            })
+            .catch((err) => console.warn('Restock email notification error:', err));
+        }
       } else {
         // Create mode (Insert)
         const randomId = `aura-custom-${Date.now()}`;
@@ -1543,6 +1595,9 @@ export default function AdminPortal({
         mainCategory: 'top',
         subType: '',
         price: '',
+        originalPrice: '',
+        discountPercent: '',
+        discountBadge: '',
         qty: '',
         colorsRaw: '',
         sizes: 'XXS-XS, S-M, L, XL',
@@ -1615,13 +1670,23 @@ export default function AdminPortal({
 
   const handleEditProductClick = (product) => {
     if (!hasPermission('products')) return;
+    const origPrice = product.originalPrice ? Number(product.originalPrice) : '';
+    const currentPrice = Number(product.price) || '';
+    let pct = Number(product.discountPercent) || '';
+    if (!pct && origPrice && currentPrice && origPrice > currentPrice) {
+      pct = Math.round(((origPrice - currentPrice) / origPrice) * 100);
+    }
+
     setEditingProductId(product.id);
     setNewProduct({
       name: product.name,
       category: product.category || (product.mainCategory === 'bottom' ? 'Bottoms' : 'Tops'),
       mainCategory: product.mainCategory || 'top',
       subType: product.subType || '',
-      price: product.price || '',
+      price: currentPrice,
+      originalPrice: origPrice || (pct ? currentPrice : ''),
+      discountPercent: pct,
+      discountBadge: product.discountBadge || (pct ? `${pct}% OFF` : ''),
       qty: product.qty || 0,
       colorsRaw: (product.colors || []).map(c => c.name).join(', '),
       sizes: product.sizes || '',
@@ -2706,7 +2771,7 @@ export default function AdminPortal({
         </aside>
 
         {/* Main Panel Content Area */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto max-h-[calc(100vh-57px)] bg-[#F4F6F9] overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
+        <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 overflow-y-auto max-h-[calc(100vh-57px)] bg-[#F4F6F9] overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
 
           {/* TAB CONTENTS */}
           {activeTab === 'dashboard' && (

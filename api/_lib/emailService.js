@@ -389,3 +389,150 @@ export async function sendOutForDeliveryEmail(order) {
     return { success: false, error: err.message };
   }
 }
+
+/**
+ * Dispatches an automated Restock email to customers who have an item saved in their cart
+ */
+export async function sendRestockNotificationEmail({
+  recipientEmail,
+  customerName = 'Valued Client',
+  productId,
+  productName,
+  productImage,
+  productPrice,
+  newQty,
+  siteUrl = 'https://auraclothingph.com',
+}) {
+  if (!recipientEmail || !recipientEmail.includes('@')) {
+    return { success: false, skipped: true, reason: 'Invalid or missing recipient email' };
+  }
+
+  const cleanName = customerName || 'Valued Client';
+  const cleanPrice = productPrice ? `₱${Number(productPrice).toLocaleString('en-PH', { minimumFractionDigits: 2 })}` : '';
+  const checkoutUrl = `${siteUrl.replace(/\/$/, '')}/product?id=${encodeURIComponent(productId || '')}`;
+
+  const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your Bag Item is Back in Stock</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #FAF5F2; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #2C1E1B;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #FAF5F2; padding: 40px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="max-width: 600px; width: 100%; background-color: #FFFFFF; border: 1px solid #E8DCD7;">
+          
+          <!-- BRAND HEADER -->
+          <tr>
+            <td style="padding: 36px 40px 24px; text-align: center; border-bottom: 1px solid #FAF5F2;">
+              <span style="font-family: Georgia, 'Times New Roman', serif; font-size: 24px; font-weight: bold; letter-spacing: 0.35em; color: #2C1E1B; text-transform: uppercase;">AURA</span>
+              <div style="font-size: 10px; letter-spacing: 0.25em; color: #705B56; text-transform: uppercase; margin-top: 6px;">Atelier Runway Collection</div>
+            </td>
+          </tr>
+
+          <!-- HERO BANNER -->
+          <tr>
+            <td style="padding: 32px 40px 20px; text-align: center; background-color: #2C1E1B; color: #FFFFFF;">
+              <div style="font-size: 10px; letter-spacing: 0.3em; text-transform: uppercase; color: #D4AF37; margin-bottom: 8px;">Restock Alert</div>
+              <h1 style="font-family: Georgia, 'Times New Roman', serif; font-size: 20px; font-weight: normal; margin: 0; line-height: 1.4; letter-spacing: 0.05em; color: #FFFFFF;">
+                Good News! An Item in Your Shopping Bag is Back in Stock.
+              </h1>
+            </td>
+          </tr>
+
+          <!-- BODY GREETING -->
+          <tr>
+            <td style="padding: 32px 40px 16px;">
+              <p style="font-size: 14px; line-height: 1.7; color: #2C1E1B; margin: 0 0 16px;">
+                Dear ${cleanName},
+              </p>
+              <p style="font-size: 13px; line-height: 1.7; color: #705B56; margin: 0 0 20px;">
+                You previously added the <strong style="color: #2C1E1B;">${productName}</strong> to your shopping bag while it was temporarily sold out. We are delighted to inform you that our atelier has replenished this garment!
+              </p>
+
+              <!-- PRODUCT CARD -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #FAF5F2; border: 1px solid #E8DCD7; margin: 20px 0;">
+                <tr>
+                  ${
+                    productImage
+                      ? `<td width="120" style="padding: 16px; vertical-align: middle;">
+                          <img src="${productImage}" alt="${productName}" width="100" style="width: 100px; max-width: 100px; height: auto; display: block; border: 1px solid #E8DCD7; object-fit: cover;" />
+                        </td>`
+                      : ''
+                  }
+                  <td style="padding: 20px; vertical-align: middle;">
+                    <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.15em; color: #B86B60; font-weight: bold; margin-bottom: 4px;">
+                      Now In Stock (${newQty} Units Available)
+                    </div>
+                    <div style="font-size: 15px; font-weight: bold; color: #2C1E1B; margin-bottom: 6px;">
+                      ${productName}
+                    </div>
+                    ${cleanPrice ? `<div style="font-size: 14px; font-weight: bold; color: #B86B60;">${cleanPrice}</div>` : ''}
+                  </td>
+                </tr>
+              </table>
+
+              <!-- CTA BUTTON -->
+              <div style="text-align: center; margin: 30px 0 20px;">
+                <a href="${checkoutUrl}" style="background-color: #2C1E1B; color: #FFFFFF; text-decoration: none; padding: 14px 32px; font-size: 12px; font-weight: bold; letter-spacing: 0.2em; text-transform: uppercase; display: inline-block;">
+                  View & Complete Order
+                </a>
+              </div>
+
+              <p style="font-size: 11px; line-height: 1.6; color: #9E8E89; text-align: center; margin: 20px 0 0;">
+                Limited allocation available. Items remain subject to availability until checkout is completed.
+              </p>
+            </td>
+          </tr>
+
+          <!-- FOOTER -->
+          <tr>
+            <td style="padding: 24px 40px; background-color: #FAF5F2; border-top: 1px solid #E8DCD7; text-align: center; font-size: 11px; color: #705B56; line-height: 1.6;">
+              <p style="margin: 0 0 8px;">Aura Official Atelier · Handcrafted in the Philippines</p>
+              <p style="margin: 0; color: #9E8E89;">Questions? Contact our concierge at <a href="mailto:auraofficialph@gmail.com" style="color: #705B56;">auraofficialph@gmail.com</a></p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `.trim();
+
+  const plainText = [
+    `AURA WOMEN'S CLOTHING - RESTOCK NOTIFICATION`,
+    `============================================`,
+    ``,
+    `Hello ${cleanName},`,
+    ``,
+    `Good news! An item saved in your shopping bag is back in stock:`,
+    `- Garment: ${productName}`,
+    cleanPrice ? `- Price: ${cleanPrice}` : null,
+    `- Available: ${newQty} units`,
+    `- Complete Your Order: ${checkoutUrl}`,
+    ``,
+    `As stock moves quickly, we recommend completing your order while allocations remain.`,
+    ``,
+    `Aura Official Atelier · Salcedo Village, Makati City, Philippines`,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  try {
+    const result = await sendEmail({
+      to: recipientEmail,
+      subject: `✨ Back in Stock: ${productName} in your Aura bag is now available!`,
+      html,
+      text: plainText,
+    });
+    return { success: true, ...result };
+  } catch (err) {
+    console.error(`[Restock Email Error] Failed to notify ${recipientEmail}:`, err.message);
+    return { success: false, error: err.message };
+  }
+}

@@ -116,32 +116,90 @@ const AdminProductModal = memo(({
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              {/* Price */}
+              {/* Regular Price */}
               <div className="space-y-1">
-                <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Price (₱)</label>
+                <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Regular Price (₱) *</label>
                 <input
                   type="number"
                   required
                   min="1"
-                  value={newProduct.price}
-                  onChange={(e) => setNewProduct(prev => ({ ...prev, price: e.target.value }))}
+                  value={newProduct.originalPrice || newProduct.price}
+                  onChange={(e) => {
+                    const regPrice = e.target.value;
+                    const pct = Number(newProduct.discountPercent) || 0;
+                    const newSelling = pct > 0 ? Math.round(Number(regPrice) * (1 - pct / 100)) : regPrice;
+                    setNewProduct(prev => ({
+                      ...prev,
+                      originalPrice: regPrice,
+                      price: newSelling
+                    }));
+                  }}
                   className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B]"
                 />
               </div>
 
-              {/* Quantity */}
+              {/* Target Item Discount (%) */}
               <div className="space-y-1">
-                <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Stock Quantity</label>
+                <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56] flex items-center justify-between">
+                  <span>Target Discount (%)</span>
+                  {Number(newProduct.discountPercent) > 0 && (
+                    <span className="text-[9px] text-[#BE123C] bg-[#FFE4E6] border border-[#FECDD3] px-1.5 py-0.2 font-bold">
+                      {newProduct.discountPercent}% OFF
+                    </span>
+                  )}
+                </label>
                 <input
                   type="number"
-                  required
                   min="0"
-                  value={newProduct.qty}
-                  onChange={(e) => setNewProduct(prev => ({ ...prev, qty: e.target.value }))}
+                  max="90"
+                  placeholder="0 (No discount)"
+                  value={newProduct.discountPercent || ''}
+                  onChange={(e) => {
+                    const pct = Math.max(0, Math.min(90, Number(e.target.value) || 0));
+                    const basePrice = Number(newProduct.originalPrice) || Number(newProduct.price) || 0;
+                    const newSelling = pct > 0 ? Math.round(basePrice * (1 - pct / 100)) : basePrice;
+                    setNewProduct(prev => ({
+                      ...prev,
+                      discountPercent: e.target.value,
+                      originalPrice: basePrice,
+                      price: newSelling,
+                      discountBadge: pct > 0 ? `${pct}% OFF` : ''
+                    }));
+                  }}
                   className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B]"
                 />
               </div>
             </div>
+
+            {/* Quantity */}
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Stock Quantity</label>
+              <input
+                type="number"
+                required
+                min="0"
+                value={newProduct.qty}
+                onChange={(e) => setNewProduct(prev => ({ ...prev, qty: e.target.value }))}
+                className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B]"
+              />
+            </div>
+
+            {/* Discount Preview Alert */}
+            {Number(newProduct.discountPercent) > 0 && (
+              <div className="p-3 bg-[#FFE4E6]/80 border border-[#FECDD3] text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[#9F1239]">
+                <div>
+                  <span className="font-bold">Targeted Discount Active:</span> Customers pay{' '}
+                  <strong className="underline text-[#BE123C]">₱{Number(newProduct.price).toLocaleString()}</strong>{' '}
+                  (Regular: ₱{Number(newProduct.originalPrice || newProduct.price).toLocaleString()}).
+                  <p className="text-[11px] text-[#9F1239]/80 mt-0.5">
+                    This item will automatically appear at the top of the storefront with a light pink discount badge.
+                  </p>
+                </div>
+                <span className="text-[10px] uppercase font-bold bg-[#FFE4E6] border border-[#FECDD3] px-2 py-1 text-[#BE123C] shrink-0 self-start sm:self-auto">
+                  {newProduct.discountPercent}% OFF
+                </span>
+              </div>
+            )}
 
             {/* Dynamic Solds & Rating Info Display */}
             <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl space-y-2">

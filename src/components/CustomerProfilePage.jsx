@@ -22,6 +22,8 @@ import {
   Check,
   Gift,
   Award,
+  Plus,
+  Trash2,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabaseClient';
@@ -57,8 +59,7 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
-  // Shipping Address State
-  const [addressData, setAddressData] = useState({
+  const EMPTY_ADDRESS = {
     street: '',
     regionCode: '',
     regionName: '',
@@ -69,7 +70,24 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
     barangayCode: '',
     barangayName: '',
     zipCode: '',
-  });
+  };
+
+  // Multi-Address State (Address 1 & Address 2)
+  const [address1, setAddress1] = useState(EMPTY_ADDRESS);
+  const [address2, setAddress2] = useState(EMPTY_ADDRESS);
+  const [hasAddress2, setHasAddress2] = useState(false);
+  const [defaultAddressKey, setDefaultAddressKey] = useState('address1'); // 'address1' | 'address2'
+  const [activeAddressTab, setActiveAddressTab] = useState('address1'); // 'address1' | 'address2'
+
+  const currentAddress = activeAddressTab === 'address1' ? address1 : address2;
+
+  const handleCurrentAddressChange = (patch) => {
+    if (activeAddressTab === 'address1') {
+      setAddress1((prev) => ({ ...prev, ...patch }));
+    } else {
+      setAddress2((prev) => ({ ...prev, ...patch }));
+    }
+  };
 
   const [regions, setRegions] = useState([]);
   const [provinces, setProvinces] = useState([]);
@@ -91,11 +109,40 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
   // Load saved address on mount
   useEffect(() => {
     try {
-      const saved = localStorage.getItem('aura_saved_shipping_address');
-      if (saved) {
-        setAddressData(JSON.parse(saved));
+      const savedMulti = localStorage.getItem('aura_saved_addresses');
+      if (savedMulti) {
+        const parsed = JSON.parse(savedMulti);
+        if (parsed.address1) setAddress1(parsed.address1);
+        if (parsed.address2) {
+          setAddress2(parsed.address2);
+          setHasAddress2(true);
+        }
+        if (parsed.defaultKey) setDefaultAddressKey(parsed.defaultKey);
+      } else {
+        const saved = localStorage.getItem('aura_saved_shipping_address');
+        if (saved) {
+          setAddress1(JSON.parse(saved));
+        }
       }
     } catch (e) { }
+
+    if (user?.id) {
+      supabase
+        .from('user_profiles')
+        .select('addresses')
+        .eq('id', user.id)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data?.addresses) {
+            if (data.addresses.address1) setAddress1(data.addresses.address1);
+            if (data.addresses.address2) {
+              setAddress2(data.addresses.address2);
+              setHasAddress2(true);
+            }
+            if (data.addresses.defaultKey) setDefaultAddressKey(data.addresses.defaultKey);
+          }
+        });
+    }
 
     // Load Philippine Regions
     getRegions().then((data) => setRegions(data || []));
@@ -145,38 +192,38 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
     setTimeout(() => setCopiedVoucher(false), 2000);
   };
 
-  // Update dependent provinces
+  // Update dependent provinces for active address
   useEffect(() => {
-    if (addressData.regionCode) {
-      getProvinces(addressData.regionCode).then((data) => {
+    if (currentAddress.regionCode) {
+      getProvinces(currentAddress.regionCode).then((data) => {
         setProvinces(data || []);
       });
     } else {
       setProvinces([]);
     }
-  }, [addressData.regionCode]);
+  }, [currentAddress.regionCode, activeAddressTab]);
 
-  // Update dependent cities
+  // Update dependent cities for active address
   useEffect(() => {
-    if (addressData.provinceCode) {
-      getCities(addressData.provinceCode).then((data) => {
+    if (currentAddress.provinceCode) {
+      getCities(currentAddress.provinceCode).then((data) => {
         setCities(data || []);
       });
     } else {
       setCities([]);
     }
-  }, [addressData.provinceCode]);
+  }, [currentAddress.provinceCode, activeAddressTab]);
 
-  // Update dependent barangays
+  // Update dependent barangays for active address
   useEffect(() => {
-    if (addressData.cityCode) {
-      getBarangays(addressData.cityCode).then((data) => {
+    if (currentAddress.cityCode) {
+      getBarangays(currentAddress.cityCode).then((data) => {
         setBarangays(data || []);
       });
     } else {
       setBarangays([]);
     }
-  }, [addressData.cityCode]);
+  }, [currentAddress.cityCode, activeAddressTab]);
 
   // Save Profile Details
   const handleUpdateProfile = async (e) => {
@@ -247,24 +294,113 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
     }
   };
 
-  // Save Default Shipping Address
-  const handleSaveAddress = (e) => {
-    e.preventDefault();
+  const sanitizeAddressObj = (addr) => ({
+    ...addr,
+    street: (addr?.street || '').replace(/<[^>]*>?/gm, '').trim().slice(0, 150),
+    zipCode: (addr?.zipCode || '').replace(/\D/g, '').trim().slice(0, 10),
+  });
+
+  // Save Shipping Address & Preferences
+  const handleSaveAddress = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
     setIsSavingAddress(true);
     setErrorMsg('');
     try {
-      const sanitizedAddress = {
-        ...addressData,
-        street: (addressData.street || '').replace(/<[^>]*>?/gm, '').trim().slice(0, 150),
-        zipCode: (addressData.zipCode || '').replace(/\D/g, '').trim().slice(0, 10),
+      const sanitized1 = sanitizeAddressObj(address1);
+      const sanitized2 = hasAddress2 ? sanitizeAddressObj(address2) : null;
+      const resolvedDefaultKey =
+        !hasAddress2 && defaultAddressKey === 'address2' ? 'address1' : defaultAddressKey;
+      const defaultAddr =
+        resolvedDefaultKey === 'address2' && sanitized2 ? sanitized2 : sanitized1;
+
+      const multiPayload = {
+        address1: sanitized1,
+        address2: sanitized2,
+        defaultKey: resolvedDefaultKey,
       };
-      localStorage.setItem('aura_saved_shipping_address', JSON.stringify(sanitizedAddress));
-      setAddressSuccess('Default delivery address saved for faster checkout.');
-      setTimeout(() => setAddressSuccess(''), 4000);
+
+      localStorage.setItem('aura_saved_addresses', JSON.stringify(multiPayload));
+      localStorage.setItem('aura_saved_shipping_address', JSON.stringify(defaultAddr));
+
+      if (user?.id) {
+        await supabase
+          .from('user_profiles')
+          .update({ addresses: multiPayload, updated_at: new Date().toISOString() })
+          .eq('id', user.id);
+      }
+
+      setAddressSuccess(
+        `Address saved! ${resolvedDefaultKey === 'address2' ? 'Address 2' : 'Address 1'} is set as your default delivery address.`
+      );
+      setTimeout(() => setAddressSuccess(''), 4500);
     } catch (err) {
+      console.error('Save address error:', err);
       setErrorMsg('Could not save address.');
     } finally {
       setIsSavingAddress(false);
+    }
+  };
+
+  const handleSetDefaultAddress = async (key) => {
+    setDefaultAddressKey(key);
+    try {
+      const sanitized1 = sanitizeAddressObj(address1);
+      const sanitized2 = hasAddress2 ? sanitizeAddressObj(address2) : null;
+      const defaultAddr = key === 'address2' && sanitized2 ? sanitized2 : sanitized1;
+
+      const multiPayload = {
+        address1: sanitized1,
+        address2: sanitized2,
+        defaultKey: key,
+      };
+
+      localStorage.setItem('aura_saved_addresses', JSON.stringify(multiPayload));
+      localStorage.setItem('aura_saved_shipping_address', JSON.stringify(defaultAddr));
+
+      if (user?.id) {
+        await supabase
+          .from('user_profiles')
+          .update({ addresses: multiPayload, updated_at: new Date().toISOString() })
+          .eq('id', user.id);
+      }
+
+      setAddressSuccess(
+        `${key === 'address2' ? 'Address 2' : 'Address 1'} is now saved as your default delivery address.`
+      );
+      setTimeout(() => setAddressSuccess(''), 3500);
+    } catch (err) {
+      console.warn('Set default error:', err);
+    }
+  };
+
+  const handleRemoveAddress2 = () => {
+    if (!window.confirm('Are you sure you want to remove Address 2?')) return;
+    setHasAddress2(false);
+    setAddress2(EMPTY_ADDRESS);
+    setDefaultAddressKey('address1');
+    setActiveAddressTab('address1');
+
+    try {
+      const sanitized1 = sanitizeAddressObj(address1);
+      const multiPayload = {
+        address1: sanitized1,
+        address2: null,
+        defaultKey: 'address1',
+      };
+      localStorage.setItem('aura_saved_addresses', JSON.stringify(multiPayload));
+      localStorage.setItem('aura_saved_shipping_address', JSON.stringify(sanitized1));
+
+      if (user?.id) {
+        supabase
+          .from('user_profiles')
+          .update({ addresses: multiPayload, updated_at: new Date().toISOString() })
+          .eq('id', user.id);
+      }
+
+      setAddressSuccess('Address 2 removed. Address 1 is now your default address.');
+      setTimeout(() => setAddressSuccess(''), 3500);
+    } catch (err) {
+      console.warn('Remove address 2 error:', err);
     }
   };
 
@@ -951,19 +1087,137 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
           </div>
         )}
 
-        {/* TAB 3: DELIVERY ADDRESS */}
+        {/* TAB 3: DELIVERY ADDRESSES */}
         {activeTab === 'address' && (
-          <div className="bg-white border border-[#E8DCD7] p-6 sm:p-8 shadow-sm">
-            <div className="pb-3 border-b border-[#E8DCD7] mb-6 flex items-center justify-between">
-              <h2 className="text-sm font-brand font-bold uppercase tracking-[0.2em] text-[#2C1E1B]">
-                Default Shipping Address
-              </h2>
-              <span className="text-[10px] text-[#705B56] uppercase tracking-wider">
-                Pre-fills at Checkout
-              </span>
+          <div className="bg-white border border-[#E8DCD7] p-6 sm:p-8 shadow-sm space-y-6">
+            <div className="pb-3 border-b border-[#E8DCD7] flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-brand font-bold uppercase tracking-[0.2em] text-[#2C1E1B]">
+                  Delivery Addresses
+                </h2>
+                <p className="text-xs text-[#705B56] mt-0.5">
+                  Manage your primary and secondary shipping locations. Pre-fills automatically at Checkout.
+                </p>
+              </div>
+
+              {!hasAddress2 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHasAddress2(true);
+                    setActiveAddressTab('address2');
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#FAF5F2] hover:bg-[#FAF0EC] text-[#2C1E1B] border border-[#E8DCD7] hover:border-[#B86B60] text-xs font-brand uppercase tracking-wider font-bold transition-all cursor-pointer self-start sm:self-auto shadow-2xs"
+                >
+                  <Plus className="w-3.5 h-3.5 text-[#B86B60]" />
+                  <span>Add Address 2</span>
+                </button>
+              )}
             </div>
 
-            <form onSubmit={handleSaveAddress} className="space-y-6">
+            {/* Address Tabs Switcher */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#FAF5F2] pb-4">
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Address 1 Tab */}
+                <button
+                  type="button"
+                  onClick={() => setActiveAddressTab('address1')}
+                  className={`px-4 py-2 text-xs font-brand uppercase tracking-wider font-bold transition-all border flex items-center gap-2 cursor-pointer ${
+                    activeAddressTab === 'address1'
+                      ? 'bg-[#2C1E1B] text-white border-[#2C1E1B] shadow-xs'
+                      : 'bg-[#FAF5F2] text-[#705B56] border-[#E8DCD7] hover:border-[#B86B60] hover:text-[#2C1E1B]'
+                  }`}
+                >
+                  <MapPin className="w-3.5 h-3.5" />
+                  <span>Address 1 (Primary)</span>
+                  {defaultAddressKey === 'address1' && (
+                    <span
+                      className={`text-[9px] font-mono px-1.5 py-0.5 uppercase tracking-wider font-bold ${
+                        activeAddressTab === 'address1'
+                          ? 'bg-emerald-400/20 text-emerald-200 border border-emerald-400/30'
+                          : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                      }`}
+                    >
+                      Default
+                    </span>
+                  )}
+                </button>
+
+                {/* Address 2 Tab */}
+                {hasAddress2 && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveAddressTab('address2')}
+                    className={`px-4 py-2 text-xs font-brand uppercase tracking-wider font-bold transition-all border flex items-center gap-2 cursor-pointer ${
+                      activeAddressTab === 'address2'
+                        ? 'bg-[#2C1E1B] text-white border-[#2C1E1B] shadow-xs'
+                        : 'bg-[#FAF5F2] text-[#705B56] border-[#E8DCD7] hover:border-[#B86B60] hover:text-[#2C1E1B]'
+                    }`}
+                  >
+                    <MapPin className="w-3.5 h-3.5" />
+                    <span>Address 2 (Secondary)</span>
+                    {defaultAddressKey === 'address2' && (
+                      <span
+                        className={`text-[9px] font-mono px-1.5 py-0.5 uppercase tracking-wider font-bold ${
+                          activeAddressTab === 'address2'
+                            ? 'bg-emerald-400/20 text-emerald-200 border border-emerald-400/30'
+                            : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                        }`}
+                      >
+                        Default
+                      </span>
+                    )}
+                  </button>
+                )}
+              </div>
+
+              {hasAddress2 && activeAddressTab === 'address2' && (
+                <button
+                  type="button"
+                  onClick={handleRemoveAddress2}
+                  className="text-xs text-rose-600 hover:text-rose-800 flex items-center gap-1 font-semibold transition-colors cursor-pointer"
+                  title="Delete Address 2"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Remove Address 2</span>
+                </button>
+              )}
+            </div>
+
+            {/* Default Status & Quick Switch Banner */}
+            {defaultAddressKey === activeAddressTab ? (
+              <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-semibold flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>
+                    This address is your <strong>Default Delivery Address</strong> and will pre-fill automatically at checkout.
+                  </span>
+                </div>
+                <span className="text-[10px] font-mono uppercase tracking-wider bg-emerald-100 text-emerald-900 px-2 py-0.5 font-bold shrink-0">
+                  Active Default
+                </span>
+              </div>
+            ) : (
+              <div className="p-3.5 bg-[#FAF5F2] border border-[#E8DCD7] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2 text-[#705B56]">
+                  <MapPin className="w-4 h-4 text-[#B86B60] shrink-0" />
+                  <span>
+                    This address is currently secondary. Make it your primary address for faster checkout.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleSetDefaultAddress(activeAddressTab)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#2C1E1B] hover:bg-[#B86B60] text-white text-[11px] uppercase tracking-wider font-bold transition-all cursor-pointer self-start sm:self-auto shadow-2xs shrink-0"
+                >
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Save as Default Address</span>
+                </button>
+              </div>
+            )}
+
+            {/* Address Form for Active Address */}
+            <form onSubmit={handleSaveAddress} className="space-y-6 pt-2">
               <div>
                 <label className="block text-[11px] uppercase font-bold tracking-wider text-[#705B56] mb-2">
                   House / Unit / Street Address *
@@ -971,8 +1225,8 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
                 <input
                   type="text"
                   required
-                  value={addressData.street}
-                  onChange={(e) => setAddressData({ ...addressData, street: e.target.value })}
+                  value={currentAddress.street || ''}
+                  onChange={(e) => handleCurrentAddressChange({ street: e.target.value })}
                   placeholder="e.g. Unit 402, Ayala Alabang Village"
                   className="w-full px-3.5 py-3 bg-[#FAF5F2] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B] rounded-none"
                 />
@@ -986,11 +1240,10 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
                   </label>
                   <select
                     required
-                    value={addressData.regionCode}
+                    value={currentAddress.regionCode || ''}
                     onChange={(e) => {
                       const sel = regions.find((r) => r.code === e.target.value);
-                      setAddressData({
-                        ...addressData,
+                      handleCurrentAddressChange({
                         regionCode: e.target.value,
                         regionName: sel ? sel.name : '',
                         provinceCode: '',
@@ -1019,12 +1272,11 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
                   </label>
                   <select
                     required
-                    disabled={!addressData.regionCode}
-                    value={addressData.provinceCode}
+                    disabled={!currentAddress.regionCode}
+                    value={currentAddress.provinceCode || ''}
                     onChange={(e) => {
                       const sel = provinces.find((p) => p.code === e.target.value);
-                      setAddressData({
-                        ...addressData,
+                      handleCurrentAddressChange({
                         provinceCode: e.target.value,
                         provinceName: sel ? sel.name : '',
                         cityCode: '',
@@ -1051,12 +1303,11 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
                   </label>
                   <select
                     required
-                    disabled={!addressData.provinceCode}
-                    value={addressData.cityCode}
+                    disabled={!currentAddress.provinceCode}
+                    value={currentAddress.cityCode || ''}
                     onChange={(e) => {
                       const sel = cities.find((c) => c.code === e.target.value);
-                      setAddressData({
-                        ...addressData,
+                      handleCurrentAddressChange({
                         cityCode: e.target.value,
                         cityName: sel ? sel.name : '',
                         barangayCode: '',
@@ -1081,12 +1332,11 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
                   </label>
                   <select
                     required
-                    disabled={!addressData.cityCode}
-                    value={addressData.barangayCode}
+                    disabled={!currentAddress.cityCode}
+                    value={currentAddress.barangayCode || ''}
                     onChange={(e) => {
                       const sel = barangays.find((b) => b.code === e.target.value);
-                      setAddressData({
-                        ...addressData,
+                      handleCurrentAddressChange({
                         barangayCode: e.target.value,
                         barangayName: sel ? sel.name : '',
                       });
@@ -1110,21 +1360,37 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
                   <input
                     type="text"
                     required
-                    value={addressData.zipCode}
-                    onChange={(e) => setAddressData({ ...addressData, zipCode: e.target.value })}
+                    value={currentAddress.zipCode || ''}
+                    onChange={(e) => handleCurrentAddressChange({ zipCode: e.target.value })}
                     placeholder="e.g. 1780"
                     className="w-full px-3.5 py-3 bg-[#FAF5F2] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B] rounded-none"
                   />
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-[#E8DCD7] flex justify-end">
+              <div className="pt-4 border-t border-[#E8DCD7] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                {defaultAddressKey !== activeAddressTab ? (
+                  <button
+                    type="button"
+                    onClick={() => handleSetDefaultAddress(activeAddressTab)}
+                    className="text-xs uppercase font-brand font-bold tracking-wider text-[#B86B60] hover:text-[#2C1E1B] flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Check className="w-4 h-4 text-emerald-600" />
+                    <span>Set as Default Delivery Address</span>
+                  </button>
+                ) : (
+                  <div className="text-xs text-emerald-800 font-medium flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>Currently set as Default Address</span>
+                  </div>
+                )}
+
                 <button
                   type="submit"
                   disabled={isSavingAddress}
-                  className="py-3.5 px-8 bg-[#2C1E1B] hover:bg-[#B86B60] text-white text-xs uppercase font-bold tracking-[0.2em] transition-all rounded-none shadow-md cursor-pointer disabled:opacity-75"
+                  className="py-3.5 px-8 bg-[#2C1E1B] hover:bg-[#B86B60] text-white text-xs uppercase font-bold tracking-[0.2em] transition-all rounded-none shadow-md cursor-pointer disabled:opacity-75 self-end sm:self-auto"
                 >
-                  {isSavingAddress ? 'Saving Address...' : 'Save Default Address'}
+                  {isSavingAddress ? 'Saving Addresses...' : 'Save Delivery Address'}
                 </button>
               </div>
             </form>

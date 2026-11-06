@@ -407,11 +407,11 @@ export default function LegalModal({ isOpen, initialTab = 'privacy', onClose }) 
                     <p className="text-[#705B56]">
                       For customer assistance, order inquiries, size sizing support, or formal communications:
                     </p>
-                    <div className="p-4 bg-[#FAF0EC]/60 border border-[#E8DCD7] space-y-1 text-xs">
+                    <div className="p-4 bg-[#FAF0EC]/60 border border-[#E8DCD7] space-y-1.5 text-xs">
                       <p><strong>Official Email:</strong> <a href="mailto:auraofficialph@gmail.com" className="underline hover:text-[#B86B60] transition-colors">auraofficialph@gmail.com</a></p>
-                      <p><strong>Support Hours:</strong> Monday – Saturday, 9:00 AM – 6:00 PM PHT</p>
-                      <p><strong>Atelier Location:</strong> Metro Manila, Philippines</p>
-                      <p><strong>Official Channels:</strong> Instagram (@auraofficial.ph) • TikTok (@auraofficial.ph)</p>
+                      <p><strong>Support Hours:</strong> Monday – Sunday, 9:00 AM – 4:00 PM PHT</p>
+                      <p><strong>Shop Warehouse Location:</strong> Cavite, Philippines</p>
+                      <p><strong>Official Channels:</strong> Facebook (Aura Official PH) • Instagram (@auraofficial.ph) • TikTok (@auraofficial.ph)</p>
                     </div>
                   </section>
                 </div>

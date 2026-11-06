@@ -148,3 +148,33 @@ export async function uploadReviewImages(files = []) {
 
   return uploadedUrls;
 }
+
+/**
+ * Masks a reviewer's name with asterisks for anonymous reviews
+ * e.g., "Adrienne Page" -> "A******e P."
+ *       "Yzelle Lim" -> "Y****e L."
+ *       "Maria" -> "M***a"
+ *       "" -> "Anonymous"
+ */
+export function maskReviewerName(fullName) {
+  if (!fullName || typeof fullName !== 'string') return 'Anonymous';
+  const trimmed = fullName.trim();
+  if (!trimmed) return 'Anonymous';
+
+  const parts = trimmed.split(/\s+/);
+  if (parts.length === 1) {
+    const w = parts[0];
+    if (w.length <= 2) return w[0] + '*';
+    return w[0] + '*'.repeat(Math.max(2, w.length - 2)) + w[w.length - 1];
+  }
+
+  const first = parts[0];
+  const last = parts[parts.length - 1];
+  const maskedFirst =
+    first.length <= 2
+      ? first[0] + '*'
+      : first[0] + '*'.repeat(Math.max(2, first.length - 2)) + first[first.length - 1];
+  const lastInitial = last[0] ? `${last[0].toUpperCase()}.` : '';
+
+  return `${maskedFirst} ${lastInitial}`.trim();
+}

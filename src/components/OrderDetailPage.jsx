@@ -22,12 +22,13 @@ import {
   Ban,
   RotateCcw,
   Camera,
-  ZoomIn
+  ZoomIn,
+  EyeOff
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import TrackingModal from './TrackingModal';
-import { uploadReviewImages, MAX_REVIEW_IMAGES } from '../lib/reviewImageService';
+import { uploadReviewImages, MAX_REVIEW_IMAGES, maskReviewerName } from '../lib/reviewImageService';
 
 const FIT_OPTIONS = [
   { id: 'Runs Small', label: 'Runs Small' },
@@ -247,6 +248,7 @@ export default function OrderDetailPage({
         comment: existingReview.comment || '',
         fit: existingReview.fit_feedback || 'True to Size',
         images: Array.isArray(existingReview.images) ? [...existingReview.images] : [],
+        isAnonymous: existingReview.is_anonymous ?? false,
         isEditing: true,
       },
     }));
@@ -267,7 +269,7 @@ export default function OrderDetailPage({
     }
 
     const pId = item.id;
-    const form = reviewForms[pId] || { rating: 5, comment: '', fit: 'True to Size' };
+    const form = reviewForms[pId] || { rating: 5, comment: '', fit: 'True to Size', isAnonymous: false };
     const ratingVal = Math.min(5, Math.max(1, parseInt(form.rating, 10) || 5));
     const commentVal = (form.comment || '').trim();
 
@@ -294,6 +296,8 @@ export default function OrderDetailPage({
       order.customer_name ||
       'Verified Client';
 
+    const isAnonymous = !!form.isAnonymous;
+
     const payload = {
       order_id: order.id ? String(order.id) : null,
       order_reference: order.order_reference,
@@ -306,6 +310,7 @@ export default function OrderDetailPage({
       comment: commentVal.slice(0, 1000),
       fit_feedback: form.fit || 'True to Size',
       images: finalImages,
+      is_anonymous: isAnonymous,
       is_verified_purchase: true,
       updated_at: new Date().toISOString(),
     };
@@ -856,7 +861,12 @@ export default function OrderDetailPage({
                         )}
 
                         <div className="flex items-center justify-between text-[11px] text-[#705B56] pt-1">
-                          <span>Reviewed by {existingReview.user_name || 'Client'}</span>
+                          <span>
+                            Reviewed by{' '}
+                            {existingReview.is_anonymous
+                              ? `${maskReviewerName(existingReview.user_name)} (Anonymous)`
+                              : (existingReview.user_name || 'Client')}
+                          </span>
                           <span>{formatDate(existingReview.updated_at || existingReview.created_at)}</span>
                         </div>
                       </div>
@@ -1026,6 +1036,44 @@ export default function OrderDetailPage({
                               </label>
                             </div>
                           )}
+                        </div>
+
+                        {/* Anonymity / Mask Name Switch */}
+                        <div className="flex items-center justify-between p-3.5 bg-[#FAF5F2] border border-[#E8DCD7]">
+                          <div className="flex items-center gap-2.5">
+                            <EyeOff className="w-4 h-4 text-[#705B56]" />
+                            <div>
+                              <span className="text-xs font-brand font-bold uppercase tracking-wider text-[#2C1E1B] block">
+                                Post as Anonymous
+                              </span>
+                              <span className="text-[11px] text-[#705B56]">
+                                {form.isAnonymous
+                                  ? `Name masked with asterisks: ${maskReviewerName(
+                                      user?.user_metadata?.full_name ||
+                                        user?.user_metadata?.name ||
+                                        order.customer_name ||
+                                        'Client'
+                                    )}`
+                                  : `Name displayed publicly as: ${
+                                      user?.user_metadata?.full_name ||
+                                      user?.user_metadata?.name ||
+                                      order.customer_name ||
+                                      'Client'
+                                    }`}
+                              </span>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleFormChange(pId, 'isAnonymous', !form.isAnonymous)}
+                            role="switch"
+                            aria-checked={!!form.isAnonymous}
+                            className={`w-11 h-6 rounded-full transition-colors p-0.5 flex items-center cursor-pointer shrink-0 ${
+                              form.isAnonymous ? 'bg-[#2C1E1B] justify-end' : 'bg-[#D1C2BD] justify-start'
+                            }`}
+                          >
+                            <div className="w-5 h-5 rounded-full bg-white shadow-xs" />
+                          </button>
                         </div>
 
                         {/* Error message */}

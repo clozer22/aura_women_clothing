@@ -4,29 +4,34 @@
  */
 
 export const FREE_SHIPPING_THRESHOLD = 3000; // Free nationwide shipping for orders ₱3,000+
+export const SHIPPING_MARKUP = 12; // Flat 12 PHP markup on top of computed J&T Express fee regardless of location
 
 export const SHIPPING_ZONES = {
   NCR: {
     name: 'Metro Manila (NCR)',
-    fee: 95,
+    baseFee: 95,
+    fee: 95 + SHIPPING_MARKUP, // 107
     eta: '1–2 Business Days',
     courier: 'J&T Express (Next-Day Courier)',
   },
   LUZON: {
     name: 'Luzon Provincial',
-    fee: 145,
+    baseFee: 145,
+    fee: 145 + SHIPPING_MARKUP, // 157
     eta: '2–4 Business Days',
     courier: 'J&T Express (Luzon Express)',
   },
   VISAYAS: {
     name: 'Visayas Region',
-    fee: 175,
+    baseFee: 175,
+    fee: 175 + SHIPPING_MARKUP, // 187
     eta: '4–6 Business Days',
     courier: 'J&T Express (Inter-Island Air/Sea)',
   },
   MINDANAO: {
     name: 'Mindanao & Island Provinces',
-    fee: 195,
+    baseFee: 195,
+    fee: 195 + SHIPPING_MARKUP, // 207
     eta: '5–8 Business Days',
     courier: 'J&T Express (Nationwide Logistics)',
   },
@@ -158,6 +163,8 @@ export function calculateShippingFee({
   return {
     fee: finalFee,
     originalFee: matchedZone.fee,
+    baseFee: matchedZone.baseFee,
+    markup: SHIPPING_MARKUP,
     zone: matchedZone.name,
     isFree: qualifiesForFreeShipping,
     eta: matchedZone.eta,

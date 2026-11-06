@@ -22,6 +22,7 @@ import {
   Tag,
   Maximize2,
   ChevronRight,
+  ArrowLeft,
   Sparkles,
   Bot,
   ExternalLink,
@@ -702,9 +703,13 @@ export default function AdminChatTab({
       </div>
 
       {/* Main 2-Column Split: Ticket List (Left) & Active Chat Thread (Right) */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 min-h-0 flex overflow-hidden">
         {/* Left Column: Tickets Master List */}
-        <div className="w-full sm:w-80 md:w-96 bg-white border-r border-slate-200 flex flex-col shrink-0">
+        <div
+          className={`${
+            selectedTicket ? 'hidden md:flex' : 'flex'
+          } w-full md:w-80 lg:w-96 min-w-0 md:min-w-[320px] md:max-w-[384px] shrink-0 bg-white border-r border-slate-200 flex-col`}
+        >
           {/* Search & Filter Header */}
           <div className="p-3 border-b border-slate-200 space-y-2 bg-slate-50/60">
             {/* Search Input */}
@@ -788,30 +793,44 @@ export default function AdminChatTab({
         </div>
 
         {/* Right Column: Active Conversation Detail */}
-        <div className="flex-1 flex flex-col bg-slate-50/70">
+        <div
+          className={`${
+            !selectedTicket ? 'hidden md:flex' : 'flex'
+          } flex-1 min-w-0 flex-col bg-slate-50/70 overflow-hidden`}
+        >
           {selectedTicket ? (
             <>
               {/* Conversation Top Header */}
-              <div className="px-6 py-3.5 bg-white border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 shadow-xs">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-700 font-bold flex items-center justify-center border border-slate-200 text-sm">
+              <div className="px-4 sm:px-6 py-3.5 bg-white border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 shadow-xs min-w-0">
+                <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                  {/* Mobile Back to Tickets List */}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedTicketId(null)}
+                    className="md:hidden p-1.5 -ml-1 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-all shrink-0 cursor-pointer"
+                    title="Back to Tickets List"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                  </button>
+
+                  <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-700 font-bold flex items-center justify-center border border-slate-200 text-sm shrink-0">
                     {selectedTicket.customer_name ? selectedTicket.customer_name.charAt(0).toUpperCase() : 'C'}
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <h2 className="text-sm font-bold text-slate-900">{selectedTicket.customer_name}</h2>
-                      <span className="font-mono text-[11px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                      <h2 className="text-sm font-bold text-slate-900 truncate">{selectedTicket.customer_name}</h2>
+                      <span className="font-mono text-[11px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 shrink-0">
                         {selectedTicket.ticket_number}
                       </span>
                     </div>
-                    <div className="flex items-center gap-3 text-xs text-slate-500 mt-0.5">
-                      <a href={`mailto:${selectedTicket.customer_email}`} className="flex items-center gap-1 hover:text-blue-600">
-                        <Mail className="w-3 h-3 text-slate-400" />
-                        <span>{selectedTicket.customer_email}</span>
+                    <div className="flex items-center gap-3 text-xs text-slate-500 mt-0.5 truncate">
+                      <a href={`mailto:${selectedTicket.customer_email}`} className="flex items-center gap-1 hover:text-blue-600 truncate max-w-[200px]">
+                        <Mail className="w-3 h-3 text-slate-400 shrink-0" />
+                        <span className="truncate">{selectedTicket.customer_email}</span>
                       </a>
                       {selectedTicket.customer_phone && (
-                        <a href={`tel:${selectedTicket.customer_phone}`} className="flex items-center gap-1 hover:text-blue-600">
-                          <Phone className="w-3 h-3 text-slate-400" />
+                        <a href={`tel:${selectedTicket.customer_phone}`} className="flex items-center gap-1 hover:text-blue-600 shrink-0">
+                          <Phone className="w-3 h-3 text-slate-400 shrink-0" />
                           <span>{selectedTicket.customer_phone}</span>
                         </a>
                       )}
@@ -820,7 +839,7 @@ export default function AdminChatTab({
                 </div>
 
                 {/* Status Switcher & Category Badge */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                   <span className={`text-xs font-semibold px-2.5 py-1 rounded-md border ${getCategoryMeta(selectedTicket.category).badgeClass}`}>
                     {getCategoryMeta(selectedTicket.category).label}
                   </span>
@@ -830,7 +849,7 @@ export default function AdminChatTab({
                     <select
                       value={selectedTicket.status}
                       onChange={(e) => handleStatusChange(e.target.value)}
-                      className="bg-white text-xs font-semibold text-slate-700 py-1 px-2.5 rounded-lg border border-slate-200 focus:outline-none"
+                      className="bg-white text-xs font-semibold text-slate-700 py-1 px-2.5 rounded-lg border border-slate-200 focus:outline-none cursor-pointer"
                     >
                       <option value="OPEN">Open</option>
                       <option value="IN_PROGRESS">In Progress</option>
@@ -895,7 +914,7 @@ export default function AdminChatTab({
 
               {/* Quick Saved Replies Shortcut Bar */}
               {savedMessages.length > 0 && (
-                <div className="px-4 py-2 bg-slate-50 border-t border-slate-200 flex items-center gap-1.5 overflow-x-auto no-scrollbar text-xs select-none">
+                <div className="w-full min-w-0 px-4 py-2 bg-slate-50 border-t border-slate-200 flex items-center gap-1.5 overflow-x-auto no-scrollbar text-xs select-none">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 shrink-0 flex items-center gap-1">
                     <Zap className="w-3.5 h-3.5 text-amber-500" />
                     <span>Saved:</span>
@@ -905,21 +924,21 @@ export default function AdminChatTab({
                       key={sm.id}
                       type="button"
                       onClick={() => handleInsertSavedMessage(sm)}
-                      className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:border-slate-400 text-slate-800 text-[11px] font-medium transition-all shrink-0 cursor-pointer flex items-center gap-1.5 hover:bg-slate-100 shadow-2xs"
+                      className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:border-slate-400 text-slate-800 text-[11px] font-medium transition-all shrink-0 cursor-pointer flex items-center gap-1.5 hover:bg-slate-100 shadow-2xs max-w-[170px]"
                       title={`${sm.title} - Click to insert into input`}
                     >
                       {sm.shortcut && (
-                        <span className="font-mono text-indigo-600 font-bold text-[10px]">
+                        <span className="font-mono text-indigo-600 font-bold text-[10px] shrink-0">
                           {sm.shortcut}
                         </span>
                       )}
-                      <span className="truncate max-w-[140px]">{sm.title}</span>
+                      <span className="truncate">{sm.title}</span>
                     </button>
                   ))}
                   <button
                     type="button"
                     onClick={() => setIsSavedMessagesModalOpen(true)}
-                    className="px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-[10px] font-bold hover:bg-amber-100 transition-all shrink-0 cursor-pointer"
+                    className="px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-[10px] font-bold hover:bg-amber-100 transition-all shrink-0 cursor-pointer whitespace-nowrap"
                   >
                     + View All ({savedMessages.length})
                   </button>
@@ -1057,7 +1076,7 @@ export default function AdminChatTab({
 
                 <form
                   onSubmit={handleSendMessage}
-                  className="p-4 bg-white border-t border-slate-200 flex items-end gap-3"
+                  className="w-full min-w-0 p-3 sm:p-4 bg-white border-t border-slate-200 flex items-end gap-2 sm:gap-3"
                 >
                   <input
                     type="file"
@@ -1092,7 +1111,7 @@ export default function AdminChatTab({
                     <span className="hidden sm:inline">Saved</span>
                   </button>
 
-                  <div className="flex-1 relative">
+                  <div className="flex-1 min-w-0 relative">
                     <textarea
                       rows={2}
                       value={inputText}
@@ -1111,10 +1130,10 @@ export default function AdminChatTab({
                   <button
                     type="submit"
                     disabled={isSending || (!inputText.trim() && !stagedMedia)}
-                    className={`px-5 py-3 rounded-xl text-xs font-bold flex items-center gap-2 transition-all shrink-0 ${
+                    className={`px-4 sm:px-5 py-3 rounded-xl text-xs font-bold flex items-center gap-2 transition-all shrink-0 cursor-pointer ${
                       isSending || (!inputText.trim() && !stagedMedia)
                         ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                        : 'bg-[#2C1E1B] hover:bg-[#3D2B27] text-white shadow-xs cursor-pointer'
+                        : 'bg-[#2C1E1B] hover:bg-[#3D2B27] text-white shadow-xs'
                     }`}
                   >
                     {isSending ? (

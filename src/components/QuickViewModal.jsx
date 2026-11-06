@@ -4,6 +4,7 @@ import { X, Star, Sparkles, Check, Heart, ArrowRight, ShoppingBag } from 'lucide
 import sizeChartImg from '../images/size_chart.webp';
 import { addToWishlist, isInWishlist } from '../lib/wishlistManager';
 import { trackViewContent } from '../lib/metaPixel';
+import { getProductDiscountPercent } from '../lib/discountHelper';
 
 const isVideoUrl = (url) => url && (url.startsWith('data:video/') || url.match(/\.(mp4|mov|webm)($|\?)/i));
 
@@ -184,6 +185,24 @@ export default function QuickViewModal({ product, onClose, onBuyNow, onOpenWishl
                 <span className="font-hero text-3xl text-[#2C1E1B]">
                   ₱{Number(product.price)?.toLocaleString()}
                 </span>
+                {(() => {
+                  const disc = getProductDiscountPercent(product);
+                  const orig = product.originalPrice || (disc > 0 ? Math.round(product.price / (1 - disc / 100)) : null);
+                  return (
+                    <>
+                      {orig && Number(orig) > Number(product.price) && (
+                        <span className="font-hero text-lg text-[#A38E88] line-through">
+                          ₱{Number(orig)?.toLocaleString()}
+                        </span>
+                      )}
+                      {disc > 0 && (
+                        <span className="text-[10px] font-brand uppercase tracking-wider font-bold bg-[#FFE4E6] text-[#BE123C] border border-[#FECDD3] px-2.5 py-0.5 shadow-2xs">
+                          {disc}% OFF
+                        </span>
+                      )}
+                    </>
+                  );
+                })()}
                 <span className="text-[10px] font-brand uppercase tracking-wider text-emerald-800 bg-emerald-100 px-3 py-1 rounded-none font-semibold">
                   In Stock
                 </span>

@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, ChevronsUpDown, ArrowLeft, Eye, RotateCcw, Filter, Search, X, ShoppingBag, Sparkles, ChevronLeft, ChevronRight } from 'lucide-react';
 import ShimmerImage from './ShimmerImage';
 import LazyVideo from './common/LazyVideo';
+import { getProductDiscountPercent, sortProductsWithDiscountsFirst } from '../lib/discountHelper';
 
 const isVideoUrl = (url) => url && (url.startsWith('data:video/') || url.match(/\.(mp4|mov|webm)($|\?)/i));
 
@@ -159,14 +160,13 @@ export default function FullCatalogView({ products, isLoading, onBackToHome, onS
       list = list.filter(p => p.mainCategory === 'bottom' && p.subType && selectedBottomsLower.includes(p.subType.trim().toLowerCase()));
     }
 
-    // Sorting
-    if (sortBy === 'price-low') {
-      list = [...list].sort((a, b) => a.price - b.price);
-    } else if (sortBy === 'price-high') {
-      list = [...list].sort((a, b) => b.price - a.price);
-    } else if (sortBy === 'discount') {
-      list = [...list].sort((a, b) => (b.originalPrice ? 1 : -1));
-    }
+    // Place items with active discount on TOP of the list
+    list = sortProductsWithDiscountsFirst(list, (a, b) => {
+      if (sortBy === 'price-low') return a.price - b.price;
+      if (sortBy === 'price-high') return b.price - a.price;
+      if (sortBy === 'discount') return getProductDiscountPercent(b) - getProductDiscountPercent(a);
+      return 0;
+    });
 
     return list;
   }, [mainCategoryFilter, selectedTops, selectedBottoms, sortBy, searchQuery, activeList]);
@@ -456,6 +456,7 @@ export default function FullCatalogView({ products, isLoading, onBackToHome, onS
           ) : (
             paginatedProducts.map((product) => {
               const isSoldOut = (product.statusBadge || '').toUpperCase() === 'SOLD OUT' || (product.qty !== undefined && product.qty !== null && Number(product.qty) <= 0);
+              const discountPercent = getProductDiscountPercent(product);
 
               return (
                 <div
@@ -465,15 +466,21 @@ export default function FullCatalogView({ products, isLoading, onBackToHome, onS
                 >
                   {/* Top Badges Header */}
                   <div className="flex items-center justify-between text-[11px] font-bold text-[#2C1E1B] uppercase tracking-wider mb-2 z-10">
-                    <span />
-                    <span>
+                    <div>
+                      {discountPercent > 0 && (
+                        <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase bg-[#FFE4E6] text-[#BE123C] border border-[#FECDD3] rounded-none shadow-2xs">
+                          {discountPercent}% OFF
+                        </span>
+                      )}
+                    </div>
+                    <div>
                       {product.statusBadge && (
                         <span className={`text-[10px] tracking-widest font-bold ${product.statusBadge === 'SOLD OUT' ? 'text-gray-400' : 'text-[#2C1E1B]'
                           }`}>
                           {product.statusBadge}
                         </span>
                       )}
-                    </span>
+                    </div>
                   </div>
 
                   {/* Studio Model Full Body Image or Video */}
@@ -520,6 +527,15 @@ export default function FullCatalogView({ products, isLoading, onBackToHome, onS
                     <div className="text-right whitespace-nowrap">
                       {isSoldOut ? (
                         <span className="font-bold text-gray-400">SOLD OUT</span>
+                      ) : discountPercent > 0 ? (
+                        <div className="flex flex-col items-end">
+                          <span className="line-through text-gray-400 text-[10px]">
+                            ₱{Number(product.originalPrice || Math.round(product.price / (1 - discountPercent / 100)))?.toLocaleString()}
+                          </span>
+                          <span className="font-bold text-[#BE123C]">
+                            ₱{Number(product.price)?.toLocaleString()}
+                          </span>
+                        </div>
                       ) : product.originalPrice ? (
                         <div className="flex flex-col items-end">
                           <span className="line-through text-gray-400 text-[10px]">

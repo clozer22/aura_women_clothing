@@ -1,7 +1,8 @@
 import React, { memo } from 'react';
 import { motion } from 'framer-motion';
-import { Search, Plus, Star, Edit, Trash2, Globe, ChevronLeft, ChevronRight, Loader2, FileText } from 'lucide-react';
+import { Search, Plus, Star, Edit, Trash2, Globe, ChevronLeft, ChevronRight, Loader2, FileText, Tag } from 'lucide-react';
 import LuxuryButton from '../common/LuxuryButton';
+import { getProductDiscountPercent } from '../../lib/discountHelper';
 
 const AdminProductsTab = memo(({
   productList,
@@ -264,7 +265,27 @@ const AdminProductsTab = memo(({
                 <td className="p-3.5 text-slate-500 text-[10px]">
                   {Array.isArray(p.sizes) ? p.sizes.join(', ') : (p.sizes || 'XXS-XS, S-M, L, XL')}
                 </td>
-                <td className="p-3.5 font-semibold text-slate-800">₱{Number(p.price)?.toLocaleString()}</td>
+                <td className="p-3.5 font-semibold text-slate-800">
+                  {(() => {
+                    const discount = getProductDiscountPercent(p);
+                    if (discount > 0) {
+                      return (
+                        <div className="flex flex-col items-start gap-0.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-slate-900 font-bold">₱{Number(p.price)?.toLocaleString()}</span>
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 uppercase bg-[#FFE4E6] text-[#BE123C] border border-[#FECDD3] rounded-sm">
+                              {discount}% OFF
+                            </span>
+                          </div>
+                          <span className="line-through text-slate-400 text-[10px]">
+                            ₱{Number(p.originalPrice || p.price)?.toLocaleString()}
+                          </span>
+                        </div>
+                      );
+                    }
+                    return <span>₱{Number(p.price)?.toLocaleString()}</span>;
+                  })()}
+                </td>
                 <td className="p-3.5 font-semibold text-amber-600">{p.rating} ★</td>
                 <td className="p-3.5 text-slate-500">{p.solds} sold</td>
                 <td className="p-3.5">
@@ -295,9 +316,16 @@ const AdminProductsTab = memo(({
                     <button
                       onClick={() => onEditProduct(p)}
                       className="p-1.5 rounded-lg text-slate-600 hover:text-blue-600 hover:bg-blue-50 border border-slate-200 transition-colors cursor-pointer"
-                      title="Edit Product"
+                      title="Edit Product Details & Discount"
                     >
                       <Edit className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => onEditProduct(p)}
+                      className="p-1.5 rounded-lg text-pink-600 hover:text-pink-700 hover:bg-pink-50 border border-pink-200 transition-colors cursor-pointer"
+                      title="Set Item Discount"
+                    >
+                      <Tag className="w-3.5 h-3.5" />
                     </button>
                     <button
                       onClick={() => onDeleteProduct(p.id)}

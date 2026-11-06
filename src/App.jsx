@@ -20,6 +20,7 @@ import { recordSiteVisit } from './lib/visitorTracking';
 import CookieConsentBanner from './components/CookieConsentBanner';
 import LegalModal from './components/LegalModal';
 import CustomerLiveChat from './components/CustomerLiveChat';
+import LandingPromoToast from './components/LandingPromoToast';
 import { trackPageView, trackViewContent, trackInitiateCheckout } from './lib/metaPixel';
 
 // Code-split route-level components for optimized INP and instant initial paint
@@ -668,6 +669,11 @@ function MainApp() {
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
       />
+
+      {/* Floating Landing Page Promo / Voucher Toast (Top-Right, under Navbar) */}
+      {currentView === 'home' && (
+        <LandingPromoToast onSelectPromo={(promo) => showToast(`Voucher ${promo.code} copied to clipboard!`)} />
+      )}
 
       <main>
         {/* Home View - Only rendered when user is on the Home page */}
