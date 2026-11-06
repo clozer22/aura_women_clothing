@@ -865,7 +865,8 @@ export default function AdminPortal({
               p === 'PAID' || s === 'COMPLETED' || s === 'DELIVERED'
             );
             if (isPaid) {
-              totalSales += Number(o.total_amount) || 0;
+              const netSales = Math.max(0, (Number(o.total_amount) || 0) - (Number(o.shipping_fee) || 0));
+              totalSales += netSales;
               paidOrdersCount += 1;
             }
 

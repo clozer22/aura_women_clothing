@@ -163,7 +163,7 @@ const AdminDashboardTab = memo(({
           badgeText={`${dashboardStats.paidOrdersCount || 0} Paid`}
           badgeType="success"
           badgeIcon={CheckCircle2}
-          sublabel="Gross Sales"
+          sublabel="Net Merchandise Sales"
           icon={DollarSign}
           iconBgColor="bg-amber-100 text-amber-700"
         />

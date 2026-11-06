@@ -71,6 +71,21 @@ export default function AdminFinanceTab({ orders = [], isLoading = false, onRefr
     }
   };
 
+  // Helper to compute net merchandise sales (excluding shipping fee since shipping is not profit)
+  const getOrderNetSales = (order) => {
+    const total = Number(order.total_amount) || 0;
+    const shipping = Number(order.shipping_fee) || 0;
+    if (shipping > 0) {
+      return Math.max(0, total - shipping);
+    }
+    if (order.subtotal !== undefined && order.subtotal !== null) {
+      const sub = Number(order.subtotal) || 0;
+      const disc = Number(order.discount_amount) || 0;
+      return Math.max(0, sub - disc);
+    }
+    return total;
+  };
+
   // Determine if an order is COD or Xendit/Online
   const isCodOrder = (order) => {
     const method = (order.payment_method || '').toUpperCase().trim();
@@ -193,9 +208,11 @@ export default function AdminFinanceTab({ orders = [], isLoading = false, onRefr
     return { filteredOrders: list, activeDateLabel: label };
   }, [orders, startDate, endDate, channelFilter, searchQuery, datePreset]);
 
-  // Aggregate Financial Metrics
+  // Aggregate Financial Metrics (Excluding shipping fee from profit/sales)
   const metrics = useMemo(() => {
-    let totalSales = 0;
+    let totalSales = 0; // Net Merchandise Sales (Profit / Item sales)
+    let totalShippingFee = 0;
+    let totalGrossCollected = 0;
     let xenditSales = 0;
     let codSales = 0;
 
@@ -207,21 +224,26 @@ export default function AdminFinanceTab({ orders = [], isLoading = false, onRefr
     let codCollectedSales = 0;
 
     filteredOrders.forEach((o) => {
-      const amount = Number(o.total_amount) || 0;
-      totalSales += amount;
+      const netAmount = getOrderNetSales(o);
+      const shipping = Number(o.shipping_fee) || 0;
+      const gross = Number(o.total_amount) || 0;
+
+      totalSales += netAmount;
+      totalShippingFee += shipping;
+      totalGrossCollected += gross;
 
       const isCod = isCodOrder(o);
       const isPaid = (o.payment_status || '').toUpperCase() === 'PAID';
       const isDelivered = (o.status || '').toUpperCase() === 'DELIVERED';
 
       if (isCod) {
-        codSales += amount;
+        codSales += netAmount;
         codCount += 1;
-        if (isPaid || isDelivered) codCollectedSales += amount;
+        if (isPaid || isDelivered) codCollectedSales += netAmount;
       } else {
-        xenditSales += amount;
+        xenditSales += netAmount;
         xenditCount += 1;
-        if (isPaid) xenditPaidSales += amount;
+        if (isPaid) xenditPaidSales += netAmount;
       }
     });
 
@@ -231,6 +253,8 @@ export default function AdminFinanceTab({ orders = [], isLoading = false, onRefr
 
     return {
       totalSales,
+      totalShippingFee,
+      totalGrossCollected,
       xenditSales,
       codSales,
       totalOrdersCount,
@@ -261,7 +285,9 @@ export default function AdminFinanceTab({ orders = [], isLoading = false, onRefr
       'Payment Method',
       'Payment Status',
       'Fulfillment Status',
-      'Total Amount (PHP)',
+      'Net Sales Amount (Excl. Shipping PHP)',
+      'Courier Shipping Fee (PHP)',
+      'Total Paid by Customer (PHP)',
     ];
 
     const rows = filteredOrders.map((o) => [
@@ -274,6 +300,8 @@ export default function AdminFinanceTab({ orders = [], isLoading = false, onRefr
       `"${o.payment_method || 'Online'}"`,
       `"${o.payment_status || 'PENDING'}"`,
       `"${o.status || 'PENDING'}"`,
+      getOrderNetSales(o),
+      Number(o.shipping_fee) || 0,
       Number(o.total_amount) || 0,
     ]);
 
@@ -421,8 +449,8 @@ export default function AdminFinanceTab({ orders = [], isLoading = false, onRefr
                 <DollarSign className="w-5 h-5" />
               </div>
               <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-300">Gross Sales</span>
-                <h3 className="text-sm font-bold text-white">Total Sales</h3>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">Net Product Sales</span>
+                <h3 className="text-sm font-bold text-white">Total Sales (Profit)</h3>
               </div>
             </div>
             <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">
@@ -434,9 +462,15 @@ export default function AdminFinanceTab({ orders = [], isLoading = false, onRefr
             <div className="text-3xl font-bold font-sans text-white tracking-tight">
               ₱{metrics.totalSales.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
-            <div className="flex items-center justify-between text-[11px] text-slate-400 mt-2 pt-2 border-t border-white/10">
-              <span>Average Order Value:</span>
-              <strong className="text-slate-200">₱{metrics.avgOrderValue.toLocaleString()}</strong>
+            <div className="space-y-1.5 mt-2 pt-2 border-t border-white/10 text-[11px]">
+              <div className="flex items-center justify-between text-slate-300">
+                <span className="text-slate-400">Average Order Value:</span>
+                <strong className="text-slate-200">₱{metrics.avgOrderValue.toLocaleString()}</strong>
+              </div>
+              <div className="flex items-center justify-between text-[10px] text-slate-400">
+                <span>Courier shipping excluded:</span>
+                <span className="font-mono text-slate-300">−₱{metrics.totalShippingFee.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -449,7 +483,7 @@ export default function AdminFinanceTab({ orders = [], isLoading = false, onRefr
                 <CreditCard className="w-5 h-5" />
               </div>
               <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600">Online Gateway</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600">Online Gateway (Net)</span>
                 <h3 className="text-sm font-bold text-slate-900">Xendit Payment</h3>
               </div>
             </div>
@@ -477,7 +511,7 @@ export default function AdminFinanceTab({ orders = [], isLoading = false, onRefr
                 <Truck className="w-5 h-5" />
               </div>
               <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700">Courier Cash</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700">Courier Cash (Net)</span>
                 <h3 className="text-sm font-bold text-slate-900">COD Payment</h3>
               </div>
             </div>
@@ -599,7 +633,7 @@ export default function AdminFinanceTab({ orders = [], isLoading = false, onRefr
                 <th className="px-5 py-3.5">Customer</th>
                 <th className="px-5 py-3.5">Payment Channel</th>
                 <th className="px-5 py-3.5">Status</th>
-                <th className="px-5 py-3.5 text-right">Amount</th>
+                <th className="px-5 py-3.5 text-right">Net Sales (Excl. Shipping)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -620,7 +654,8 @@ export default function AdminFinanceTab({ orders = [], isLoading = false, onRefr
               ) : (
                 filteredOrders.map((order) => {
                   const isCod = isCodOrder(order);
-                  const amount = Number(order.total_amount) || 0;
+                  const netAmount = getOrderNetSales(order);
+                  const shippingFee = Number(order.shipping_fee) || 0;
                   const dateStr = order.created_at
                     ? new Date(order.created_at).toLocaleString('en-US', {
                         month: 'short',
@@ -672,8 +707,17 @@ export default function AdminFinanceTab({ orders = [], isLoading = false, onRefr
                       </td>
 
                       {/* Amount */}
-                      <td className="px-5 py-3.5 align-middle text-right font-bold text-slate-900 font-mono">
-                        ₱{amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      <td className="px-5 py-3.5 align-middle text-right">
+                        <div className="font-mono font-bold text-slate-900 text-xs">
+                          ₱{netAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">
+                          {shippingFee > 0 ? (
+                            <span>+ ₱{shippingFee.toLocaleString()} shipping</span>
+                          ) : (
+                            <span className="text-emerald-600 font-medium">Free shipping</span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
