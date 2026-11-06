@@ -18,6 +18,8 @@ import {
   Loader2,
   ChevronDown,
   Info,
+  Check,
+  Tag,
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
@@ -29,6 +31,7 @@ import {
   fetchCustomerTickets,
   fetchTicketMessages,
   sendChatMessage,
+  updateTicketCategory,
   markTicketAsRead,
 } from '../lib/chatService';
 
@@ -476,6 +479,42 @@ export default function CustomerLiveChat() {
     }
   }, [user?.id, clearFileSelection]);
 
+  // Active Conversation: Category Switching State
+  const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
+  const [isChangingCategory, setIsChangingCategory] = useState(false);
+
+  // Switch concern category during an active conversation
+  const handleChangeCategory = async (newCategoryId) => {
+    if (!activeTicket?.id || activeTicket.category === newCategoryId) {
+      setIsCategoryDropdownOpen(false);
+      return;
+    }
+
+    const targetCat = getCategoryMeta(newCategoryId);
+    setIsChangingCategory(true);
+    setIsCategoryDropdownOpen(false);
+
+    try {
+      await updateTicketCategory(activeTicket.id, newCategoryId);
+      setActiveTicket((prev) => (prev ? { ...prev, category: newCategoryId } : prev));
+
+      // Post an in-chat status update so both customer and admin see the new concern category in the timeline
+      await sendChatMessage({
+        ticketId: activeTicket.id,
+        senderType: 'CUSTOMER',
+        senderName: customerName || user?.user_metadata?.full_name || 'Customer',
+        senderId: user?.id || null,
+        messageText: `📌 [Concern Topic Changed] Switched category to: "${targetCat.label}"`,
+      });
+      scrollToBottom(true);
+    } catch (err) {
+      console.error('Failed to update ticket category:', err);
+      alert('Unable to change concern category. Please try again.');
+    } finally {
+      setIsChangingCategory(false);
+    }
+  };
+
   const categoryMeta = useMemo(() => {
     return getCategoryMeta(activeTicket?.category);
   }, [activeTicket?.category]);
@@ -769,22 +808,88 @@ export default function CustomerLiveChat() {
             ) : (
               /* SCREEN 2: Active Chat Conversation Stream */
               <div className="flex-1 flex flex-col h-full bg-[#FAF5F2] overflow-hidden">
-                {/* Active Category Bar */}
-                <div className="px-4 py-2 bg-white border-b border-[#E8DCD7] flex items-center justify-between text-[11px]">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wider ${categoryMeta.badgeClass}`}
+                {/* Active Category Bar with Topic Switcher */}
+                <div className="relative px-3.5 py-2 bg-white border-b border-[#E8DCD7] flex items-center justify-between text-[11px] select-none">
+                  <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => setIsCategoryDropdownOpen((prev) => !prev)}
+                      className="flex items-center gap-1.5 hover:bg-[#FAF5F2] px-2 py-1 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-[#E8DCD7] text-left min-w-0"
+                      title="Click to select or change your concern topic"
                     >
-                      {categoryMeta.shortLabel}
-                    </span>
-                    <span className="text-[#705B56] text-[10px] truncate max-w-[160px]">
-                      {categoryMeta.label}
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wider shrink-0 ${categoryMeta.badgeClass}`}
+                      >
+                        {categoryMeta.shortLabel}
+                      </span>
+                      <span className="text-[#2C1E1B] font-semibold text-[11px] truncate">
+                        {categoryMeta.label}
+                      </span>
+                      <ChevronDown
+                        className={`w-3.5 h-3.5 text-[#A38E88] shrink-0 transition-transform ${
+                          isCategoryDropdownOpen ? 'rotate-180' : ''
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    {isChangingCategory && (
+                      <span className="text-[10px] text-amber-700 flex items-center gap-1">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        <span>Updating...</span>
+                      </span>
+                    )}
+                    <span className="text-[10px] font-mono text-[#A38E88] bg-[#FAF5F2] px-1.5 py-0.5 rounded border border-[#E8DCD7]">
+                      {activeTicket.status}
                     </span>
                   </div>
 
-                  <span className="text-[10px] font-mono text-[#A38E88]">
-                    {activeTicket.status}
-                  </span>
+                  {/* Dropdown Menu for Category Selection */}
+                  <AnimatePresence>
+                    {isCategoryDropdownOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -6 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute left-3 right-3 top-full mt-1 z-30 bg-white border border-[#2C1E1B]/20 shadow-xl rounded-xl p-2 space-y-1"
+                      >
+                        <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[#A38E88] flex items-center justify-between border-b border-slate-100 mb-1">
+                          <span>Select Concern Topic</span>
+                          <span className="text-[9px] text-[#B86B60] font-normal">Active conversation</span>
+                        </div>
+                        {CHAT_CATEGORIES.map((cat) => {
+                          const isCurrent = activeTicket.category === cat.id;
+                          return (
+                            <button
+                              key={cat.id}
+                              type="button"
+                              onClick={() => handleChangeCategory(cat.id)}
+                              disabled={isChangingCategory}
+                              className={`w-full text-left p-2 rounded-lg text-xs transition-all flex items-center justify-between cursor-pointer ${
+                                isCurrent
+                                  ? 'bg-[#2C1E1B] text-white font-bold'
+                                  : 'hover:bg-[#FAF5F2] text-[#2C1E1B]'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span
+                                  className={`px-1.5 py-0.5 rounded text-[9px] font-bold border uppercase ${
+                                    isCurrent ? 'bg-white/20 text-white border-white/30' : cat.badgeClass
+                                  }`}
+                                >
+                                  {cat.shortLabel}
+                                </span>
+                                <span className="text-[11px] truncate">{cat.label}</span>
+                              </div>
+                              {isCurrent && <Check className="w-3.5 h-3.5 text-white shrink-0" />}
+                            </button>
+                          );
+                        })}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
 
                 {/* Messages Container */}
@@ -838,6 +943,32 @@ export default function CustomerLiveChat() {
                     </button>
                   </div>
                 )}
+
+                {/* Quick Topic Concern Pills Strip */}
+                <div className="px-3.5 py-1.5 bg-[#FAF5F2] border-t border-[#E8DCD7] flex items-center gap-1.5 overflow-x-auto no-scrollbar text-[10px] select-none">
+                  <span className="text-[#A38E88] font-bold uppercase tracking-wider text-[9px] shrink-0">
+                    Concern:
+                  </span>
+                  {CHAT_CATEGORIES.map((cat) => {
+                    const isSelected = activeTicket.category === cat.id;
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        disabled={isChangingCategory}
+                        onClick={() => handleChangeCategory(cat.id)}
+                        className={`px-2 py-0.5 rounded-full font-semibold transition-all shrink-0 cursor-pointer text-[10px] border ${
+                          isSelected
+                            ? 'bg-[#2C1E1B] text-white border-[#2C1E1B] shadow-2xs'
+                            : 'bg-white text-[#705B56] hover:bg-[#E8DCD7] border-[#E8DCD7]'
+                        }`}
+                        title={`Switch concern to ${cat.label}`}
+                      >
+                        {cat.shortLabel}
+                      </button>
+                    );
+                  })}
+                </div>
 
                 {/* Chat Composer Bar */}
                 <form

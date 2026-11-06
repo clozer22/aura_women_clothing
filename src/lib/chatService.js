@@ -386,3 +386,110 @@ export async function markTicketAsRead(ticketId, viewerType = 'ADMIN') {
     .update(updateFields)
     .eq('id', ticketId);
 }
+
+/**
+ * Update active ticket concern category (Customer or Admin)
+ */
+export async function updateTicketCategory(ticketId, category) {
+  if (!ticketId) throw new Error('Ticket ID is required.');
+  const { data, error } = await supabase
+    .from('chat_tickets')
+    .update({
+      category,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', ticketId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Fetch all admin saved messages (canned responses)
+ */
+export async function fetchSavedMessages() {
+  const { data, error } = await supabase
+    .from('chat_saved_messages')
+    .select('*')
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    console.error('Error fetching saved messages:', error);
+    return [];
+  }
+  return data || [];
+}
+
+/**
+ * Create a new admin saved message
+ */
+export async function createSavedMessage({
+  title,
+  content,
+  category = 'GENERAL',
+  shortcut = '',
+  createdBy = null,
+}) {
+  if (!title?.trim()) throw new Error('Title is required.');
+  if (!content?.trim()) throw new Error('Message content is required.');
+
+  const { data, error } = await supabase
+    .from('chat_saved_messages')
+    .insert([
+      {
+        title: title.trim(),
+        content: content.trim(),
+        category: category || 'GENERAL',
+        shortcut: shortcut?.trim() || null,
+        created_by: createdBy,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    ])
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Update an existing admin saved message
+ */
+export async function updateSavedMessage(id, { title, content, category, shortcut }) {
+  if (!id) throw new Error('Message ID is required.');
+  const updates = {
+    updated_at: new Date().toISOString(),
+  };
+  if (title !== undefined) updates.title = title.trim();
+  if (content !== undefined) updates.content = content.trim();
+  if (category !== undefined) updates.category = category;
+  if (shortcut !== undefined) updates.shortcut = shortcut?.trim() || null;
+
+  const { data, error } = await supabase
+    .from('chat_saved_messages')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Delete a saved message
+ */
+export async function deleteSavedMessage(id) {
+  if (!id) throw new Error('Message ID is required.');
+  const { error } = await supabase
+    .from('chat_saved_messages')
+    .delete()
+    .eq('id', id);
+
+  if (error) throw error;
+  return true;
+}
+

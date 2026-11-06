@@ -29,7 +29,14 @@ import {
   Sliders,
   Archive,
   CornerDownRight,
-  Smile
+  Smile,
+  Bookmark,
+  Copy,
+  Plus,
+  Trash2,
+  Edit2,
+  FileText,
+  Zap,
 } from 'lucide-react';
 import { supabaseAdmin as supabase } from '../../lib/supabaseClient';
 import {
@@ -41,7 +48,11 @@ import {
   updateTicketStatus,
   markTicketAsRead,
   fetchAutoReplies,
-  updateAutoReply
+  updateAutoReply,
+  fetchSavedMessages,
+  createSavedMessage,
+  updateSavedMessage,
+  deleteSavedMessage,
 } from '../../lib/chatService';
 
 // Format timestamp helper
@@ -228,6 +239,25 @@ export default function AdminChatTab({
   const [isLoadingAutoReplies, setIsLoadingAutoReplies] = useState(false);
   const [savingCategory, setSavingCategory] = useState(null);
   const [autoReplyToast, setAutoReplyToast] = useState(null);
+
+  // Saved Messages (Canned Responses) State
+  const [savedMessages, setSavedMessages] = useState([]);
+  const [isLoadingSavedMessages, setIsLoadingSavedMessages] = useState(false);
+  const [isSavedMessagesModalOpen, setIsSavedMessagesModalOpen] = useState(false);
+  const [isQuickRepliesOpen, setIsQuickRepliesOpen] = useState(false);
+  const [savedMessageSearch, setSavedMessageSearch] = useState('');
+  const [savedCategoryFilter, setSavedCategoryFilter] = useState('ALL');
+  const [copiedSavedMessageId, setCopiedSavedMessageId] = useState(null);
+
+  // Add / Edit Saved Message Form State
+  const [isAddingNewSavedMessage, setIsAddingNewSavedMessage] = useState(false);
+  const [editingSavedMessageId, setEditingSavedMessageId] = useState(null);
+  const [savedFormTitle, setSavedFormTitle] = useState('');
+  const [savedFormContent, setSavedFormContent] = useState('');
+  const [savedFormCategory, setSavedFormCategory] = useState('GENERAL');
+  const [savedFormShortcut, setSavedFormShortcut] = useState('');
+  const [isSavingMessage, setIsSavingMessage] = useState(false);
+  const [savedMessageToast, setSavedMessageToast] = useState(null);
 
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -471,6 +501,154 @@ export default function AdminChatTab({
     }
   };
 
+  // Load Saved Messages
+  const loadSavedMessages = useCallback(async () => {
+    setIsLoadingSavedMessages(true);
+    try {
+      const data = await fetchSavedMessages();
+      setSavedMessages(data);
+    } catch (err) {
+      console.error('Failed to load saved messages:', err);
+    } finally {
+      setIsLoadingSavedMessages(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadSavedMessages();
+  }, [loadSavedMessages]);
+
+  // Copy Saved Message Content to Clipboard
+  const handleCopySavedMessage = (msg) => {
+    if (!msg?.content) return;
+    try {
+      navigator.clipboard.writeText(msg.content);
+      setCopiedSavedMessageId(msg.id);
+      setTimeout(() => setCopiedSavedMessageId(null), 2000);
+    } catch (err) {
+      console.error('Copy failed:', err);
+    }
+  };
+
+  // Insert Saved Message into Active Chat Textarea
+  const handleInsertSavedMessage = (msg) => {
+    if (!msg?.content) return;
+    setInputText((prev) => (prev.trim() ? `${prev.trim()}\n\n${msg.content}` : msg.content));
+    setIsQuickRepliesOpen(false);
+  };
+
+  // Send Saved Message Directly to Active Customer Ticket
+  const handleSendSavedMessageDirectly = async (msg) => {
+    if (!selectedTicket?.id || !msg?.content) return;
+    setIsSending(true);
+    setIsQuickRepliesOpen(false);
+    try {
+      await sendChatMessage({
+        ticketId: selectedTicket.id,
+        senderType: 'ADMIN',
+        senderName: currentAdmin.name || 'Aura Support Staff',
+        senderId: currentAdmin.id || null,
+        messageText: msg.content,
+      });
+      scrollToBottom(true);
+    } catch (err) {
+      console.error('Failed to send saved message:', err);
+      alert('Failed to send saved message. Please try again.');
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  // Open Edit Form for an existing Saved Message
+  const handleStartEditSavedMessage = (msg) => {
+    setEditingSavedMessageId(msg.id);
+    setSavedFormTitle(msg.title || '');
+    setSavedFormContent(msg.content || '');
+    setSavedFormCategory(msg.category || 'GENERAL');
+    setSavedFormShortcut(msg.shortcut || '');
+    setIsAddingNewSavedMessage(true);
+  };
+
+  // Cancel Add / Edit Form
+  const handleCancelSavedMessageForm = () => {
+    setIsAddingNewSavedMessage(false);
+    setEditingSavedMessageId(null);
+    setSavedFormTitle('');
+    setSavedFormContent('');
+    setSavedFormCategory('GENERAL');
+    setSavedFormShortcut('');
+  };
+
+  // Submit Add / Update Saved Message
+  const handleSaveMessageSubmit = async (e) => {
+    e.preventDefault();
+    if (!savedFormTitle.trim() || !savedFormContent.trim()) {
+      alert('Please fill in both title and message content.');
+      return;
+    }
+    setIsSavingMessage(true);
+    try {
+      if (editingSavedMessageId) {
+        await updateSavedMessage(editingSavedMessageId, {
+          title: savedFormTitle,
+          content: savedFormContent,
+          category: savedFormCategory,
+          shortcut: savedFormShortcut,
+        });
+        setSavedMessageToast('Saved message updated successfully!');
+      } else {
+        await createSavedMessage({
+          title: savedFormTitle,
+          content: savedFormContent,
+          category: savedFormCategory,
+          shortcut: savedFormShortcut,
+          createdBy: currentAdmin.email || currentAdmin.name || 'Admin',
+        });
+        setSavedMessageToast('New saved message created successfully!');
+      }
+      setTimeout(() => setSavedMessageToast(null), 3000);
+      handleCancelSavedMessageForm();
+      await loadSavedMessages();
+    } catch (err) {
+      console.error('Error saving message:', err);
+      alert(err.message || 'Failed to save message.');
+    } finally {
+      setIsSavingMessage(false);
+    }
+  };
+
+  // Delete Saved Message
+  const handleDeleteSavedMessage = async (msgId) => {
+    if (!window.confirm('Are you sure you want to delete this saved message?')) return;
+    try {
+      await deleteSavedMessage(msgId);
+      await loadSavedMessages();
+      setSavedMessageToast('Saved message deleted.');
+      setTimeout(() => setSavedMessageToast(null), 2500);
+    } catch (err) {
+      console.error('Error deleting saved message:', err);
+      alert('Failed to delete saved message.');
+    }
+  };
+
+  // Filtered Saved Messages for Search & Category
+  const filteredSavedMessages = useMemo(() => {
+    let list = Array.isArray(savedMessages) ? savedMessages : [];
+    if (savedCategoryFilter && savedCategoryFilter !== 'ALL') {
+      list = list.filter((m) => (m.category || 'GENERAL').toUpperCase() === savedCategoryFilter);
+    }
+    if (savedMessageSearch.trim()) {
+      const q = savedMessageSearch.toLowerCase().trim();
+      list = list.filter(
+        (m) =>
+          (m.title && m.title.toLowerCase().includes(q)) ||
+          (m.content && m.content.toLowerCase().includes(q)) ||
+          (m.shortcut && m.shortcut.toLowerCase().includes(q))
+      );
+    }
+    return list;
+  }, [savedMessages, savedCategoryFilter, savedMessageSearch]);
+
   // Total unread ticket count for badge
   const totalUnreadCount = useMemo(() => {
     return tickets.reduce((sum, t) => sum + (t.unread_admin_count || 0), 0);
@@ -499,8 +677,16 @@ export default function AdminChatTab({
 
         <div className="flex items-center gap-2">
           <button
+            onClick={() => setIsSavedMessagesModalOpen(true)}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 transition-all shadow-xs cursor-pointer"
+            title="Manage saved messages and quick replies"
+          >
+            <Bookmark className="w-4 h-4 text-amber-600" />
+            <span>Saved Messages ({savedMessages.length})</span>
+          </button>
+          <button
             onClick={handleOpenAutoRepliesModal}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-amber-50 text-amber-900 border border-amber-300/80 hover:bg-amber-100 transition-all shadow-xs"
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-amber-50 text-amber-900 border border-amber-300/80 hover:bg-amber-100 transition-all shadow-xs cursor-pointer"
           >
             <Sparkles className="w-4 h-4 text-amber-600" />
             <span>Auto-Reply Settings</span>
@@ -707,63 +893,241 @@ export default function AdminChatTab({
                 </div>
               )}
 
-              {/* Admin Reply Composer */}
-              <form
-                onSubmit={handleSendMessage}
-                className="p-4 bg-white border-t border-slate-200 flex items-end gap-3"
-              >
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleFileChange}
-                  accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime"
-                  className="hidden"
-                />
-
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  title="Attach Photo or Video (max 50MB)"
-                  className="p-2.5 rounded-xl border border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-all shrink-0"
-                >
-                  <Paperclip className="w-4 h-4" />
-                </button>
-
-                <div className="flex-1 relative">
-                  <textarea
-                    rows={2}
-                    value={inputText}
-                    onChange={(e) => setInputText(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSendMessage(e);
-                      }
-                    }}
-                    placeholder={`Reply to ${selectedTicket.customer_name} (Press Enter to send, Shift+Enter for newline)...`}
-                    className="w-full bg-slate-50 focus:bg-white text-xs text-slate-800 p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-[#2C1E1B] transition-all resize-none"
-                  />
+              {/* Quick Saved Replies Shortcut Bar */}
+              {savedMessages.length > 0 && (
+                <div className="px-4 py-2 bg-slate-50 border-t border-slate-200 flex items-center gap-1.5 overflow-x-auto no-scrollbar text-xs select-none">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 shrink-0 flex items-center gap-1">
+                    <Zap className="w-3.5 h-3.5 text-amber-500" />
+                    <span>Saved:</span>
+                  </span>
+                  {savedMessages.slice(0, 6).map((sm) => (
+                    <button
+                      key={sm.id}
+                      type="button"
+                      onClick={() => handleInsertSavedMessage(sm)}
+                      className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:border-slate-400 text-slate-800 text-[11px] font-medium transition-all shrink-0 cursor-pointer flex items-center gap-1.5 hover:bg-slate-100 shadow-2xs"
+                      title={`${sm.title} - Click to insert into input`}
+                    >
+                      {sm.shortcut && (
+                        <span className="font-mono text-indigo-600 font-bold text-[10px]">
+                          {sm.shortcut}
+                        </span>
+                      )}
+                      <span className="truncate max-w-[140px]">{sm.title}</span>
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setIsSavedMessagesModalOpen(true)}
+                    className="px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-[10px] font-bold hover:bg-amber-100 transition-all shrink-0 cursor-pointer"
+                  >
+                    + View All ({savedMessages.length})
+                  </button>
                 </div>
+              )}
 
-                <button
-                  type="submit"
-                  disabled={isSending || (!inputText.trim() && !stagedMedia)}
-                  className={`px-5 py-3 rounded-xl text-xs font-bold flex items-center gap-2 transition-all shrink-0 ${
-                    isSending || (!inputText.trim() && !stagedMedia)
-                      ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                      : 'bg-[#2C1E1B] hover:bg-[#3D2B27] text-white shadow-xs'
-                  }`}
+              {/* Admin Reply Composer Form */}
+              <div className="relative">
+                {/* Floating Quick Replies Popover */}
+                {isQuickRepliesOpen && (
+                  <div className="absolute bottom-full left-4 right-4 mb-2 z-30 bg-white border border-slate-200 shadow-2xl rounded-2xl p-4 max-h-80 flex flex-col">
+                    <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
+                      <div className="flex items-center gap-2">
+                        <Bookmark className="w-4 h-4 text-amber-600" />
+                        <h4 className="text-xs font-bold text-slate-900">Saved Messages & Quick Replies</h4>
+                        <span className="text-[10px] text-slate-400">({savedMessages.length})</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsQuickRepliesOpen(false);
+                            setIsSavedMessagesModalOpen(true);
+                          }}
+                          className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer"
+                        >
+                          Manage All
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsQuickRepliesOpen(false)}
+                          className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Quick Search */}
+                    <div className="relative mb-2">
+                      <Search className="w-3.5 h-3.5 absolute left-2.5 top-2 text-slate-400" />
+                      <input
+                        type="text"
+                        value={savedMessageSearch}
+                        onChange={(e) => setSavedMessageSearch(e.target.value)}
+                        placeholder="Search quick replies..."
+                        className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:bg-white focus:border-slate-800"
+                      />
+                    </div>
+
+                    {/* Messages Scroll Area */}
+                    <div className="flex-1 overflow-y-auto divide-y divide-slate-100 space-y-1 pr-1">
+                      {filteredSavedMessages.length === 0 ? (
+                        <div className="p-4 text-center text-xs text-slate-400">
+                          No saved messages found.
+                        </div>
+                      ) : (
+                        filteredSavedMessages.map((msg) => {
+                          const isCopied = copiedSavedMessageId === msg.id;
+                          return (
+                            <div
+                              key={msg.id}
+                              className="p-2.5 hover:bg-slate-50 rounded-xl transition-colors flex flex-col gap-1.5 group"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <span className="text-xs font-bold text-slate-900 truncate">
+                                    {msg.title}
+                                  </span>
+                                  {msg.shortcut && (
+                                    <span className="font-mono text-[9px] font-bold bg-indigo-50 text-indigo-700 px-1.5 py-0.2 rounded border border-indigo-200">
+                                      {msg.shortcut}
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 px-1.5 py-0.5 bg-slate-100 rounded">
+                                  {msg.category || 'GENERAL'}
+                                </span>
+                              </div>
+
+                              <p className="text-[11px] text-slate-600 line-clamp-2 leading-relaxed">
+                                {msg.content}
+                              </p>
+
+                              <div className="flex items-center justify-end gap-2 pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopySavedMessage(msg)}
+                                  className={`px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                                    isCopied
+                                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-300'
+                                      : 'bg-white border border-slate-200 hover:border-slate-300 text-slate-600'
+                                  }`}
+                                  title="Copy text to clipboard"
+                                >
+                                  {isCopied ? (
+                                    <>
+                                      <Check className="w-3 h-3 text-emerald-600" />
+                                      <span>Copied!</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Copy className="w-3 h-3 text-slate-400" />
+                                      <span>Copy</span>
+                                    </>
+                                  )}
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleInsertSavedMessage(msg)}
+                                  className="px-2.5 py-1 rounded text-[10px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 transition-all cursor-pointer flex items-center gap-1"
+                                  title="Insert into reply box to edit"
+                                >
+                                  <span>Insert to Input</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleSendSavedMessageDirectly(msg)}
+                                  className="px-2.5 py-1 rounded text-[10px] font-bold bg-[#2C1E1B] hover:bg-[#3D2B27] text-white transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
+                                  title="Send immediately to customer"
+                                >
+                                  <Send className="w-2.5 h-2.5" />
+                                  <span>Send Direct</span>
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <form
+                  onSubmit={handleSendMessage}
+                  className="p-4 bg-white border-t border-slate-200 flex items-end gap-3"
                 >
-                  {isSending ? (
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <>
-                      <span>Send</span>
-                      <Send className="w-3.5 h-3.5" />
-                    </>
-                  )}
-                </button>
-              </form>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileChange}
+                    accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime"
+                    className="hidden"
+                  />
+
+                  {/* Attachment Button */}
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    title="Attach Photo or Video (max 50MB)"
+                    className="p-2.5 rounded-xl border border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-all shrink-0 cursor-pointer"
+                  >
+                    <Paperclip className="w-4 h-4" />
+                  </button>
+
+                  {/* Saved Replies Toggle Button */}
+                  <button
+                    type="button"
+                    onClick={() => setIsQuickRepliesOpen((prev) => !prev)}
+                    title="Toggle Saved Messages Popover"
+                    className={`p-2.5 rounded-xl border transition-all shrink-0 cursor-pointer flex items-center gap-1.5 text-xs font-semibold ${
+                      isQuickRepliesOpen
+                        ? 'bg-[#2C1E1B] text-white border-[#2C1E1B] shadow-xs'
+                        : 'border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Bookmark className="w-4 h-4 text-amber-500" />
+                    <span className="hidden sm:inline">Saved</span>
+                  </button>
+
+                  <div className="flex-1 relative">
+                    <textarea
+                      rows={2}
+                      value={inputText}
+                      onChange={(e) => setInputText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSendMessage(e);
+                        }
+                      }}
+                      placeholder={`Reply to ${selectedTicket.customer_name} (Press Enter to send, Shift+Enter for newline)...`}
+                      className="w-full bg-slate-50 focus:bg-white text-xs text-slate-800 p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-[#2C1E1B] transition-all resize-none"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isSending || (!inputText.trim() && !stagedMedia)}
+                    className={`px-5 py-3 rounded-xl text-xs font-bold flex items-center gap-2 transition-all shrink-0 ${
+                      isSending || (!inputText.trim() && !stagedMedia)
+                        ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                        : 'bg-[#2C1E1B] hover:bg-[#3D2B27] text-white shadow-xs cursor-pointer'
+                    }`}
+                  >
+                    {isSending ? (
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <>
+                        <span>Send</span>
+                        <Send className="w-3.5 h-3.5" />
+                      </>
+                    )}
+                  </button>
+                </form>
+              </div>
             </>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-400">
@@ -797,7 +1161,7 @@ export default function AdminChatTab({
               </div>
               <button
                 onClick={() => setIsAutoRepliesModalOpen(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg"
+                className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -845,9 +1209,381 @@ export default function AdminChatTab({
             <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex justify-end">
               <button
                 onClick={() => setIsAutoRepliesModalOpen(false)}
-                className="px-5 py-2 text-xs font-bold rounded-xl bg-[#2C1E1B] text-white hover:bg-[#3D2B27]"
+                className="px-5 py-2 text-xs font-bold rounded-xl bg-[#2C1E1B] text-white hover:bg-[#3D2B27] cursor-pointer"
               >
                 Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Saved Messages (Quick Replies) Management Modal */}
+      {isSavedMessagesModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
+            {/* Modal Header */}
+            <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-300 flex items-center justify-center">
+                  <Bookmark className="w-5 h-5 text-amber-400" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold">Saved Messages & Quick Replies</h3>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                      {savedMessages.length} Templates
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    Create reusable answers that staff can copy, insert, or dispatch directly to customers
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setIsSavedMessagesModalOpen(false);
+                  handleCancelSavedMessageForm();
+                }}
+                className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Notification Toast */}
+            {savedMessageToast && (
+              <div className="bg-emerald-50 text-emerald-800 px-6 py-2.5 text-xs font-semibold border-b border-emerald-200 flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-emerald-600" />
+                <span>{savedMessageToast}</span>
+              </div>
+            )}
+
+            {/* Search, Filter & New Button Toolbar */}
+            <div className="p-4 bg-slate-50 border-b border-slate-200 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                {/* Search */}
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+                  <input
+                    type="text"
+                    value={savedMessageSearch}
+                    onChange={(e) => setSavedMessageSearch(e.target.value)}
+                    placeholder="Search by title, shortcut, or message keywords..."
+                    className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-slate-800"
+                  />
+                  {savedMessageSearch && (
+                    <button
+                      onClick={() => setSavedMessageSearch('')}
+                      className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Add New Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isAddingNewSavedMessage) {
+                      handleCancelSavedMessageForm();
+                    } else {
+                      setIsAddingNewSavedMessage(true);
+                      setEditingSavedMessageId(null);
+                      setSavedFormTitle('');
+                      setSavedFormContent('');
+                      setSavedFormCategory('GENERAL');
+                      setSavedFormShortcut('');
+                    }
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-[#2C1E1B] hover:bg-[#3D2B27] text-white shadow-xs transition-all shrink-0 cursor-pointer"
+                >
+                  {isAddingNewSavedMessage ? (
+                    <>
+                      <X className="w-4 h-4" />
+                      <span>Close Form</span>
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4" />
+                      <span>Create Saved Message</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Category Filter Pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar text-xs">
+                {['ALL', 'GREETING', 'SHIPPING', 'RETURNS', 'PAYMENT', 'GENERAL'].map((catKey) => (
+                  <button
+                    key={catKey}
+                    type="button"
+                    onClick={() => setSavedCategoryFilter(catKey)}
+                    className={`px-3 py-1 rounded-lg font-semibold transition-all shrink-0 cursor-pointer text-[11px] ${
+                      savedCategoryFilter === catKey
+                        ? 'bg-slate-900 text-white shadow-2xs'
+                        : 'bg-white text-slate-600 hover:bg-slate-200/70 border border-slate-200'
+                    }`}
+                  >
+                    {catKey === 'ALL' ? 'All Templates' : catKey}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Inline Add / Edit Saved Message Form */}
+            {isAddingNewSavedMessage && (
+              <form
+                onSubmit={handleSaveMessageSubmit}
+                className="p-5 bg-amber-50/60 border-b border-amber-200 space-y-4"
+              >
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-amber-900 flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-amber-600" />
+                    <span>{editingSavedMessageId ? 'Edit Saved Message' : 'New Saved Message'}</span>
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={handleCancelSavedMessageForm}
+                    className="text-xs text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-slate-600 mb-1">
+                      Title *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={savedFormTitle}
+                      onChange={(e) => setSavedFormTitle(e.target.value)}
+                      placeholder="e.g. Return Policy Overview"
+                      className="w-full px-3 py-2 bg-white text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-slate-800"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-slate-600 mb-1">
+                      Category
+                    </label>
+                    <select
+                      value={savedFormCategory}
+                      onChange={(e) => setSavedFormCategory(e.target.value)}
+                      className="w-full px-3 py-2 bg-white text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-slate-800"
+                    >
+                      <option value="GENERAL">General</option>
+                      <option value="GREETING">Greeting</option>
+                      <option value="SHIPPING">Shipping & Courier</option>
+                      <option value="RETURNS">Returns & Exchanges</option>
+                      <option value="PAYMENT">Payment & Billing</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-slate-600 mb-1">
+                      Shortcut (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={savedFormShortcut}
+                      onChange={(e) => setSavedFormShortcut(e.target.value)}
+                      placeholder="e.g. /return or /hello"
+                      className="w-full px-3 py-2 bg-white text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-slate-800 font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] uppercase font-bold text-slate-600 mb-1">
+                    Message Content *
+                  </label>
+                  <textarea
+                    rows={4}
+                    required
+                    value={savedFormContent}
+                    onChange={(e) => setSavedFormContent(e.target.value)}
+                    placeholder="Enter the complete response text that will be copied or sent to the customer..."
+                    className="w-full px-3 py-2.5 bg-white text-xs text-slate-800 border border-slate-200 rounded-lg focus:outline-none focus:border-slate-800 resize-none leading-relaxed"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleCancelSavedMessageForm}
+                    className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-200 transition-all cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingMessage}
+                    className="px-5 py-2 rounded-xl text-xs font-bold bg-[#2C1E1B] hover:bg-[#3D2B27] text-white transition-all shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    {isSavingMessage ? (
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4" />
+                        <span>{editingSavedMessageId ? 'Update Message' : 'Save Message'}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* Saved Messages Cards List */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-3">
+              {isLoadingSavedMessages ? (
+                <div className="text-center py-12 text-xs text-slate-400">
+                  <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-slate-400" />
+                  Loading saved messages...
+                </div>
+              ) : filteredSavedMessages.length === 0 ? (
+                <div className="text-center py-16 text-xs text-slate-400 space-y-2">
+                  <Bookmark className="w-8 h-8 mx-auto text-slate-300" />
+                  <p className="font-semibold text-slate-700">No Saved Messages Found</p>
+                  <p className="text-[11px] max-w-sm mx-auto">
+                    {savedMessageSearch || savedCategoryFilter !== 'ALL'
+                      ? 'Try clearing your search or category filters.'
+                      : 'Click "Create Saved Message" above to add your first reusable canned response!'}
+                  </p>
+                </div>
+              ) : (
+                filteredSavedMessages.map((msg) => {
+                  const isCopied = copiedSavedMessageId === msg.id;
+                  return (
+                    <div
+                      key={msg.id}
+                      className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-2xs hover:shadow-xs transition-all space-y-2.5"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <h4 className="text-xs font-bold text-slate-900 truncate">{msg.title}</h4>
+                          {msg.shortcut && (
+                            <span className="font-mono text-[10px] font-bold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md border border-indigo-200">
+                              {msg.shortcut}
+                            </span>
+                          )}
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-2 py-0.5 bg-slate-100 rounded-md">
+                            {msg.category || 'GENERAL'}
+                          </span>
+                        </div>
+
+                        {/* Top-right card actions */}
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleStartEditSavedMessage(msg)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition-all cursor-pointer"
+                            title="Edit this saved message"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSavedMessage(msg.id)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all cursor-pointer"
+                            title="Delete this saved message"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Content Block */}
+                      <div className="bg-slate-50/80 p-3 rounded-xl border border-slate-100 text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">
+                        {msg.content}
+                      </div>
+
+                      {/* Bottom Action Buttons */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-100">
+                        <span className="text-[10px] text-slate-400">
+                          Created {msg.created_at ? new Date(msg.created_at).toLocaleDateString() : ''}
+                        </span>
+
+                        <div className="flex items-center gap-2">
+                          {/* Copy Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleCopySavedMessage(msg)}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                              isCopied
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-300'
+                                : 'bg-white border border-slate-200 hover:bg-slate-50 text-slate-700'
+                            }`}
+                            title="Copy message to clipboard"
+                          >
+                            {isCopied ? (
+                              <>
+                                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                <span>Copied to Clipboard!</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3.5 h-3.5 text-slate-500" />
+                                <span>Copy Text</span>
+                              </>
+                            )}
+                          </button>
+
+                          {/* Contextual actions if ticket is selected */}
+                          {selectedTicket && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleInsertSavedMessage(msg);
+                                  setIsSavedMessagesModalOpen(false);
+                                }}
+                                className="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 transition-all cursor-pointer"
+                                title="Insert text into composer to edit before sending"
+                              >
+                                Insert into Chat
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleSendSavedMessageDirectly(msg);
+                                  setIsSavedMessagesModalOpen(false);
+                                }}
+                                className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-[#2C1E1B] hover:bg-[#3D2B27] text-white transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                                title={`Send directly to ${selectedTicket.customer_name}`}
+                              >
+                                <Send className="w-3 h-3" />
+                                <span>Send to Customer</span>
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+              <span className="text-[11px] text-slate-500">
+                Tip: Type shortcut or click <Zap className="w-3 h-3 inline text-amber-500" /> in the chat box for instant access.
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSavedMessagesModalOpen(false);
+                  handleCancelSavedMessageForm();
+                }}
+                className="px-5 py-2 text-xs font-bold rounded-xl bg-[#2C1E1B] text-white hover:bg-[#3D2B27] cursor-pointer"
+              >
+                Close
               </button>
             </div>
           </div>
