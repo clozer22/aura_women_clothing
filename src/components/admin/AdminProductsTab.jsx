@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
 import { motion } from 'framer-motion';
-import { Search, Plus, Star, Edit, Trash2, Globe, ChevronLeft, ChevronRight, Loader2, FileText, Tag } from 'lucide-react';
+import { Search, Plus, Star, Edit, Trash2, Globe, ChevronLeft, ChevronRight, Loader2, FileText, Tag, Layers } from 'lucide-react';
 import LuxuryButton from '../common/LuxuryButton';
 import { getProductDiscountPercent } from '../../lib/discountHelper';
 
@@ -112,11 +112,18 @@ const AdminProductsTab = memo(({
             <span>Export CSV</span>
           </button>
           <button
-            onClick={onAddProduct}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl shadow-xs shadow-blue-600/20 transition-all cursor-pointer"
+            onClick={() => onAddProduct('single')}
+            className="inline-flex items-center gap-2 px-3.5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl shadow-xs shadow-blue-600/20 transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            <span>Add New Product</span>
+            <span>Add Single Product</span>
+          </button>
+          <button
+            onClick={() => onAddProduct('bulk')}
+            className="inline-flex items-center gap-2 px-3.5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-xs font-semibold rounded-xl shadow-xs shadow-indigo-600/20 transition-all cursor-pointer"
+          >
+            <Layers className="w-4 h-4" />
+            <span>Bulk Add Variants</span>
           </button>
         </div>
       </div>

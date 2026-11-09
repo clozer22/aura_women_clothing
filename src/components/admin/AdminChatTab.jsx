@@ -1398,7 +1398,7 @@ export default function AdminChatTab({
                       <option value="GENERAL">General</option>
                       <option value="GREETING">Greeting</option>
                       <option value="SHIPPING">Shipping & Courier</option>
-                      <option value="RETURNS">Returns & Exchanges</option>
+                      <option value="RETURNS">Replacements & Exchanges</option>
                       <option value="PAYMENT">Payment & Billing</option>
                     </select>
                   </div>

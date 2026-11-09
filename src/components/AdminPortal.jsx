@@ -292,6 +292,7 @@ export default function AdminPortal({
 
   // Modals / Form states
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [addProductModalMode, setAddProductModalMode] = useState('single');
   const [editingProductId, setEditingProductId] = useState(null);
   const [newProduct, setNewProduct] = useState({
     name: '',
@@ -1616,6 +1617,75 @@ export default function AdminPortal({
     }
   };
 
+  const handleBulkSaveProducts = async (batchProducts) => {
+    try {
+      const { error } = await supabase.from('products').insert(batchProducts);
+      if (error) throw error;
+
+      setProductList(prev => [...batchProducts, ...prev]);
+      setIsAddModalOpen(false);
+
+      clearAllPageCache();
+      invalidateProductsCache();
+      await fetchProductsPage(currentPage, searchQuery, categoryFilter, true);
+      fetchDashboardStats();
+      if (onRefreshData) onRefreshData();
+
+      triggerNotification(
+        'success',
+        'Garments Published',
+        `Successfully created ${batchProducts.length} color variants! Each item is now displayed individually across the storefront.`
+      );
+    } catch (err) {
+      triggerNotification('error', 'Bulk Creation Failed', err.message);
+      throw err;
+    }
+  };
+
+  const handleUploadVariantImage = async (file) => {
+    if (!file) return null;
+    const isImage = file.type.startsWith('image/') || !!file.name.toLowerCase().match(/\.(png|jpg|jpeg|gif|webp)$/i);
+    const isVideo = file.type.startsWith('video/') || !!file.name.toLowerCase().match(/\.(mp4|mov|webm)$/i);
+
+    if (!isImage && !isVideo) {
+      triggerNotification('warning', 'Invalid File Format', 'Only image and video files are allowed.');
+      throw new Error('Invalid file format');
+    }
+
+    if (isImage) {
+      const dimensions = await validateImageDimensions(file);
+      if (dimensions && !dimensions.isPortrait) {
+        triggerNotification(
+          'error',
+          'Invalid Image Orientation',
+          `Aura collection layouts require portrait photos (height must be greater than width). Uploaded size: ${dimensions.width}x${dimensions.height}px.`
+        );
+        throw new Error('Image must be in portrait orientation.');
+      }
+    }
+
+    const fileExt = file.name.split('.').pop();
+    const fileName = `product_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+    const filePath = `products/${fileName}`;
+
+    const { data, error: uploadError } = await supabase.storage
+      .from('storefront')
+      .upload(filePath, file, { cacheControl: '31536000', upsert: true });
+
+    if (!uploadError && data) {
+      const { data: { publicUrl } } = supabase.storage
+        .from('storefront')
+        .getPublicUrl(filePath);
+      return publicUrl;
+    }
+
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (event) => resolve(event.target.result);
+      reader.readAsDataURL(file);
+    });
+  };
+
   // Pagination navigation handler
   const totalPages = Math.max(1, Math.ceil(totalProductsCount / pageSize));
 
@@ -1644,9 +1714,10 @@ export default function AdminPortal({
     });
   }, []);
 
-  const handleOpenAddProduct = useCallback(() => {
+  const handleOpenAddProduct = useCallback((mode = 'single') => {
     if (!hasPermission('products')) return;
     setEditingProductId(null);
+    setAddProductModalMode(mode === 'bulk' ? 'bulk' : 'single');
     setNewProduct({
       name: '',
       category: 'Tops',
@@ -1670,6 +1741,7 @@ export default function AdminPortal({
 
   const handleEditProductClick = (product) => {
     if (!hasPermission('products')) return;
+    setAddProductModalMode('single');
     const origPrice = product.originalPrice ? Number(product.originalPrice) : '';
     const currentPrice = Number(product.price) || '';
     let pct = Number(product.discountPercent) || '';
@@ -2915,12 +2987,15 @@ export default function AdminPortal({
       {/* MODALS */}
       <AdminProductModal
         isOpen={isAddModalOpen}
+        initialMode={addProductModalMode}
         editingProductId={editingProductId}
         newProduct={newProduct}
         setNewProduct={setNewProduct}
         isUploadingProductImage={isUploadingProductImage}
         onProductImageUpload={handleProductImageUpload}
         onSaveProduct={handleSaveProduct}
+        onBulkSaveProducts={handleBulkSaveProducts}
+        onUploadVariantImage={handleUploadVariantImage}
         onClose={() => setIsAddModalOpen(false)}
       />
 
