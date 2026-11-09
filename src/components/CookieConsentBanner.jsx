@@ -94,7 +94,7 @@ export default function CookieConsentBanner({ onOpenLegal }) {
           {/* Description */}
           {!isPreferencesOpen ? (
             <p className="text-[11px] leading-relaxed text-[#705B56]">
-              Aura Atelier uses strictly necessary cookies to ensure seamless bag checkout and account sessions, and privacy-first analytics to improve your atelier shopping experience.
+              Aura uses strictly necessary cookies to ensure seamless bag checkout and account sessions, and privacy-first analytics to improve your shopping experience.
               {onOpenLegal && (
                 <button
                   onClick={() => onOpenLegal('privacy')}
@@ -134,7 +134,7 @@ export default function CookieConsentBanner({ onOpenLegal }) {
                   />
                 </div>
                 <p className="text-[10px] text-[#705B56]">
-                  Aggregated page visit counts to optimize atelier garment availability.
+                  Aggregated page visit counts to optimize collection and product availability.
                 </p>
               </div>
             </div>

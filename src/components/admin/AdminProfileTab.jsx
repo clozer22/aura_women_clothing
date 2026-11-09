@@ -96,13 +96,13 @@ const AdminProfileTab = memo(({
             </div>
 
             <div className="space-y-1">
-              <label className="text-[11px] uppercase tracking-wider font-semibold text-slate-600 block">Biography / Atelier Notes</label>
+              <label className="text-[11px] uppercase tracking-wider font-semibold text-slate-600 block">Biography / Brand Notes</label>
               <textarea
                 rows={4}
                 value={editProfileForm.bio}
                 onChange={(e) => setEditProfileForm(prev => ({ ...prev, bio: e.target.value }))}
                 className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white resize-y"
-                placeholder="Atelier owner bio notes..."
+                placeholder="Owner bio notes..."
               />
             </div>
           </div>

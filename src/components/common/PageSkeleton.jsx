@@ -1,7 +1,7 @@
 import React from 'react';
 import { Loader2 } from 'lucide-react';
 
-export default function PageSkeleton({ label = 'Loading Atelier Experience...' }) {
+export default function PageSkeleton({ label = 'Loading Experience...' }) {
   return (
     <div className="min-h-screen bg-[#FAF5F2] flex flex-col items-center justify-center p-6 select-none animate-fadeIn">
       <div className="w-16 h-16 border border-[#E8DCD7] bg-white flex items-center justify-center shadow-sm mb-4">

@@ -6,9 +6,9 @@ import { supabase } from './supabaseClient';
 export const CHAT_CATEGORIES = [
   {
     id: 'RETURN_EXCHANGE',
-    label: 'Return & Exchange Queries',
-    shortLabel: 'Returns',
-    description: '30-day return policy, exchange requests, garment conditions',
+    label: 'Replacement & Order Queries',
+    shortLabel: 'Replacement',
+    description: '2-day replacement policy, damaged/wrong items, unboxing video',
     badgeClass: 'bg-rose-50 text-rose-700 border-rose-200',
     iconColor: 'text-rose-500',
   },
@@ -30,7 +30,7 @@ export const CHAT_CATEGORIES = [
   },
   {
     id: 'GENERAL_INQUIRY',
-    label: 'General Atelier Inquiries',
+    label: 'General Inquiries',
     shortLabel: 'General',
     description: '',
     badgeClass: 'bg-amber-50 text-amber-800 border-amber-200',

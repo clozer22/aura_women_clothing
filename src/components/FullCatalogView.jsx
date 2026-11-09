@@ -566,7 +566,7 @@ export default function FullCatalogView({ products, isLoading, onBackToHome, onS
         {!isLoading && totalProductsCount > 0 && (
           <div className="bg-[#FAF5F2] border border-[#E8DCD7] border-t-0 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4 select-none">
             <div className="text-xs text-[#705B56] font-medium">
-              Showing <span className="font-bold text-[#2C1E1B]">{(safeCurrentPage - 1) * pageSize + 1}</span> to <span className="font-bold text-[#2C1E1B]">{Math.min(safeCurrentPage * pageSize, totalProductsCount)}</span> of <span className="font-bold text-[#2C1E1B]">{totalProductsCount}</span> garments (15 per page)
+              Showing <span className="font-bold text-[#2C1E1B]">{(safeCurrentPage - 1) * pageSize + 1}</span> to <span className="font-bold text-[#2C1E1B]">{Math.min(safeCurrentPage * pageSize, totalProductsCount)}</span> of <span className="font-bold text-[#2C1E1B]">{totalProductsCount}</span> products (15 per page)
             </div>
 
             <div className="flex items-center gap-2">
@@ -619,7 +619,7 @@ export default function FullCatalogView({ products, isLoading, onBackToHome, onS
         {activeList.length === 0 && !isLoading ? (
           <div className="py-24 text-center bg-white rounded-none border border-[#E8DCD7] max-w-2xl mx-auto shadow-sm p-8 flex flex-col items-center justify-center mt-6">
             <ShoppingBag className="w-10 h-10 text-[#B86B60] mx-auto mb-4 opacity-80 animate-bounce" />
-            <h3 className="font-editorial text-2xl text-[#2C1E1B] mb-2 font-normal">Atelier Catalog Empty</h3>
+            <h3 className="font-editorial text-2xl text-[#2C1E1B] mb-2 font-normal">Catalog Empty</h3>
             <p className="text-xs text-[#705B56] leading-relaxed max-w-md">
               We are currently curating and preparing our seasonal collections. Please check back soon, or visit the Admin Portal to populate listings in our database.
             </p>
@@ -628,7 +628,7 @@ export default function FullCatalogView({ products, isLoading, onBackToHome, onS
           filteredProducts.length === 0 && (
             <div className="text-center py-24 bg-[#FAF5F2] rounded-none border border-[#E8DCD7] mt-6">
               <Filter className="w-10 h-10 text-[#A38E88] mx-auto mb-3" />
-              <h3 className="font-editorial text-3xl text-[#2C1E1B] mb-2">No Matching Garments Found</h3>
+              <h3 className="font-editorial text-3xl text-[#2C1E1B] mb-2">No Matching Products Found</h3>
               <p className="text-xs text-[#705B56] mb-6">
                 Try adjusting your Tops or Bottoms category filters to explore more items.
               </p>

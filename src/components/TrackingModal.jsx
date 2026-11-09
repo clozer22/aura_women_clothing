@@ -108,7 +108,7 @@ export default function TrackingModal({
 
   // Milestone Stages
   const stages = [
-    { key: 'ORDER_PLACED', label: 'Order Placed', desc: 'Atelier Salcedo Verified', active: true },
+    { key: 'ORDER_PLACED', label: 'Order Placed', desc: 'Order Verified', active: true },
     {
       key: 'TO_SHIP',
       label: 'Scheduled',
@@ -283,7 +283,7 @@ export default function TrackingModal({
                       : 'Parcel Ready for Courier Pickup'}
                   </h4>
                   <p className="text-[11px] text-emerald-700">
-                    {trackingData?.latestLocation || 'Aura Salcedo Atelier, Makati'} • {trackingData?.latestUpdate ? new Date(trackingData.latestUpdate).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Live J&T Sync Active'}
+                    {trackingData?.latestLocation || 'Aura Hub, Makati'} • {trackingData?.latestUpdate ? new Date(trackingData.latestUpdate).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Live J&T Sync Active'}
                   </p>
                 </div>
               </div>
@@ -334,7 +334,7 @@ export default function TrackingModal({
                 </div>
               ) : (
                 <p className="text-xs text-[#A38E88] py-4 text-center">
-                  Tracking checkpoints will appear once the J&T courier rider scans the package at the Salcedo Atelier.
+                  Tracking checkpoints will appear once the J&T courier rider scans the package at the fulfillment center.
                 </p>
               )}
             </div>
@@ -343,7 +343,7 @@ export default function TrackingModal({
             <div className="bg-[#FAF5F2] p-3 border border-[#E8DCD7] flex items-center gap-3 text-[11px] text-[#705B56]">
               <ShieldCheck className="w-5 h-5 text-emerald-700 flex-shrink-0" />
               <span>
-                Protected under Aura Luxury Garment Transit Insurance. Sealed and authenticated from Salcedo Atelier to your doorstep.
+                Protected under Aura Transit Insurance. Sealed and authenticated from dispatch to your doorstep.
               </span>
             </div>
           </div>

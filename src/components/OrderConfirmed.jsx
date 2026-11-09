@@ -142,6 +142,11 @@ export default function OrderConfirmed({ order, onContinueShopping, onViewOrders
       clearWishlist();
     }
 
+    try {
+      localStorage.removeItem('aura_active_checkout_items');
+      sessionStorage.removeItem('aura_pending_checkout_ref');
+    } catch (e) {}
+
     // Report Purchase event to Meta Pixel (deduplicated per order reference)
     if (activeOrder?.order_reference) {
       try {

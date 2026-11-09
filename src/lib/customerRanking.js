@@ -23,8 +23,8 @@ export const DEFAULT_TIER_CONFIG = {
     voucherCode: 'MUSE10',
     voucherDiscount: '10% OFF',
     benefits: [
-      'Welcome Atelier Voucher: 10% off (Code: MUSE10)',
-      'Standard Atelier Care & Order Tracking',
+      'Welcome VIP Voucher: 10% off (Code: MUSE10)',
+      'Standard Order Care & Order Tracking',
       'Seasonal Drop & Collection Early Notifications',
       'Access to AURA Customer Support Hub'
     ],
@@ -43,14 +43,14 @@ export const DEFAULT_TIER_CONFIG = {
     benefits: [
       'Icon VIP Voucher: 15% off (Code: ICON15)',
       'Free Express Delivery on orders over ₱1,500',
-      'Priority Atelier Gift Packaging & Ribboned Box',
+      'Priority Gift Packaging & Ribboned Box',
       '12-Hour Early Access to Limited Capsule Drops',
-      'Direct Atelier Stylist Consultation via Live Chat'
+      'Direct Stylist Consultation via Live Chat'
     ],
   },
   [TIER_KEYS.ROYAL]: {
     name: 'AURA Royal',
-    tagline: 'High Atelier Sovereign',
+    tagline: 'High VIP Sovereign',
     minItems: 16,
     maxItems: Infinity,
     thresholdLabel: 'More than 15 items',

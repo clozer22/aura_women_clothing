@@ -473,13 +473,13 @@ export default function OrderHistory({ onBackToShop, onSelectOrder }) {
 
           <div className="bg-white border border-[#E8DCD7] p-6 sm:p-8 shadow-sm">
             <span className="text-[11px] font-brand uppercase tracking-[0.25em] font-bold text-[#B86B60]">
-              Customer Atelier Account
+              Customer Account
             </span>
             <h1 className="font-brand text-3xl sm:text-4xl font-bold tracking-wide text-[#2C1E1B] mt-1 mb-2">
               MY ORDERS & REVIEWS
             </h1>
             <p className="text-xs sm:text-sm text-[#705B56]">
-              Track your shipments in real-time, view receipts, and share reviews on delivered garments.
+              Track your shipments in real-time, view receipts, and share reviews on delivered items.
             </p>
           </div>
         </div>
@@ -709,7 +709,7 @@ export default function OrderHistory({ onBackToShop, onSelectOrder }) {
                     Verified Buyer Rating
                   </span>
                   <h3 className="font-editorial text-2xl text-[#2C1E1B]">
-                    {reviewModal.existingReview ? 'Edit Your Review' : 'Rate Your Delivered Garment'}
+                    {reviewModal.existingReview ? 'Edit Your Review' : 'Rate Your Delivered Item'}
                   </h3>
                 </div>
                 <button
@@ -809,7 +809,7 @@ export default function OrderHistory({ onBackToShop, onSelectOrder }) {
                   {/* Quick Highlight Tags */}
                   <div className="space-y-1.5">
                     <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56] block">
-                      Garment Highlights (Click to add)
+                      Product Highlights (Click to add)
                     </label>
                     <div className="flex flex-wrap gap-1.5">
                       {availableTags.map((tag) => (

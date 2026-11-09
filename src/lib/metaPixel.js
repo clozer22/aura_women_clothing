@@ -54,7 +54,7 @@ function parseNumericPrice(val) {
 export function trackViewContent(product) {
   if (!product) return;
   fbqSafe('track', 'ViewContent', {
-    content_name: product.name || 'Garment',
+    content_name: product.name || 'Product',
     content_ids: [String(product.id || '')],
     content_type: 'product',
     content_category: product.category || 'Apparel',
@@ -73,7 +73,7 @@ export function trackAddToCart(item) {
   const qty = Number(item.quantity) || 1;
 
   fbqSafe('track', 'AddToCart', {
-    content_name: item.name || 'Garment',
+    content_name: item.name || 'Product',
     content_ids: [String(item.id || item.productId || '')],
     content_type: 'product',
     value: unitPrice * qty,

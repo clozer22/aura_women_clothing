@@ -87,10 +87,21 @@ function MainApp() {
       return null;
     }
   });
+  const getInitialCheckoutItems = () => {
+    try {
+      const saved = localStorage.getItem('aura_active_checkout_items');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return [];
+  };
+
   const [toastMessage, setToastMessage] = useState(null);
   const [catalogSearchQuery, setCatalogSearchQuery] = useState('');
   const [wishlistDrawerOpen, setWishlistDrawerOpen] = useState(false);
-  const [checkoutItems, setCheckoutItems] = useState([]);
+  const [checkoutItems, setCheckoutItems] = useState(getInitialCheckoutItems);
   const [pendingCheckoutItems, setPendingCheckoutItems] = useState(null);
   const [completedOrder, setCompletedOrder] = useState(getInitialOrder());
   const [selectedOrderRef, setSelectedOrderRef] = useState(() => {
@@ -105,7 +116,8 @@ function MainApp() {
   const [legalModalState, setLegalModalState] = useState({ isOpen: false, tab: 'privacy' });
 
   const handleOpenLegal = (tab = 'privacy') => {
-    setLegalModalState({ isOpen: true, tab });
+    const mapped = tab === 'refund' || tab === 'replacement' ? 'returns' : tab;
+    setLegalModalState({ isOpen: true, tab: mapped });
   };
 
   // Only show splash screen on very first visit in this session
@@ -437,6 +449,10 @@ function MainApp() {
       trackInitiateCheckout(validItems, estTotal);
     } catch (e) {}
 
+    try {
+      localStorage.setItem('aura_active_checkout_items', JSON.stringify(validItems));
+    } catch (e) {}
+
     setCheckoutItems(validItems);
     setCurrentView('checkout');
     window.history.pushState(null, '', '/checkout');
@@ -474,6 +490,11 @@ function MainApp() {
 
   const handleOrderCompleted = (order) => {
     setCompletedOrder(order);
+    setCheckoutItems([]);
+    try {
+      localStorage.removeItem('aura_active_checkout_items');
+      sessionStorage.removeItem('aura_pending_checkout_ref');
+    } catch (e) {}
     setCurrentView('order-confirmed');
     window.history.pushState(null, '', '/order-confirmed');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -563,7 +584,14 @@ function MainApp() {
     return (
       <React.Suspense fallback={<PageSkeleton label="Preparing Checkout..." />}>
         <CheckoutPage
-          checkoutItems={checkoutItems.length > 0 ? checkoutItems : getWishlist()}
+          checkoutItems={
+            checkoutItems.length > 0
+              ? checkoutItems
+              : (() => {
+                  const saved = getInitialCheckoutItems();
+                  return saved.length > 0 ? saved : getWishlist();
+                })()
+          }
           onBackToShop={navigateToHome}
           onOrderCompleted={handleOrderCompleted}
         />
@@ -612,7 +640,7 @@ function MainApp() {
   // Render full-screen Customer Profile & Settings View
   if (currentView === 'profile') {
     return (
-      <React.Suspense fallback={<PageSkeleton label="Loading Profile & Atelier Settings..." />}>
+      <React.Suspense fallback={<PageSkeleton label="Loading Profile & Settings..." />}>
         <CustomerProfilePage
           onBackToShop={navigateToHome}
           onNavigateOrders={navigateToOrders}
@@ -713,7 +741,7 @@ function MainApp() {
               onViewFullCatalog={navigateToFullCatalog}
             />
 
-            {/* Atelier Contact Us Section */}
+            {/* Contact Us Section */}
             <ContactSection />
           </div>
         )}
@@ -733,7 +761,7 @@ function MainApp() {
 
         {/* Dedicated Product Detail Page View (Full Page, with Reviews & Feedback) */}
         {currentView === 'product' && (
-          <React.Suspense fallback={<PageSkeleton label="Opening Atelier Garment..." />}>
+          <React.Suspense fallback={<PageSkeleton label="Opening Product..." />}>
             <ProductDetailPage
               product={selectedProduct}
               productId={selectedProductId}

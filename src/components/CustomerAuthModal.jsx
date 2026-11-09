@@ -39,7 +39,7 @@ export default function CustomerAuthModal({
   // Auto-detect when user confirms email in browser or from email link and logs in
   useEffect(() => {
     if (isOpen && user && (mode === 'check_email' || mode === 'verify_otp')) {
-      setSuccessMsg('Account verified! Welcome to Aura Atelier.');
+      setSuccessMsg('Account verified! Welcome to Aura.');
       const timer = setTimeout(() => {
         if (onSuccess) onSuccess();
         onClose();

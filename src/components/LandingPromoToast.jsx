@@ -176,7 +176,7 @@ export default function LandingPromoToast({ onSelectPromo }) {
                 <Sparkles className="w-3 h-3 text-[#B86B60]" />
               </span>
               <span className="text-[10px] font-brand font-bold uppercase tracking-[0.2em] text-[#B86B60]">
-                Ongoing Atelier Privilege
+                Ongoing Exclusive Privilege
               </span>
             </div>
 
@@ -194,7 +194,7 @@ export default function LandingPromoToast({ onSelectPromo }) {
           {/* Body Content */}
           <div className="pt-2.5 pb-3">
             <h4 className="font-editorial text-base sm:text-lg text-[#2C1E1B] font-normal leading-snug">
-              Save <span className="font-semibold text-[#B86B60]">{discountLabel}</span> on Your Garment Order
+              Save <span className="font-semibold text-[#B86B60]">{discountLabel}</span> on Your Order
             </h4>
             <p className="text-[11px] text-[#705B56] mt-1 leading-relaxed">
               {minOrderValue > 0

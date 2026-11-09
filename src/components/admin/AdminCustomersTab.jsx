@@ -72,7 +72,7 @@ const AdminCustomersTab = ({ orders = [], onExportCsv }) => {
       
       const amount = isPaid ? (Number(o.total_amount) || 0) : 0;
 
-      // Count total garments/items ordered
+      // Count total items ordered
       const itemsCount = Array.isArray(o.items) && o.items.length > 0
         ? o.items.reduce((acc, it) => acc + (Number(it?.quantity) || 1), 0)
         : (Number(o.items_count) || 1);

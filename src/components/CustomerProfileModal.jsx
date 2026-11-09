@@ -109,7 +109,7 @@ export default function CustomerProfileModal({ isOpen, onClose }) {
               {fullName ? fullName.charAt(0).toUpperCase() : user.email.charAt(0).toUpperCase()}
             </div>
             <h2 className="font-brand text-2xl font-normal text-[#2C1E1B]">
-              {fullName || 'Atelier Client'}
+              {fullName || 'Aura Client'}
             </h2>
             <p className="text-xs text-[#705B56] mt-0.5">{user.email}</p>
 

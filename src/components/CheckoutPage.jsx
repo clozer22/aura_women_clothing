@@ -23,7 +23,7 @@ import {
 import { createSecureOrderInvoice } from '../lib/xendit';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
-import { removeItemsFromWishlist } from '../lib/wishlistManager';
+import { removeItemsFromWishlist, getWishlist } from '../lib/wishlistManager';
 import { trackInitiateCheckout } from '../lib/metaPixel';
 import { calculateShippingFee, FREE_SHIPPING_THRESHOLD } from '../lib/shippingCalculator';
 import { getCachedProducts } from '../lib/productCache';
@@ -39,6 +39,24 @@ export default function CheckoutPage({
   const [currentStep, setCurrentStep] = useState(1); // 1: Shipping, 2: Review, 3: Payment
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [isSendingOtp, setIsSendingOtp] = useState(false);
+
+  // Resolve effective checkout items, preserving cached items from localStorage if returning from external payment redirect
+  const effectiveCheckoutItems = useMemo(() => {
+    if (Array.isArray(checkoutItems) && checkoutItems.length > 0) {
+      try {
+        localStorage.setItem('aura_active_checkout_items', JSON.stringify(checkoutItems));
+      } catch (e) {}
+      return checkoutItems;
+    }
+    try {
+      const saved = localStorage.getItem('aura_active_checkout_items');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return getWishlist();
+  }, [checkoutItems]);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -90,7 +108,7 @@ export default function CheckoutPage({
   // Real-time sold out item validation in checkout
   const soldOutItems = useMemo(() => {
     const liveProducts = getCachedProducts();
-    return checkoutItems.filter((item) => {
+    return effectiveCheckoutItems.filter((item) => {
       const match =
         (Array.isArray(liveProducts) ? liveProducts.find((p) => String(p.id) === String(item.id)) : null) ||
         PRODUCTS.find((p) => String(p.id) === String(item.id)) ||
@@ -104,14 +122,14 @@ export default function CheckoutPage({
           : null;
       return badge === 'SOLD OUT' || badge === 'ARCHIVE' || (qty !== null && qty <= 0);
     });
-  }, [checkoutItems]);
+  }, [effectiveCheckoutItems]);
 
   const hasSoldOutItems = soldOutItems.length > 0;
   const isItemSoldOut = (item) => soldOutItems.some((s) => String(s.id) === String(item.id));
 
   // Manage selected items within checkout (defaults to all in-stock items)
   const [selectedItemIds, setSelectedItemIds] = useState(() => {
-    return checkoutItems
+    return effectiveCheckoutItems
       .filter((item) => {
         const liveProducts = getCachedProducts();
         const match =
@@ -131,6 +149,18 @@ export default function CheckoutPage({
       .map((item) => item.wishlistId || item.id);
   });
 
+  // Re-sync selectedItemIds if effectiveCheckoutItems loads or rehydrates
+  useEffect(() => {
+    if (selectedItemIds.length === 0 && effectiveCheckoutItems.length > 0) {
+      const inStockIds = effectiveCheckoutItems
+        .filter((item) => !isItemSoldOut(item))
+        .map((item) => item.wishlistId || item.id);
+      if (inStockIds.length > 0) {
+        setSelectedItemIds(inStockIds);
+      }
+    }
+  }, [effectiveCheckoutItems, selectedItemIds.length]);
+
   const toggleItemSelection = (itemId) => {
     setSelectedItemIds((prev) =>
       prev.includes(itemId) ? prev.filter((id) => id !== itemId) : [...prev, itemId]
@@ -138,11 +168,15 @@ export default function CheckoutPage({
   };
 
   const selectedCheckoutItems = useMemo(() => {
-    return checkoutItems.filter((item) => {
+    const filtered = effectiveCheckoutItems.filter((item) => {
       const id = item.wishlistId || item.id;
       return selectedItemIds.includes(id) && !isItemSoldOut(item);
     });
-  }, [checkoutItems, selectedItemIds, soldOutItems]);
+    if (filtered.length === 0 && effectiveCheckoutItems.length > 0) {
+      return effectiveCheckoutItems.filter((item) => !isItemSoldOut(item));
+    }
+    return filtered;
+  }, [effectiveCheckoutItems, selectedItemIds, soldOutItems]);
 
   // Load saved profile / address from localStorage on mount & report InitiateCheckout to Meta Pixel
   useEffect(() => {
@@ -160,13 +194,26 @@ export default function CheckoutPage({
       }
     } catch (e) {}
 
-    if (Array.isArray(checkoutItems) && checkoutItems.length > 0) {
+    // Check if returning from cancelled or abandoned payment
+    try {
+      const search = window.location.search;
+      if (search.includes('payment=cancelled') || search.includes('status=cancelled')) {
+        setPaymentError('Payment was not completed. Your items are safe in checkout — feel free to choose another payment method or try again.');
+        // Clean up URL query parameters without full reload
+        const url = new URL(window.location.href);
+        url.searchParams.delete('payment');
+        url.searchParams.delete('status');
+        window.history.replaceState({}, '', url.pathname);
+      }
+    } catch (e) {}
+
+    if (Array.isArray(effectiveCheckoutItems) && effectiveCheckoutItems.length > 0) {
       try {
-        const initialSubtotal = checkoutItems.reduce(
+        const initialSubtotal = effectiveCheckoutItems.reduce(
           (sum, item) => sum + (Number(item.price) || 0) * (item.quantity || 1),
           0
         );
-        trackInitiateCheckout(checkoutItems, initialSubtotal + 150);
+        trackInitiateCheckout(effectiveCheckoutItems, initialSubtotal + 150);
       } catch (err) {}
     }
   }, []);
@@ -345,9 +392,9 @@ export default function CheckoutPage({
   );
   
   const discountAmount = appliedPromo 
-    ? (appliedPromo.discount_type === 'percentage' 
-        ? subtotal * (appliedPromo.discount_value / 100)
-        : appliedPromo.discount_value)
+    ? Math.round(appliedPromo.discount_type === 'percentage' 
+        ? (subtotal * Number(appliedPromo.discount_value)) / 100
+        : Number(appliedPromo.discount_value) || 0)
     : 0;
     
   const netSubtotal = Math.max(0, subtotal - discountAmount);
@@ -411,7 +458,16 @@ export default function CheckoutPage({
       if (!promoData.is_active) throw new Error("This voucher or promo code is no longer active.");
       if (promoData.expires_at && new Date(promoData.expires_at) < new Date()) throw new Error("This voucher or promo code has expired.");
       if (promoData.usage_limit && promoData.times_used >= promoData.usage_limit) throw new Error("This voucher has reached its usage limit.");
-      if (promoData.min_order_value && subtotal < promoData.min_order_value) throw new Error(`Minimum order value of ₱${promoData.min_order_value} required.`);
+
+      // Customer tier/rank vouchers (MUSE10, ICON15, ROYAL20) are earned status perks and have NO minimum order requirement
+      const RANK_VOUCHERS = ['MUSE10', 'ICON15', 'ROYAL20'];
+      if (RANK_VOUCHERS.includes(cleanCode)) {
+        promoData.min_order_value = 0;
+      }
+
+      if (promoData.min_order_value && Number(promoData.min_order_value) > 0 && subtotal < Number(promoData.min_order_value)) {
+        throw new Error(`Minimum order value of ₱${Number(promoData.min_order_value).toLocaleString()} required.`);
+      }
       
       setAppliedPromo(promoData);
       setPromoCodeInput('');
@@ -537,20 +593,26 @@ export default function CheckoutPage({
         } catch (err) {}
       }
 
-      // Clear checked-out items from active cart and Supabase database
-      try {
-        await removeItemsFromWishlist(selectedCheckoutItems);
-      } catch (e) {}
-
       // 3. Redirect to verified Xendit payment interface if online invoice provided
       if (result.invoiceUrl) {
+        // Persist items & order reference so returning or cancelling from Xendit never loses items or state
+        try {
+          localStorage.setItem('aura_active_checkout_items', JSON.stringify(selectedCheckoutItems));
+          sessionStorage.setItem('aura_pending_checkout_ref', result.orderReference);
+        } catch (e) {}
+
         window.location.href = result.invoiceUrl;
         return;
       }
 
+      // 4. For COD or direct instant orders, clear checked-out items and route directly to Order Confirmed
+      try {
+        await removeItemsFromWishlist(selectedCheckoutItems);
+        localStorage.removeItem('aura_active_checkout_items');
+      } catch (e) {}
+
       setIsProcessingOrder(false);
 
-      // 4. For COD or direct instant orders, route directly to Order Confirmed
       if (onOrderCompleted && result.order) {
         onOrderCompleted(result.order);
         return;
@@ -1111,10 +1173,10 @@ export default function CheckoutPage({
                 {/* Items Summary Table */}
                 <div className="space-y-3">
                   <h3 className="text-xs font-brand uppercase tracking-wider font-bold text-[#705B56]">
-                    Items in this Order ({selectedCheckoutItems.length} selected of {checkoutItems.length})
+                    Items in this Order ({selectedCheckoutItems.length} selected of {effectiveCheckoutItems.length})
                   </h3>
                   <div className="divide-y divide-[#E8DCD7]">
-                    {checkoutItems.map((item) => {
+                    {effectiveCheckoutItems.map((item) => {
                       const itemIsSoldOut = isItemSoldOut(item);
                       const isSelected = !itemIsSoldOut && selectedItemIds.includes(item.wishlistId || item.id);
                       return (
@@ -1409,12 +1471,12 @@ export default function CheckoutPage({
           <div className="lg:col-span-5 space-y-6">
             <div className="bg-white border border-[#E8DCD7] p-6 sm:p-8 shadow-sm space-y-6">
               <h3 className="font-brand text-xs uppercase tracking-[0.25em] font-bold text-[#2C1E1B] pb-3 border-b border-[#E8DCD7]">
-                Order Summary ({selectedCheckoutItems.length} selected of {checkoutItems.length})
+                Order Summary ({selectedCheckoutItems.length} selected of {effectiveCheckoutItems.length})
               </h3>
 
               {/* Items List */}
               <div className="space-y-4 divide-y divide-[#E8DCD7]">
-                {checkoutItems.map((item) => {
+                {effectiveCheckoutItems.map((item) => {
                   const itemIsSoldOut = isItemSoldOut(item);
                   const isSelected = !itemIsSoldOut && selectedItemIds.includes(item.wishlistId || item.id);
                   return (
@@ -1574,7 +1636,7 @@ export default function CheckoutPage({
                   <span>Shopping Protection</span>
                 </div>
                 <p className="text-[11px] text-[#705B56] leading-relaxed">
-                  Free returns within 30 days. All orders include door-to-door tracking and authenticated atelier inspection.
+                  2-Day replacement guarantee upon delivery for defective, damaged, or incorrect items. All orders include door-to-door tracking.
                 </p>
               </div>
             </div>

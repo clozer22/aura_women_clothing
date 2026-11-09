@@ -127,7 +127,7 @@ const AdminDashboardTab = memo(({
             Dashboard
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Monitor sales revenue, visitor traffic, garment inventory, and order dispatch.
+            Monitor sales revenue, visitor traffic, product inventory, and order dispatch.
           </p>
         </div>
 
@@ -206,7 +206,7 @@ const AdminDashboardTab = memo(({
 
         {/* CARD 5: TOTAL STOCKS & LOW STOCK WARNING */}
         <StatCard
-          title="Garment Stock"
+          title="Total Stock"
           value={isLoadingStats ? '—' : `${(dashboardStats.totalStock || 0).toLocaleString()}`}
           badgeText={dashboardStats.lowStockCount > 0 ? `${dashboardStats.lowStockCount} Low` : 'Stock Healthy'}
           badgeType={dashboardStats.lowStockCount > 0 ? 'warning' : 'success'}
@@ -290,7 +290,7 @@ const AdminDashboardTab = memo(({
               </div>
               <div>
                 <h3 className="text-sm font-bold font-sans text-slate-900">Restock Urgency Monitor</h3>
-                <p className="text-[11px] text-slate-500">Catalog garments with 10 or fewer pieces remaining.</p>
+                <p className="text-[11px] text-slate-500">Catalog items with 10 or fewer pieces remaining.</p>
               </div>
             </div>
 
@@ -316,7 +316,7 @@ const AdminDashboardTab = memo(({
               <CheckCircle2 className="w-7 h-7 text-emerald-600 mx-auto" />
               <h4 className="font-sans font-semibold text-sm text-slate-800">All Inventory Levels Healthy</h4>
               <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                None of your catalog garments currently have stock at or below the 10-unit urgency threshold.
+                None of your catalog products currently have stock at or below the 10-unit urgency threshold.
               </p>
             </div>
           ) : (
@@ -341,7 +341,7 @@ const AdminDashboardTab = memo(({
                           {item.name}
                         </h4>
                         <p className="text-[10px] text-slate-400 uppercase tracking-wider truncate">
-                          {item.subType || item.category || 'Garment'}
+                          {item.subType || item.category || 'Product'}
                         </p>
                         <span className="text-xs font-semibold text-slate-700 mt-0.5 block">
                           ₱{Number(item.price || 0).toLocaleString()}
@@ -364,7 +364,7 @@ const AdminDashboardTab = memo(({
                         <button
                           onClick={() => onEditProduct(item)}
                           className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-[10px] font-semibold rounded-lg transition-all flex items-center gap-1 cursor-pointer"
-                          title="Restock or Edit this garment"
+                          title="Restock or Edit this product"
                         >
                           <Edit className="w-3 h-3" />
                           <span>Restock</span>
@@ -381,7 +381,7 @@ const AdminDashboardTab = memo(({
                     onClick={() => onNavigateTab('products')}
                     className="text-xs font-semibold text-blue-600 hover:text-blue-700 transition-colors cursor-pointer"
                   >
-                    + View {dashboardStats.lowStockItems.length - 6} more low stock garments in Products Table →
+                    + View {dashboardStats.lowStockItems.length - 6} more low stock products in Products Table →
                   </button>
                 </div>
               )}

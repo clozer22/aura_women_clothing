@@ -4,7 +4,7 @@ import { supabaseAdmin as supabase } from '../../lib/supabaseClient';
 
 const DEFAULT_VOUCHER_PRESETS = [
   { code: 'MUSE10', type: 'voucher', discount_type: 'percentage', discount_value: 10, min_order_value: 0, label: 'Muse Tier Voucher (10% OFF)' },
-  { code: 'ICON15', type: 'voucher', discount_type: 'percentage', discount_value: 15, min_order_value: 1500, label: 'Icon Tier Voucher (15% OFF, min ₱1.5k)' },
+  { code: 'ICON15', type: 'voucher', discount_type: 'percentage', discount_value: 15, min_order_value: 0, label: 'Icon Tier Voucher (15% OFF, No Min. Spend)' },
   { code: 'ROYAL20', type: 'voucher', discount_type: 'percentage', discount_value: 20, min_order_value: 0, label: 'Royal Tier Voucher (20% OFF)' },
   { code: 'AURA100', type: 'voucher', discount_type: 'fixed', discount_value: 100, min_order_value: 800, label: 'Gift Voucher (₱100 OFF, min ₱800)' },
   { code: 'WELCOME50', type: 'voucher', discount_type: 'fixed', discount_value: 50, min_order_value: 500, label: 'Welcome Voucher (₱50 OFF, min ₱500)' },

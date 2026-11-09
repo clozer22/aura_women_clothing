@@ -211,8 +211,13 @@ export default function QuickViewModal({ product, onClose, onBuyNow, onOpenWishl
               {/* Dynamic Description Label & Paragraph */}
               <div className="mb-6">
                 <h4 className="text-[0.9rem] tracking-[0.50em] font-black font-brand text-[#2C1E1B] text-justify mb-2">
-                  {product.descriptionLabel || 'Description'}
+                  {product.descriptionLabel && product.descriptionLabel.length < 50 ? product.descriptionLabel : 'Description'}
                 </h4>
+                {product.descriptionLabel && product.descriptionLabel.length >= 50 && (
+                  <p className="text-xs sm:text-sm text-[#705B56] font-brand font-normal leading-relaxed text-justify mb-2">
+                    {product.descriptionLabel}
+                  </p>
+                )}
                 <div
                   className="text-xs sm:text-sm text-[#705B56] font-brand font-normal leading-relaxed text-justify whitespace-pre-wrap product-description-html"
                   dangerouslySetInnerHTML={{ __html: product.description || '' }}

@@ -42,7 +42,7 @@ export default function A6ThermalPrintModal({ isOpen, onClose, order }) {
             return `${it.name} (${it.quantity || 1}x, ${sizeLabel})`;
           })
           .join(', ')
-      : 'Aura Garments / Apparel';
+      : 'Aura Clothing / Apparel';
 
   const formattedAddress = order.shipping_address
     ? `${order.shipping_address.street || ''}, ${order.shipping_address.barangay || ''} ${order.shipping_address.city || ''}, ${order.shipping_address.province || ''} ${order.shipping_address.postal_code || order.shipping_address.zipCode || order.shipping_address.zip || ''}`
@@ -265,10 +265,10 @@ export default function A6ThermalPrintModal({ isOpen, onClose, order }) {
                       <span className="font-bold uppercase tracking-wider block text-[8px] text-slate-500">
                         FROM (SHIPPER):
                       </span>
-                      <p className="font-bold text-[10px] text-slate-900">Aura Atelier Dispatch Hub</p>
+                      <p className="font-bold text-[10px] text-slate-900">Aura Fulfillment Hub</p>
                       <p className="text-slate-800">09171234567</p>
                       <p className="text-slate-700 leading-tight text-[8.5px]">
-                        108 Atelier Blvd, Salcedo Village, Bel-Air, Makati City, Metro Manila 1209
+                        Salcedo Village, Bel-Air, Makati City, Metro Manila 1209
                       </p>
                     </div>
 
@@ -401,7 +401,7 @@ export default function A6ThermalPrintModal({ isOpen, onClose, order }) {
                           return (
                             <tr key={idx} className="align-top">
                               <td className="py-1 pr-1 leading-tight font-medium text-slate-900">
-                                <div className="font-bold text-[8px] truncate">{item.name || 'Aura Garment'}</div>
+                                <div className="font-bold text-[8px] truncate">{item.name || 'Aura Item'}</div>
                                 <div className="text-[6.5px] text-slate-500 font-mono">
                                   SKU: {String(item.id || `AURA-${idx + 1}`).slice(0, 10)}
                                 </div>

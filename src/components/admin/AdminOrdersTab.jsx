@@ -1934,9 +1934,9 @@ const AdminOrdersTab = ({
                   </div>
                 </div>
 
-                {/* Middle Row: Purchased Garments Thumbnails & Shipping Info */}
+                {/* Middle Row: Purchased Items Thumbnails & Shipping Info */}
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-4 text-xs items-center">
-                  {/* Garment Items (7 cols) */}
+                  {/* Order Items (7 cols) */}
                   <div className="md:col-span-7 flex flex-wrap items-center gap-2.5">
                     {order.items?.map((item, idx) => (
                       <div
@@ -2813,7 +2813,7 @@ const AdminOrdersTab = ({
                       <option value="box">Carton Box (Up to 10.0 kg - Bulk/Haul)</option>
                     </select>
                     <p className="text-[10px] text-slate-400">
-                      Standard Aura garment order fits in Small or Medium pouch.
+                      Standard Aura order fits in Small or Medium pouch.
                     </p>
                   </div>
 
@@ -3034,10 +3034,10 @@ const AdminOrdersTab = ({
                           <span className="font-bold uppercase tracking-wider block text-[9px] text-slate-500">
                             FROM (SHIPPER):
                           </span>
-                          <p className="font-bold text-xs">Aura Atelier Dispatch Hub</p>
+                          <p className="font-bold text-xs">Aura Fulfillment Hub</p>
                           <p>09171234567</p>
                           <p className="text-slate-700 leading-tight">
-                            108 Atelier Blvd, Salcedo Village, Bel-Air, Makati City, Metro Manila 1209
+                            Salcedo Village, Bel-Air, Makati City, Metro Manila 1209
                           </p>
                         </div>
 
@@ -3073,7 +3073,7 @@ const AdminOrdersTab = ({
                         <div className="bg-slate-50 p-2 border border-slate-300">
                           <span className="block font-bold text-[9px] text-slate-500 mb-0.5">CONTENT SPECIFICATION:</span>
                           <p className="truncate">
-                            {ord.items?.map(it => `${it.name} (${it.quantity || 1}x)`).join(', ') || 'Garments / Apparel'}
+                            {ord.items?.map(it => `${it.name} (${it.quantity || 1}x)`).join(', ') || 'Clothing / Apparel'}
                           </p>
                         </div>
 
@@ -3170,7 +3170,7 @@ const AdminOrdersTab = ({
                     type="text"
                     value={cancelNotes}
                     onChange={(e) => setCancelNotes(e.target.value)}
-                    placeholder="e.g. Buyer contacted atelier phone line"
+                    placeholder="e.g. Buyer contacted store phone line"
                     className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:border-rose-500"
                   />
                 </div>
@@ -3297,10 +3297,10 @@ const AdminOrdersTab = ({
                       <span className="font-bold uppercase tracking-wider block text-[9px] text-slate-500">
                         FROM (SHIPPER):
                       </span>
-                      <p className="font-bold text-xs">Aura Atelier Dispatch Hub</p>
+                      <p className="font-bold text-xs">Aura Fulfillment Hub</p>
                       <p>09171234567</p>
                       <p className="text-slate-700 leading-tight">
-                        108 Atelier Blvd, Salcedo Village, Bel-Air, Makati City, Metro Manila 1209
+                        Salcedo Village, Bel-Air, Makati City, Metro Manila 1209
                       </p>
                     </div>
 
@@ -3336,7 +3336,7 @@ const AdminOrdersTab = ({
                     <div className="bg-slate-50 p-2 border border-slate-300">
                       <span className="block font-bold text-[9px] text-slate-500 mb-0.5">CONTENT SPECIFICATION:</span>
                       <p className="truncate">
-                        {selectedWaybillOrder.items?.map(it => `${it.name} (${it.quantity || 1}x, ${typeof it.size === 'object' ? it.size?.name : (it.size || 'Std')})`).join(', ') || 'Garments / Apparel'}
+                        {selectedWaybillOrder.items?.map(it => `${it.name} (${it.quantity || 1}x, ${typeof it.size === 'object' ? it.size?.name : (it.size || 'Std')})`).join(', ') || 'Clothing / Apparel'}
                       </p>
                     </div>
 

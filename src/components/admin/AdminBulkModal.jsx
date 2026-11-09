@@ -48,7 +48,7 @@ const AdminBulkModal = memo(({
               Bulk Update Size Chart
             </h3>
             <p className="text-xs text-slate-500 mt-1">
-              Upload a size chart image to apply across the {selectedCount} selected garments.
+              Upload a size chart image to apply across the {selectedCount} selected products.
             </p>
           </div>
 

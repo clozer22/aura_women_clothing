@@ -36,11 +36,25 @@ function ProductCatalog({ products, isLoading, onSelectProduct, onViewFullCatalo
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('featured');
 
-  // Use featured items if selected by the admin, otherwise fall back to all products
+  // Prioritize active discounted items first, then the 6 featured items, falling back to all products
   const activeList = useMemo(() => {
     const list = products || [];
+    const discounted = list.filter(p => getProductDiscountPercent(p) > 0);
     const featured = list.filter(p => p.isFeatured);
-    return featured.length > 0 ? featured : list;
+
+    const map = new Map();
+    discounted.forEach(p => map.set(p.id, p));
+    featured.forEach(p => {
+      if (!map.has(p.id)) map.set(p.id, p);
+    });
+
+    if (map.size < 6) {
+      list.forEach(p => {
+        if (!map.has(p.id)) map.set(p.id, p);
+      });
+    }
+
+    return Array.from(map.values());
   }, [products]);
 
   // Limit to first 6 items on home page catalog preview, with discounted items on top
@@ -97,7 +111,7 @@ function ProductCatalog({ products, isLoading, onSelectProduct, onViewFullCatalo
             <Sparkles className="w-8 h-8 text-[#B86B60] mb-4 animate-pulse" />
             <h3 className="font-editorial text-2xl text-[#2C1E1B] mb-2 font-normal">Collection Under Refinement</h3>
             <p className="text-xs text-[#705B56] max-w-md leading-relaxed">
-              Our atelier is currently orchestrating new seasonal garments. Please visit the admin portal to publish catalog listings, or connect with our designers to be notified upon launch.
+              We are currently preparing new seasonal collections. Please visit the admin portal to publish catalog listings, or connect with our designers to be notified upon launch.
             </p>
           </div>
         ) : (

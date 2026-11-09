@@ -87,7 +87,7 @@ export default function CartDrawer({ isOpen, onClose, cartItems, onUpdateQuantit
                   </motion.div>
                   <h3 className="font-editorial text-3xl text-[#2C1E1B] mb-2">Order Confirmed!</h3>
                   <p className="text-xs text-[#705B56] mb-6 leading-relaxed">
-                    Thank you for shopping with Aura Women's Clothing. Your order #AU-2026-8891 has been received and our atelier is preparing your items.
+                    Thank you for shopping with Aura Women's Clothing. Your order #AU-2026-8891 has been received and our team is preparing your items.
                   </p>
                   <button
                     onClick={() => {
@@ -258,7 +258,7 @@ export default function CartDrawer({ isOpen, onClose, cartItems, onUpdateQuantit
                   className="w-full py-4 bg-[#2C1E1B] hover:bg-[#B86B60] text-white rounded-none text-xs font-semibold uppercase tracking-[0.2em] transition-all duration-300 shadow-xl flex items-center justify-center gap-2"
                 >
                   {isCheckingOut ? (
-                    <span>Processing Atelier Order...</span>
+                    <span>Processing Order...</span>
                   ) : (
                     <>
                       <span>Proceed to Checkout</span>

@@ -112,10 +112,10 @@ export default function Footer({ onNavigateAdmin, onOpenLegal }) {
           <span className="text-[#E8DCD7]">•</span>
           <button
             type="button"
-            onClick={() => handleOpenLegal('refund')}
+            onClick={() => handleOpenLegal('returns')}
             className="hover:text-[#2C1E1B] transition-colors underline-offset-4 hover:underline"
           >
-            Return & Refund Policy
+            Replacement Policy
           </button>
           <span className="text-[#E8DCD7]">•</span>
           <button

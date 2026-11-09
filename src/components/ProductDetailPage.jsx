@@ -314,7 +314,7 @@ export default function ProductDetailPage({
     const shareUrl = `${window.location.origin}/product?id=${encodeURIComponent(prodId)}`;
     const shareData = {
       title: product?.name || "Aura Women's Clothing",
-      text: `Discover ${product?.name || 'this atelier piece'} at Aura Official Atelier`,
+      text: `Discover ${product?.name || 'this piece'} at Aura Official`,
       url: shareUrl,
     };
 
@@ -371,7 +371,7 @@ export default function ProductDetailPage({
       <div className="min-h-screen bg-[#FAF5F2] flex flex-col items-center justify-center p-6 text-[#2C1E1B]">
         <div className="w-10 h-10 border-2 border-[#2C1E1B] border-t-transparent rounded-full animate-spin mb-4" />
         <p className="font-brand text-xs uppercase tracking-[0.25em] font-semibold text-[#705B56]">
-          Loading Atelier Garment...
+          Loading Product...
         </p>
       </div>
     );
@@ -382,10 +382,10 @@ export default function ProductDetailPage({
       <div className="min-h-screen bg-[#FAF5F2] flex flex-col items-center justify-center p-6 text-[#2C1E1B]">
         <Package className="w-12 h-12 text-[#A38E88] stroke-[1.2] mb-3" />
         <h2 className="font-brand text-xl font-bold uppercase tracking-wider mb-2">
-          Garment Not Found
+          Product Not Found
         </h2>
         <p className="text-xs text-[#705B56] max-w-sm text-center mb-6">
-          The requested piece may have been retired from our current atelier collection.
+          The requested piece may have been retired from our current collection.
         </p>
         <button
           onClick={onBack}
@@ -410,7 +410,7 @@ export default function ProductDetailPage({
             className="fixed bottom-6 right-6 z-50 bg-[#2C1E1B] text-white px-5 py-3 rounded-none text-xs font-semibold shadow-2xl flex items-center gap-2 border border-white/20"
           >
             <Check className="w-4 h-4 text-emerald-400" />
-            <span>Garment link copied to clipboard!</span>
+            <span>Product link copied to clipboard!</span>
           </motion.div>
         )}
       </AnimatePresence>
@@ -444,14 +444,14 @@ export default function ProductDetailPage({
           <button
             onClick={handleShare}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#E8DCD7] hover:border-[#B86B60] text-[#705B56] hover:text-[#2C1E1B] transition-colors rounded-none cursor-pointer"
-            title="Share this garment"
+            title="Share this product"
           >
             <Share2 className="w-3.5 h-3.5" />
             <span className="uppercase tracking-wider text-[11px] font-bold">Share</span>
           </button>
         </div>
 
-        {/* Garment Hero: 2-Column Desktop Grid */}
+        {/* Product Hero: 2-Column Desktop Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-14 py-8 lg:py-12">
 
           {/* Left Column: Visual Media Display */}
@@ -496,7 +496,7 @@ export default function ProductDetailPage({
               </button>
             </div>
 
-            {/* Quick Atelier Confidence Badges */}
+            {/* Quick Confidence Badges */}
             <div className="grid grid-cols-3 gap-2 text-center text-xs text-[#705B56] pt-2">
               <div className="p-3 bg-white border border-[#E8DCD7] space-y-1">
                 <Truck className="w-4 h-4 text-[#B86B60] mx-auto stroke-[1.5]" />
@@ -511,12 +511,12 @@ export default function ProductDetailPage({
               <div className="p-3 bg-white border border-[#E8DCD7] space-y-1">
                 <Package className="w-4 h-4 text-[#B86B60] mx-auto stroke-[1.5]" />
                 <p className="font-bold uppercase tracking-wider text-[10px] text-[#2C1E1B]">Secure Packaging</p>
-                <p className="text-[10px] text-[#705B56]">Protective Atelier Box</p>
+                <p className="text-[10px] text-[#705B56]">Protective Packaging Box</p>
               </div>
             </div>
           </div>
 
-          {/* Right Column: Garment Information, Sizing & Actions */}
+          {/* Right Column: Product Information, Sizing & Actions */}
           <div className="lg:col-span-6 flex flex-col justify-between space-y-6">
 
             <div className="space-y-4">
@@ -578,7 +578,7 @@ export default function ProductDetailPage({
 
                 <span className="text-emerald-700 text-[11px] font-semibold flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
-                  Verified Atelier Item
+                  Verified Authentic Item
                 </span>
               </div>
 
@@ -608,19 +608,22 @@ export default function ProductDetailPage({
               </div>
 
               {/* Description Section with Justified Format and Toggle Button (Hidden by default) */}
-              {product.description && (
+              {(product.description || product.descriptionLabel) && (
                 <div className="space-y-2 pt-2">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-xs uppercase font-brand tracking-[0.25em] font-bold text-[#2C1E1B]">
-                      {product.descriptionLabel || 'Garment Silhouette & Notes'}
-                    </h4>
-                  </div>
-
                   {isDescriptionExpanded && (
-                    <div
-                      className="text-xs sm:text-sm text-[#705B56] leading-relaxed text-justify whitespace-pre-wrap product-description-html pt-1"
-                      dangerouslySetInnerHTML={{ __html: product.description || '' }}
-                    />
+                    <div className="space-y-2.5 pt-1">
+                      {product.descriptionLabel && (
+                        <h4 className="text-xs uppercase font-brand tracking-[0.25em] font-bold text-[#2C1E1B]">
+                          {product.descriptionLabel}
+                        </h4>
+                      )}
+                      {product.description && (
+                        <div
+                          className="text-xs sm:text-sm text-[#705B56] leading-relaxed text-justify whitespace-pre-wrap product-description-html"
+                          dangerouslySetInnerHTML={{ __html: product.description || '' }}
+                        />
+                      )}
+                    </div>
                   )}
 
                   <button
@@ -637,7 +640,7 @@ export default function ProductDetailPage({
                 </div>
               )}
 
-              {/* Atelier Details / Feature Highlights */}
+              {/* Product Details / Feature Highlights */}
               <div className="p-4 bg-white border border-[#E8DCD7] space-y-2 text-xs">
                 <span className="text-[10px] uppercase font-brand tracking-wider font-bold text-[#705B56] block">
                   Tailoring Specifications
@@ -654,7 +657,7 @@ export default function ProductDetailPage({
                     <>
                       <li className="flex items-center gap-1.5">
                         <span className="text-[#B86B60]">✦</span>
-                        <span>Handcrafted Filipino Atelier cut</span>
+                        <span>Handcrafted Filipino tailoring</span>
                       </li>
                       <li className="flex items-center gap-1.5">
                         <span className="text-[#B86B60]">✦</span>
@@ -826,7 +829,7 @@ export default function ProductDetailPage({
             {/* Score Column */}
             <div className="md:col-span-4 flex flex-col justify-center items-center md:items-start text-center md:text-left md:border-r md:border-[#E8DCD7] md:pr-8 space-y-2">
               <span className="text-[11px] font-brand uppercase tracking-wider text-[#705B56] font-bold">
-                Overall Garment Rating
+                Overall Product Rating
               </span>
               <div className="flex items-baseline gap-2">
                 <span className="font-hero text-5xl font-bold text-[#2C1E1B]">
@@ -927,7 +930,7 @@ export default function ProductDetailPage({
                 </h3>
                 <p className="text-xs text-[#705B56] max-w-md mx-auto">
                   {reviews.length === 0
-                    ? 'Be the first verified customer to rate this atelier garment! Place an order and submit your review directly from your Order History after delivery.'
+                    ? 'Be the first verified customer to rate this product! Place an order and submit your review directly from your Order History after delivery.'
                     : 'Try selecting "All Reviews" to view other customer feedback.'}
                 </p>
                 {reviews.length === 0 && onNavigateOrders && (
@@ -1061,7 +1064,7 @@ export default function ProductDetailPage({
 
         </div>
 
-        {/* Complete the Atelier Look / Related Garments */}
+        {/* Complete the Look / Related Products */}
         {relatedProducts.length > 0 && (
           <div className="mt-20 pt-12 border-t border-[#E8DCD7] space-y-6">
             <div className="flex items-center justify-between">
@@ -1235,7 +1238,7 @@ export default function ProductDetailPage({
               </button>
               <img
                 src={reviewLightboxImg}
-                alt="Customer Garment Proof"
+                alt="Customer Product Proof"
                 className="max-w-full max-h-[80vh] object-contain block mx-auto"
               />
             </div>
@@ -1246,7 +1249,7 @@ export default function ProductDetailPage({
       {/* Fixed Bottom Action Bar for Mobile View (SHEIN style) */}
       <div className="fixed bottom-0 left-0 right-0 z-40 md:hidden bg-white/95 backdrop-blur-md border-t border-[#E8DCD7] shadow-[0_-4px_25px_rgba(0,0,0,0.08)] px-3.5 pt-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]">
         <div className="max-w-md mx-auto space-y-2">
-          {/* Quick Size Selection Strip (if garment has multiple sizes) */}
+          {/* Quick Size Selection Strip (if product has multiple sizes) */}
           {sizesList && sizesList.length > 1 && (
             <div className="flex items-center justify-between pb-2 border-b border-[#E8DCD7]/70">
               <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5">

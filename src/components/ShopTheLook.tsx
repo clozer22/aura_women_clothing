@@ -47,7 +47,7 @@ export interface ShopTheLookProps {
 }
 
 /**
- * Default Curated Hotspots locked onto the 4 AURA Atelier Models
+ * Default Curated Hotspots locked onto the 4 AURA Models
  * from the official ABOUT AURA banner image (1920x1080)
  */
 export const DEFAULT_ABOUT_AURA_HOTSPOTS: LookbookHotspot[] = [
@@ -359,7 +359,7 @@ export const ShopTheLook: React.FC<ShopTheLookProps> = ({
             {/* Lookbook / Models Image */}
             <img
               src={bannerImage}
-              alt={heading || 'AURA Atelier Lookbook'}
+              alt={heading || 'AURA Lookbook'}
               className="w-full h-full object-cover block pointer-events-none select-none"
               loading="eager"
               draggable={false}
@@ -373,7 +373,7 @@ export const ShopTheLook: React.FC<ShopTheLookProps> = ({
               // If no matching product exists in the catalog, skip rendering this pin
               if (!product) return null;
 
-              const title = product.title || product.name || 'Aura Garment';
+              const title = product.title || product.name || 'Aura Item';
               const sizesList = resolveSizes(product.sizes);
               const priceText = formatPrice(product.price);
 

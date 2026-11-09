@@ -28,7 +28,7 @@ const getHexForColorName = (name) => {
   return '#E6D7CD';
 };
 
-const TOPS_DEFAULT_DESC = `<p>A timeless essential designed for effortless elegance. Crafted from premium breathable fabric that drapes comfortably for everyday wear.</p><br>Details<br>• Designed for effortless everyday styling<br>• Soft, comfortable and breathable fabric<br>• High-quality atelier tailoring<br>• Available in XXS–XL<br><br>Care<br>Machine wash on a gentle cycle with cold water. Avoid harsh bleach to preserve fabric quality.`;
+const TOPS_DEFAULT_DESC = `<p>A timeless essential designed for effortless elegance. Crafted from premium breathable fabric that drapes comfortably for everyday wear.</p><br>Details<br>• Designed for effortless everyday styling<br>• Soft, comfortable and breathable fabric<br>• High-quality tailoring and finish<br>• Available in XXS–XL<br><br>Care<br>Machine wash on a gentle cycle with cold water. Avoid harsh bleach to preserve fabric quality.`;
 
 const BOTTOMS_DEFAULT_DESC = `<p>A feminine take on effortless versatility. Features a flattering high-comfort silhouette tailored for everyday movement and elegant style.</p><br>Details<br>• Flattering silhouette and comfortable waist fit<br>• Designed for movement and all-day comfort<br>• Versatile for casual or elevated looks<br>• Available in XXS–XL<br><br>Care<br>Machine wash on a gentle cycle with cold water. Avoid harsh bleach to preserve fabric quality.`;
 
@@ -221,7 +221,7 @@ const AdminProductModal = memo(({
         return {
           id: `aura-custom-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
           name: fullName,
-          subtitle: 'Atelier Runway Collection',
+          subtitle: 'Signature Collection',
           category: bulkShared.mainCategory === 'top' ? 'Tops' : 'Bottoms',
           mainCategory: bulkShared.mainCategory,
           subType: bulkShared.subType.trim(),
@@ -302,7 +302,7 @@ const AdminProductModal = memo(({
                 ) : (
                   <>
                     <Package className="w-3 h-3" />
-                    <span>Single Garment</span>
+                    <span>Single Product</span>
                   </>
                 )}
               </span>
@@ -316,7 +316,7 @@ const AdminProductModal = memo(({
             </h3>
             {createMode === 'bulk' && !editingProductId && (
               <p className="text-xs text-slate-500 mt-0.5">
-                Define the garment details once. Then simply fill in the image, color, stock, and price for each colorway. Each item will be displayed individually on the storefront.
+                Define the product details once. Then simply fill in the image, color, stock, and price for each colorway. Each item will be displayed individually on the storefront.
               </p>
             )}
           </div>
@@ -371,7 +371,7 @@ const AdminProductModal = memo(({
                 <div className="flex items-center justify-between pb-2 border-b border-slate-200/60">
                   <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
                     <span className="w-5 h-5 rounded-full bg-indigo-600 text-white inline-flex items-center justify-center text-[11px] font-bold">1</span>
-                    Shared Garment Information (One-Time Fill)
+                    Shared Product Information (One-Time Fill)
                   </span>
                   <span className="text-[11px] text-slate-500">Applies to all colors below</span>
                 </div>
@@ -507,7 +507,7 @@ const AdminProductModal = memo(({
                   {/* Status Badge */}
                   <div className="space-y-1">
                     <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">
-                      Garment Status
+                      Product Status
                     </label>
                     <select
                       value={bulkShared.statusBadge}
@@ -742,7 +742,7 @@ const AdminProductModal = memo(({
               <div className="pt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-slate-200">
                 <div className="text-xs text-slate-600">
                   Ready to publish{' '}
-                  <strong className="text-indigo-700">{variants.length} color variants</strong> as individual garments in the catalog.
+                  <strong className="text-indigo-700">{variants.length} color variants</strong> as individual items in the catalog.
                 </div>
                 <div className="flex items-center gap-2.5 self-end sm:self-auto">
                   <LuxuryButton
@@ -761,7 +761,7 @@ const AdminProductModal = memo(({
                     {isSubmittingBulk ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Publishing Garments...</span>
+                        <span>Publishing Products...</span>
                       </>
                     ) : (
                       <>
@@ -824,7 +824,7 @@ const AdminProductModal = memo(({
               <div className="grid grid-cols-2 gap-4">
                 {/* Status Dropdown */}
                 <div className="space-y-1 col-span-2">
-                  <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Garment Status</label>
+                  <label className="text-[10px] uppercase tracking-wider font-bold text-[#705B56]">Product Status</label>
                   <select
                     value={newProduct.statusBadge}
                     onChange={(e) => setNewProduct(prev => ({ ...prev, statusBadge: e.target.value }))}
@@ -1027,7 +1027,7 @@ const AdminProductModal = memo(({
                   value={newProduct.descriptionLabel}
                   onChange={(e) => setNewProduct(prev => ({ ...prev, descriptionLabel: e.target.value }))}
                   className="w-full px-4 py-3 rounded-none bg-[#FAF0EC] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B]"
-                  placeholder="e.g. Description, Craftsmanship, Garment Story"
+                  placeholder="e.g. Description, Details, Material Story"
                 />
               </div>
 
@@ -1055,7 +1055,7 @@ const AdminProductModal = memo(({
                   type="submit"
                   icon={Save}
                 >
-                  Save Garment
+                  Save Product
                 </LuxuryButton>
               </div>
             </form>

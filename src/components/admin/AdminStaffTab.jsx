@@ -38,7 +38,7 @@ export const ALL_AVAILABLE_PAGES = [
   { id: 'messages', label: 'Live Chat Support', desc: 'Customer inquiries, tickets & auto-replies', icon: MessageSquare },
   { id: 'reviews', label: 'Customer Reviews', desc: 'Customer ratings, moderation, feedback', icon: Star },
   { id: 'customize', label: 'Store Customizer', desc: 'Visual theme, hero banners, site branding', icon: Sliders },
-  { id: 'profile', label: 'Owner Profile', desc: 'Atelier profile info and bio settings', icon: User },
+  { id: 'profile', label: 'Owner Profile', desc: 'Store owner profile info and bio settings', icon: User },
 ];
 
 export default function AdminStaffTab({

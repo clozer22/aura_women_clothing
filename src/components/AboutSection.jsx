@@ -161,7 +161,7 @@ export default function AboutSection({
             <img
               ref={mediaRef}
               src={mediaUrl}
-              alt="Aura Atelier Brand Background"
+              alt="Aura Brand Background"
               loading="lazy"
               decoding="async"
               onLoad={() => setLoaded(true)}

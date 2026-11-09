@@ -168,7 +168,7 @@ const AdminProductsTab = memo(({
         {selectedProductIds.length > 0 && (
           <div className="bg-blue-50/70 p-3 border-b border-blue-100 flex items-center justify-between px-6 sticky left-0 right-0 z-10 shadow-xs animate-fadeIn">
             <span className="text-xs font-semibold text-blue-900">
-              Selected <strong className="text-blue-700">{selectedProductIds.length}</strong> {selectedProductIds.length === 1 ? 'garment' : 'garments'}
+              Selected <strong className="text-blue-700">{selectedProductIds.length}</strong> {selectedProductIds.length === 1 ? 'product' : 'products'}
             </span>
             <div className="flex items-center gap-2">
               <button
@@ -357,14 +357,14 @@ const AdminProductsTab = memo(({
 
         {!isLoadingProducts && productList.length === 0 && (
           <div className="text-center py-16 text-slate-400 text-xs bg-white">
-            No garments found matching the selected query.
+            No products found matching the selected query.
           </div>
         )}
 
         {/* Modern Pagination Controls (10 items per page) */}
         <div className="bg-slate-50 border-t border-slate-200/80 px-6 py-3.5 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="text-xs text-slate-500 font-medium">
-            Showing <span className="font-bold text-slate-900">{totalProductsCount === 0 ? 0 : (currentPage - 1) * pageSize + 1}</span> to <span className="font-bold text-slate-900">{Math.min(currentPage * pageSize, totalProductsCount)}</span> of <span className="font-bold text-slate-900">{totalProductsCount}</span> garments
+            Showing <span className="font-bold text-slate-900">{totalProductsCount === 0 ? 0 : (currentPage - 1) * pageSize + 1}</span> to <span className="font-bold text-slate-900">{Math.min(currentPage * pageSize, totalProductsCount)}</span> of <span className="font-bold text-slate-900">{totalProductsCount}</span> products
           </div>
 
           <div className="flex items-center gap-1.5">

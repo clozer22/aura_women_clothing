@@ -18,25 +18,51 @@ export function getProductDiscountPercent(product) {
 }
 
 /**
- * Sorts products so that any item with an active discount is placed ON TOP of the list.
+ * Sorts products so that:
+ * 1. Items with active discounts ALWAYS have the highest priority (placed at the top).
+ * 2. The 6 featured items (isFeatured === true) appear on the first list of the catalog.
+ * 3. All remaining regular items follow.
+ *
+ * Ranking Hierarchy:
+ * - Tier 1: Discounted + Featured (both on sale and atelier-featured)
+ * - Tier 2: Discounted Regular (on sale)
+ * - Tier 3: Featured (atelier-featured items without active discount)
+ * - Tier 4: Regular (standard catalog items)
  */
 export function sortProductsWithDiscountsFirst(products, customSortFn) {
   if (!Array.isArray(products)) return [];
-  const discounted = [];
-  const regular = [];
+
+  const discountedFeatured = [];
+  const discountedRegular = [];
+  const regularFeatured = [];
+  const regularOther = [];
 
   products.forEach((p) => {
-    if (getProductDiscountPercent(p) > 0) {
-      discounted.push(p);
+    const hasDiscount = getProductDiscountPercent(p) > 0;
+    const isFeatured = Boolean(p.isFeatured);
+
+    if (hasDiscount && isFeatured) {
+      discountedFeatured.push(p);
+    } else if (hasDiscount) {
+      discountedRegular.push(p);
+    } else if (isFeatured) {
+      regularFeatured.push(p);
     } else {
-      regular.push(p);
+      regularOther.push(p);
     }
   });
 
   if (customSortFn) {
-    discounted.sort(customSortFn);
-    regular.sort(customSortFn);
+    discountedFeatured.sort(customSortFn);
+    discountedRegular.sort(customSortFn);
+    regularFeatured.sort(customSortFn);
+    regularOther.sort(customSortFn);
   }
 
-  return [...discounted, ...regular];
+  return [
+    ...discountedFeatured,
+    ...discountedRegular,
+    ...regularFeatured,
+    ...regularOther,
+  ];
 }

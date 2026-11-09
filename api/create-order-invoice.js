@@ -197,48 +197,74 @@ export default async function handler(req, res) {
     // 6. Server-Side Promo Code Validation & Computation
     let verifiedDiscount = 0;
     let verifiedPromoCode = null;
+    // Standard Atelier VIP tier vouchers and promo presets fallback (Rank vouchers have NO minimum order requirement)
+    const PRESET_VOUCHERS = {
+      MUSE10: { code: 'MUSE10', discount_type: 'percentage', discount_value: 10, min_order_value: 0, is_active: true },
+      ICON15: { code: 'ICON15', discount_type: 'percentage', discount_value: 15, min_order_value: 0, is_active: true },
+      ROYAL20: { code: 'ROYAL20', discount_type: 'percentage', discount_value: 20, min_order_value: 0, is_active: true },
+      AURA100: { code: 'AURA100', discount_type: 'fixed', discount_value: 100, min_order_value: 800, is_active: true },
+      WELCOME50: { code: 'WELCOME50', discount_type: 'fixed', discount_value: 50, min_order_value: 500, is_active: true },
+    };
+
     let promoRecord = null;
 
     if (promoCode && typeof promoCode === 'string' && promoCode.trim()) {
       const cleanCode = promoCode.trim().toUpperCase().slice(0, 30);
-      if (supabase) {
-        try {
-          const { data: promo, error: promoErr } = await supabase
+      try {
+        let promo = null;
+        if (supabase) {
+          const { data, error: promoErr } = await supabase
             .from('promotions')
             .select('*')
             .eq('code', cleanCode)
             .maybeSingle();
 
-          if (promoErr || !promo) {
-            return res.status(400).json({ error: `Promo code "${cleanCode}" is invalid.` });
+          if (!promoErr && data) {
+            promo = data;
           }
-          if (!promo.is_active) {
-            return res.status(400).json({ error: `Promo code "${cleanCode}" is no longer active.` });
-          }
-          if (promo.expires_at && new Date(promo.expires_at) < new Date()) {
-            return res.status(400).json({ error: `Promo code "${cleanCode}" has expired.` });
-          }
-          if (promo.usage_limit && (promo.times_used || 0) >= promo.usage_limit) {
-            return res.status(400).json({ error: `Promo code "${cleanCode}" has reached its maximum usage limit.` });
-          }
-          if (promo.min_order_value && verifiedSubtotal < Number(promo.min_order_value)) {
-            return res.status(400).json({
-              error: `Promo code "${cleanCode}" requires a minimum order value of ₱${Number(promo.min_order_value).toLocaleString()}.`,
-            });
-          }
-
-          if (promo.discount_type === 'percentage') {
-            verifiedDiscount = Math.round((verifiedSubtotal * Number(promo.discount_value)) / 100);
-          } else {
-            verifiedDiscount = Math.round(Number(promo.discount_value) || 0);
-          }
-          verifiedDiscount = Math.min(verifiedDiscount, verifiedSubtotal);
-          verifiedPromoCode = cleanCode;
-          promoRecord = promo;
-        } catch (err) {
-          console.warn('Error during server-side promo verification:', err.message);
-          return res.status(400).json({ error: 'Could not verify promotion code. Please try again.' });
         }
+
+        // Fallback to recognized VIP Tier Vouchers & Standard Preset Vouchers
+        if (!promo && PRESET_VOUCHERS[cleanCode]) {
+          promo = PRESET_VOUCHERS[cleanCode];
+        }
+
+        if (!promo) {
+          return res.status(400).json({ error: `Promo code "${cleanCode}" is invalid.` });
+        }
+        if (!promo.is_active) {
+          return res.status(400).json({ error: `Promo code "${cleanCode}" is no longer active.` });
+        }
+        if (promo.expires_at && new Date(promo.expires_at) < new Date()) {
+          return res.status(400).json({ error: `Promo code "${cleanCode}" has expired.` });
+        }
+        if (promo.usage_limit && (promo.times_used || 0) >= promo.usage_limit) {
+          return res.status(400).json({ error: `Promo code "${cleanCode}" has reached its maximum usage limit.` });
+        }
+
+        // Customer rank/tier vouchers (MUSE10, ICON15, ROYAL20) are earned status perks and have NO minimum order requirement
+        const RANK_VOUCHERS = ['MUSE10', 'ICON15', 'ROYAL20'];
+        if (RANK_VOUCHERS.includes(cleanCode)) {
+          promo.min_order_value = 0;
+        }
+
+        if (promo.min_order_value && Number(promo.min_order_value) > 0 && verifiedSubtotal < Number(promo.min_order_value)) {
+          return res.status(400).json({
+            error: `Promo code "${cleanCode}" requires a minimum order value of ₱${Number(promo.min_order_value).toLocaleString()}.`,
+          });
+        }
+
+        if (promo.discount_type === 'percentage') {
+          verifiedDiscount = Math.round((verifiedSubtotal * Number(promo.discount_value)) / 100);
+        } else {
+          verifiedDiscount = Math.round(Number(promo.discount_value) || 0);
+        }
+        verifiedDiscount = Math.min(verifiedDiscount, verifiedSubtotal);
+        verifiedPromoCode = cleanCode;
+        promoRecord = promo;
+      } catch (err) {
+        console.warn('Error during server-side promo verification:', err.message);
+        return res.status(400).json({ error: 'Could not verify promotion code. Please try again.' });
       }
     }
 
@@ -394,7 +420,7 @@ export default async function handler(req, res) {
       payment_methods: paymentMethods,
       currency: 'PHP',
       success_redirect_url: `${currentOrigin}/order-confirmed?ref=${orderReference}`,
-      failure_redirect_url: `${currentOrigin}/checkout`,
+      failure_redirect_url: `${currentOrigin}/checkout?payment=cancelled`,
     };
 
     const xenditRes = await fetch('https://api.xendit.co/v2/invoices', {
@@ -431,19 +457,14 @@ export default async function handler(req, res) {
       user_id: verifiedUserId,
       xendit_invoice_id: xenditData.id,
       xendit_invoice_url: xenditData.invoice_url,
-      inventory_deducted: true,
+      inventory_deducted: false,
       created_at: new Date().toISOString(),
     };
 
     if (supabase) {
       try {
         await supabase.from('orders').insert([newOrder]);
-        // Atomically deduct product stock in Supabase database
-        try {
-          await supabase.rpc('deduct_product_inventory', { p_items: verifiedItems });
-        } catch (deductErr) {
-          console.warn('Notice: Could not deduct inventory via RPC (Online):', deductErr.message);
-        }
+        // Inventory deduction is idempotently deferred until payment is verified as PAID via webhook or verify-payment.
         if (promoRecord?.id) {
           await supabase
             .from('promotions')

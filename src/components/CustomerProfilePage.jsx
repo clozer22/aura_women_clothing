@@ -431,7 +431,7 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
               YOUR ACCOUNT
             </span>
             <h1 className="font-brand text-3xl text-[#2C1E1B] tracking-wide">
-              {fullName || 'Atelier Client'}
+              {fullName || 'Aura Client'}
             </h1>
             <p className="text-xs text-[#705B56] mt-1 font-sans">{user?.email}</p>
 
@@ -585,7 +585,7 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
                       {currentTier} • <span className="font-normal italic text-xs text-[#705B56]">{currentTierConfig?.tagline}</span>
                     </h3>
                     <p className="text-xs text-[#705B56] mt-1">
-                      You have ordered <strong className="text-[#2C1E1B] font-mono">{totalItemsOrdered} {totalItemsOrdered === 1 ? 'item' : 'items'}</strong> from the AURA Atelier.
+                      You have ordered <strong className="text-[#2C1E1B] font-mono">{totalItemsOrdered} {totalItemsOrdered === 1 ? 'item' : 'items'}</strong> from AURA.
                     </p>
                   </div>
                 </div>
@@ -628,7 +628,7 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
                   <span className="text-[#705B56] text-[11px] font-medium">
                     {tierProgress.isMaxTier ? (
                       <span className="text-amber-800 font-bold flex items-center gap-1">
-                        <Crown className="w-3.5 h-3.5" /> Highest Atelier Sovereign Status
+                        <Crown className="w-3.5 h-3.5" /> Highest Sovereign Status
                       </span>
                     ) : (
                       tierProgress.message
@@ -751,7 +751,7 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
                     Customer Ranking & Exclusive Rewards
                   </h2>
                   <p className="text-xs text-[#D5C2BC] max-w-xl mt-2 leading-relaxed">
-                    Every garment acquired at AURA advances your ranking. Unlock private capsules, tier discount vouchers, and complimentary express delivery tailored to your patron tier.
+                    Every purchase acquired at AURA advances your ranking. Unlock private capsules, tier discount vouchers, and complimentary express delivery tailored to your patron tier.
                   </p>
                 </div>
 
@@ -981,7 +981,7 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
             {/* Note on Admin Managed Perks */}
             <div className="bg-[#FAF5F2] border border-[#E8DCD7] p-5 text-center">
               <p className="text-xs text-[#705B56] leading-relaxed max-w-xl mx-auto">
-                <strong className="text-[#2C1E1B]">Atelier Privileges Note:</strong> Benefits and exclusive vouchers are curated and granted by the AURA Administration based on items ordered. To redeem a voucher, enter the code in checkout.
+                <strong className="text-[#2C1E1B]">VIP Privileges Note:</strong> Benefits and exclusive vouchers are curated and granted by the AURA Administration based on items ordered. To redeem a voucher, enter the code in checkout.
               </p>
             </div>
           </div>

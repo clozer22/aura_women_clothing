@@ -1102,7 +1102,7 @@ export default function AdminPortal({
       });
       triggerNotification('success', 'Status Updated', `Order fulfillment set to ${newStatus}.`);
 
-      // If status changed to Out for Delivery (TO_DELIVER), notify customer via official Atelier email
+      // If status changed to Out for Delivery (TO_DELIVER), notify customer via official email
       if (newStatus === 'TO_DELIVER' && existingOrder?.customer_email) {
         fetch('/api/notify-delivery', {
           method: 'POST',
@@ -1400,7 +1400,7 @@ export default function AdminPortal({
     setAuthError(null);
 
     if (!isAdminEmail(authEmail)) {
-      setAuthError('Access Denied: You do not have permission to access the Atelier administrator dashboard.');
+      setAuthError('Access Denied: You do not have permission to access the administrator dashboard.');
       return;
     }
 
@@ -1484,7 +1484,7 @@ export default function AdminPortal({
 
     const productObj = {
       name: newProduct.name,
-      subtitle: 'Atelier Runway Collection',
+      subtitle: 'Signature Collection',
       category: newProduct.mainCategory === 'top' ? 'Tops' : 'Bottoms',
       mainCategory: newProduct.mainCategory,
       subType: newProduct.subType,
@@ -1534,7 +1534,7 @@ export default function AdminPortal({
           isFeatured: existingProd.isFeatured ?? false
         };
         setProductList(productList.map(p => p.id === editingProductId ? updatedObj : p));
-        triggerNotification('success', 'Garment Updated', 'Product updated successfully!');
+        triggerNotification('success', 'Product Updated', 'Product updated successfully!');
 
         // Dispatch back-in-stock email alert to customers who have this sold-out item in their bag
         if (isNowInStock) {
@@ -1555,7 +1555,7 @@ export default function AdminPortal({
                 triggerNotification(
                   'info',
                   'Restock Email Dispatched',
-                  `Emailed ${res.notifiedCount} customer(s) who saved this garment in their cart.`
+                  `Emailed ${res.notifiedCount} customer(s) who saved this product in their cart.`
                 );
               }
             })
@@ -1577,7 +1577,7 @@ export default function AdminPortal({
         if (error) throw error;
 
         setProductList([newProductObj, ...productList]);
-        triggerNotification('success', 'Garment Created', 'Product uploaded successfully!');
+        triggerNotification('success', 'Product Created', 'Product uploaded successfully!');
       }
 
       setIsAddModalOpen(false);
@@ -1633,7 +1633,7 @@ export default function AdminPortal({
 
       triggerNotification(
         'success',
-        'Garments Published',
+        'Products Published',
         `Successfully created ${batchProducts.length} color variants! Each item is now displayed individually across the storefront.`
       );
     } catch (err) {
@@ -1776,7 +1776,7 @@ export default function AdminPortal({
 
   const handleDeleteProduct = async (id) => {
     setConfirmDialog({
-      message: 'Are you sure you want to remove this garment from inventory?',
+      message: 'Are you sure you want to remove this product from inventory?',
       onConfirm: async () => {
         try {
           const { error } = await supabase.from('products').delete().eq('id', id);
@@ -1789,7 +1789,7 @@ export default function AdminPortal({
           await fetchProductsPage(currentPage, searchQuery, categoryFilter, true);
           fetchDashboardStats();
           if (onRefreshData) onRefreshData();
-          triggerNotification('success', 'Product Deleted', 'The garment has been removed from inventory successfully.');
+          triggerNotification('success', 'Product Deleted', 'The product has been removed from inventory successfully.');
         } catch (err) {
           triggerNotification('error', 'Delete Failed', err.message);
         }
@@ -1821,7 +1821,7 @@ export default function AdminPortal({
     if (selectedProductIds.length === 0) return;
 
     setConfirmDialog({
-      message: `Are you sure you want to remove the ${selectedProductIds.length} selected garments from inventory?`,
+      message: `Are you sure you want to remove the ${selectedProductIds.length} selected products from inventory?`,
       onConfirm: async () => {
         try {
           const { error } = await supabase
@@ -1837,7 +1837,7 @@ export default function AdminPortal({
           await fetchProductsPage(currentPage, searchQuery, categoryFilter, true);
           fetchDashboardStats();
           if (onRefreshData) onRefreshData();
-          triggerNotification('success', 'Products Deleted', 'The selected garments have been removed from inventory successfully.');
+          triggerNotification('success', 'Products Deleted', 'The selected products have been removed from inventory successfully.');
         } catch (err) {
           triggerNotification('error', 'Delete Failed', err.message);
         }
@@ -1914,7 +1914,7 @@ export default function AdminPortal({
       setBulkSizeChart('');
       setIsBulkModalOpen(false);
       if (onRefreshData) onRefreshData();
-      triggerNotification('success', 'Bulk Update Success', `Successfully updated the size chart for ${selectedProductIds.length} selected garments.`);
+      triggerNotification('success', 'Bulk Update Success', `Successfully updated the size chart for ${selectedProductIds.length} selected products.`);
     } catch (err) {
       triggerNotification('error', 'Bulk Update Failed', err.message);
     }
@@ -1970,7 +1970,7 @@ export default function AdminPortal({
 
       setProfile(editProfileForm);
       setIsEditingProfile(false);
-      triggerNotification('success', 'Profile Updated', 'Atelier Profile updated successfully!');
+      triggerNotification('success', 'Profile Updated', 'Profile updated successfully!');
     } catch (err) {
       triggerNotification('error', 'Update Failed', err.message);
     }
@@ -1997,8 +1997,8 @@ export default function AdminPortal({
       invalidateProductsCache();
       triggerNotification(
         'success',
-        isChecked ? 'Garment Featured' : 'Garment Unfeatured',
-        isChecked ? 'Garment successfully added to home collection.' : 'Garment successfully removed from home collection.'
+        isChecked ? 'Product Featured' : 'Product Unfeatured',
+        isChecked ? 'Product successfully added to home collection.' : 'Product successfully removed from home collection.'
       );
       if (onRefreshData) onRefreshData();
     } catch (err) {
@@ -2012,7 +2012,7 @@ export default function AdminPortal({
       <div className="min-h-screen bg-[#FAF0EC] flex items-center justify-center p-6 select-none font-sans">
         <div className="flex flex-col items-center gap-3">
           <div className="w-8 h-8 border-2 border-t-transparent border-[#B86B60] rounded-full animate-spin" />
-          <span className="text-[10px] uppercase tracking-widest font-bold text-[#705B56]">Connecting to Atelier...</span>
+          <span className="text-[10px] uppercase tracking-widest font-bold text-[#705B56]">Connecting to Server...</span>
         </div>
       </div>
     );
@@ -2317,7 +2317,7 @@ export default function AdminPortal({
             </div>
             <div className="hidden lg:block text-left">
               <p className="text-xs font-semibold text-slate-800 leading-tight truncate max-w-[110px]">
-                {profile.name || 'Atelier Owner'}
+                {profile.name || 'Store Owner'}
               </p>
               <p className="text-[10px] text-slate-400 capitalize truncate">
                 {profile.role_title || adminRole}

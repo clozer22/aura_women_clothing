@@ -40,7 +40,7 @@ export default function LegalModal({ isOpen, initialTab = 'privacy', onClose }) 
   const tabs = [
     { id: 'privacy', label: 'Privacy Policy', icon: ShieldCheck, tag: 'RA 10173 / GDPR' },
     { id: 'terms', label: 'Terms of Service', icon: FileText, tag: 'RA 8792 E-Commerce' },
-    { id: 'returns', label: 'Returns & Refunds', icon: RotateCcw, tag: 'RA 7394 Consumer Act' },
+    { id: 'returns', label: 'Replacement Policy', icon: RotateCcw, tag: '2-Day Replacement' },
     { id: 'shipping', label: 'Shipping & Delivery', icon: Truck, tag: 'Nationwide Logistics' },
     { id: 'legitimacy', label: 'Business & Legitimacy', icon: Building, tag: 'DTI & BIR Registered' },
   ];
@@ -139,7 +139,7 @@ export default function LegalModal({ isOpen, initialTab = 'privacy', onClose }) 
                   <section className="space-y-2">
                     <h4 className="font-bold text-sm text-[#2C1E1B]">1. Commitment to Customer Privacy</h4>
                     <p className="text-[#705B56]">
-                      Aura Women's Clothing ("Aura Atelier", "we", "us", or "our") operates in strict compliance with the <strong>Data Privacy Act of 2012 (Republic Act No. 10173)</strong> of the Republic of the Philippines and international data privacy principles. We are committed to protecting your personal information and handling your orders with transparency and high-grade security.
+                      Aura Women's Clothing ("Aura", "we", "us", or "our") operates in strict compliance with the <strong>Data Privacy Act of 2012 (Republic Act No. 10173)</strong> of the Republic of the Philippines and international data privacy principles. We are committed to protecting your personal information and handling your orders with transparency and high-grade security.
                     </p>
                   </section>
 
@@ -149,7 +149,7 @@ export default function LegalModal({ isOpen, initialTab = 'privacy', onClose }) 
                     <ul className="list-disc pl-5 space-y-1 text-[#705B56]">
                       <li><strong>Identity Data:</strong> Full customer name, account email address.</li>
                       <li><strong>Delivery & Logistics Data:</strong> Shipping street address, barangay, city, province/region, postal zip code, and active mobile phone number for rider delivery coordination.</li>
-                      <li><strong>Order Transaction Data:</strong> Garment purchases, size choices, payment reference numbers, order history, and delivery receipts.</li>
+                      <li><strong>Order Transaction Data:</strong> Product purchases, size choices, payment reference numbers, order history, and delivery receipts.</li>
                       <li><strong>Technical & Session Data:</strong> IP address, device browser type, and anonymous session IDs to maintain your cart and prevent fraudulent orders.</li>
                     </ul>
                   </section>
@@ -201,14 +201,14 @@ export default function LegalModal({ isOpen, initialTab = 'privacy', onClose }) 
                   <section className="space-y-2">
                     <h4 className="font-bold text-sm text-[#2C1E1B]">2. Intellectual Property & Brand Copyright</h4>
                     <p className="text-[#705B56]">
-                      All content on this website—including garment silhouette designs, size charts, lookbook imagery, branding trademarks, logos, typography, styling, and editorial narratives—is the exclusive intellectual property of Aura Women's Clothing. Unauthorized reproduction, web scraping, commercial re-selling, or copying constitutes intellectual property theft punishable under Philippine copyright and trademark laws.
+                      All content on this website—including clothing silhouette designs, size charts, lookbook imagery, branding trademarks, logos, typography, styling, and editorial narratives—is the exclusive intellectual property of Aura Women's Clothing. Unauthorized reproduction, web scraping, commercial re-selling, or copying constitutes intellectual property theft punishable under Philippine copyright and trademark laws.
                     </p>
                   </section>
 
                   <section className="space-y-2">
                     <h4 className="font-bold text-sm text-[#2C1E1B]">3. Order Validation & Pricing Accuracy</h4>
                     <p className="text-[#705B56]">
-                      All garment orders are subject to acceptance and stock availability. While we make every effort to display accurate colorways, descriptions, and Philippine Peso (₱) pricing, typographical errors may occasionally occur. In the event of a manifest pricing error or fraudulent checkout attempt, Aura reserves the right to cancel the transaction and issue an immediate 100% refund.
+                      All orders are subject to acceptance and stock availability. While we make every effort to display accurate colorways, descriptions, and Philippine Peso (₱) pricing, typographical errors may occasionally occur. In the event of a manifest pricing error or fraudulent checkout attempt, Aura reserves the right to cancel the transaction and issue an immediate 100% refund.
                     </p>
                   </section>
 
@@ -228,59 +228,85 @@ export default function LegalModal({ isOpen, initialTab = 'privacy', onClose }) 
                 </div>
               )}
 
-              {/* TAB 3: RETURN & REFUND POLICY */}
+              {/* TAB 3: AURA REPLACEMENT POLICY */}
               {activeTab === 'returns' && (
                 <div className="space-y-5">
                   <div className="border-b border-[#E8DCD7] pb-3">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-[#B86B60] block mb-1">
-                      Republic Act No. 7394 • Consumer Act of the Philippines & DTI Guidelines
+                      AURA Official Policy • 2-Day Replacement Period
                     </span>
-                    <h3 className="font-editorial text-2xl text-[#2C1E1B]">Return, Refund & Exchange Policy</h3>
-                    <p className="text-[11px] text-[#705B56] mt-1">Comprehensive 7-day buyer protection & reverse logistics policy</p>
+                    <h3 className="font-editorial text-2xl text-[#2C1E1B]">AURA REPLACEMENT POLICY</h3>
+                    <p className="text-[11px] font-bold text-[#B86B60] uppercase tracking-wider mt-1">2-DAY REPLACEMENT PERIOD</p>
                   </div>
 
-                  <section className="space-y-2">
-                    <h4 className="font-bold text-sm text-[#2C1E1B]">1. The 7-Calendar-Day Return Window</h4>
-                    <p className="text-[#705B56]">
-                      In full compliance with DTI regulations and the Consumer Act of the Philippines (RA 7394), you have <strong>seven (7) calendar days</strong> from the official date your courier delivers your order to request an exchange, return, or replacement.
-                    </p>
-                  </section>
+                  <p className="text-sm text-[#705B56] leading-relaxed">
+                    At <strong>AURA Women's Clothing</strong>, we want to make sure you receive your orders in good condition. Please read our replacement guidelines carefully.
+                  </p>
 
                   <section className="space-y-2">
-                    <h4 className="font-bold text-sm text-[#2C1E1B]">2. Eligibility Standards for Garment Return</h4>
-                    <p className="text-[#705B56]">To qualify for an exchange or refund:</p>
+                    <h4 className="font-bold text-sm text-[#2C1E1B]">1. Replacement Period</h4>
                     <ul className="list-disc pl-5 space-y-1 text-[#705B56]">
-                      <li>The garment must be in its original atelier condition: unwashed, unworn, and free of stains, cosmetics, perfume, odors, or alterations.</li>
-                      <li>Original brand tags, size markers, and luxury polybags must be attached intact.</li>
-                      <li>Proof of purchase (Order Reference number and courier delivery receipt / waybill) must be provided.</li>
+                      <li>Customers may request a replacement within <strong>2 calendar days (48 hours) upon receiving their order</strong>.</li>
+                      <li>Requests submitted beyond the 2-day period will no longer be accommodated.</li>
                     </ul>
                   </section>
 
                   <section className="space-y-2">
-                    <h4 className="font-bold text-sm text-[#2C1E1B]">3. Defective or Incorrect Item Replacement (100% Brand Covered)</h4>
-                    <p className="text-[#705B56]">
-                      If you receive a defective garment, damaged stitching, or an incorrect item/size dispatched by our atelier, Aura shoulders <strong>100% of reverse pickup and replacement transit fees</strong>. We arrange an automated doorstep pickup via J&T Express or provide a prepaid drop-off barcode for any of 2,000+ J&T branches nationwide, and dispatch your replacement immediately upon transit scan.
-                    </p>
+                    <h4 className="font-bold text-sm text-[#2C1E1B]">2. Eligible Reasons for Replacement</h4>
+                    <p className="text-[#705B56]">Replacement requests will only be accepted for the following reasons:</p>
+                    <ul className="list-disc pl-5 space-y-1 text-[#705B56]">
+                      <li>Wrong item received.</li>
+                      <li>Wrong color or size sent by AURA.</li>
+                      <li>Item received with manufacturing defects.</li>
+                      <li>Item received damaged or defective.</li>
+                    </ul>
                   </section>
 
                   <section className="space-y-2">
-                    <h4 className="font-bold text-sm text-[#2C1E1B]">4. Size Exchange (Fit Guarantee)</h4>
-                    <p className="text-[#705B56]">
-                      If a garment does not fit as desired, we gladly accommodate size swaps subject to atelier inventory. Customers only shoulder standard J&T Express courier logistics rates for change-of-mind size swaps, with convenient branch drop-off or rider pickup options available nationwide.
-                    </p>
+                    <h4 className="font-bold text-sm text-[#2C1E1B]">3. Requirements for Replacement</h4>
+                    <p className="text-[#705B56]">To process your request, customers must provide:</p>
+                    <ul className="list-disc pl-5 space-y-1 text-[#705B56]">
+                      <li>A clear, unedited unboxing video showing the package from the moment it is opened.</li>
+                      <li>Clear photos and videos of the issue or defect.</li>
+                      <li>Order number and proof of purchase.</li>
+                    </ul>
                   </section>
 
                   <section className="space-y-2">
-                    <h4 className="font-bold text-sm text-[#2C1E1B]">5. Reverse Logistics & Refund Turnaround</h4>
-                    <p className="text-[#705B56]">
-                      Once your return parcel arrives at our atelier via J&T Express and passes quality inspection (within 24–48 hours), refunds are issued within <strong>3 to 5 business days</strong> directly to your original payment channel (GCash, Maya, Bank Transfer via Xendit) or as a store credit voucher.
-                    </p>
+                    <h4 className="font-bold text-sm text-[#2C1E1B]">4. Non-Eligible Cases</h4>
+                    <p className="text-[#705B56]">Replacement requests will not be accepted for:</p>
+                    <ul className="list-disc pl-5 space-y-1 text-[#705B56]">
+                      <li>Change of mind or personal preference.</li>
+                      <li>Incorrect size selection made by the customer.</li>
+                      <li>Minor differences in color due to lighting or screen settings.</li>
+                      <li>Items damaged due to improper handling, washing, or use.</li>
+                      <li>Items that have been worn, washed, altered, or damaged by the customer.</li>
+                    </ul>
                   </section>
 
                   <section className="space-y-2">
-                    <h4 className="font-bold text-sm text-[#2C1E1B]">6. Hygiene & Non-Returnable Items</h4>
+                    <h4 className="font-bold text-sm text-[#2C1E1B]">5. Important Reminders</h4>
+                    <ul className="list-disc pl-5 space-y-1 text-[#705B56]">
+                      <li>Items must be unused, unwashed, and in their original condition.</li>
+                      <li>All replacement requests are subject to inspection and verification by our team.</li>
+                      <li>Approved replacements will be processed subject to stock availability.</li>
+                      <li>If the same item is unavailable, our team will coordinate with you regarding the available resolution.</li>
+                    </ul>
+                  </section>
+
+                  <section className="space-y-2">
+                    <h4 className="font-bold text-sm text-[#2C1E1B]">6. How to Request a Replacement</h4>
                     <p className="text-[#705B56]">
-                      In accordance with Department of Trade and Industry (DTI) sanitation protocols, items that have been washed, worn, altered, or marked with cosmetics or fragrances cannot be accepted for refund or restocked.
+                      For replacement concerns, simply message <strong>"Chat with Aura"</strong> through our official shop chat. Our customer service team will assist you with the replacement process.
+                    </p>
+                    <p className="text-xs text-[#A38E88] italic pt-2">
+                      AURA reserves the right to review and verify all replacement requests to ensure fair and proper handling.
+                    </p>
+                    <p className="text-sm font-medium text-[#2C1E1B] pt-2">
+                      Thank you for understanding and shopping with AURA!
+                    </p>
+                    <p className="text-xs font-serif italic text-[#B86B60]">
+                      Wear your AURA.
                     </p>
                   </section>
                 </div>
@@ -298,7 +324,7 @@ export default function LegalModal({ isOpen, initialTab = 'privacy', onClose }) 
                   </div>
 
                   <section className="space-y-2">
-                    <h4 className="font-bold text-sm text-[#2C1E1B]">1. Processing & Atelier Dispatch</h4>
+                    <h4 className="font-bold text-sm text-[#2C1E1B]">1. Processing & Dispatch</h4>
                     <p className="text-[#705B56]">
                       Orders placed before 2:00 PM PHT (Monday through Friday) are prepared, steam-pressed, and handed over to our official logistics partner, <strong>J&T Express Philippines</strong>, within <strong>24 to 48 hours</strong>. J&T Express operates and transports parcels <strong>365 days a year</strong>, including weekends and public holidays.
                     </p>
@@ -336,7 +362,7 @@ export default function LegalModal({ isOpen, initialTab = 'privacy', onClose }) 
                   <section className="space-y-2">
                     <h4 className="font-bold text-sm text-[#2C1E1B]">4. Doorstep Delivery Attempts & Redelivery Protocol</h4>
                     <p className="text-[#705B56]">
-                      J&T delivery riders make up to <strong>2 to 3 delivery attempts</strong> to your designated address and will contact you via mobile call/SMS prior to arrival. If you are temporarily unavailable, redelivery will automatically be attempted on the following business day. If delivery cannot be completed after 3 attempts, the parcel will be safely routed back to the atelier (Return to Sender).
+                      J&T delivery riders make up to <strong>2 to 3 delivery attempts</strong> to your designated address and will contact you via mobile call/SMS prior to arrival. If you are temporarily unavailable, redelivery will automatically be attempted on the following business day. If delivery cannot be completed after 3 attempts, the parcel will be safely routed back to our hub (Return to Sender).
                     </p>
                   </section>
 

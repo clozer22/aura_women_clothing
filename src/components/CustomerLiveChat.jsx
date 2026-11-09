@@ -521,7 +521,7 @@ export default function CustomerLiveChat() {
 
   return (
     <>
-      {/* 1. Floating Atelier Concierge Chat Launcher Button */}
+      {/* 1. Floating Concierge Chat Launcher Button */}
       <div className="fixed bottom-6 right-6 z-40 flex items-center gap-2">
         <motion.button
           onClick={() => {
@@ -534,7 +534,7 @@ export default function CustomerLiveChat() {
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           className="relative group w-14 h-14 rounded-full bg-[#2C1E1B] text-white shadow-2xl border-2 border-white hover:bg-[#3D2B27] transition-all flex items-center justify-center cursor-pointer p-0 overflow-visible"
-          aria-label="Atelier Customer Service Live Chat"
+          aria-label="Customer Service Live Chat"
           title="Chat with Aura Concierge"
         >
           {isOpen ? (
@@ -625,13 +625,13 @@ export default function CustomerLiveChat() {
               <div className="flex-1 overflow-y-auto p-5 space-y-5 bg-[#FAF5F2]">
                 <div className="text-center space-y-1">
                   <span className="text-[10px] font-brand uppercase tracking-[0.25em] text-[#B86B60] font-bold">
-                    Direct Atelier Assistance
+                    Direct Concierge Assistance
                   </span>
                   <h4 className="font-brand text-base font-bold text-[#2C1E1B]">
                     How May We Assist You?
                   </h4>
                   <p className="text-[11px] text-[#705B56] leading-relaxed max-w-xs mx-auto">
-                    Select your topic below. Our automated guidance will respond instantly, followed by live atelier support.
+                    Select your topic below. Our automated guidance will respond instantly, followed by live concierge support.
                   </p>
                 </div>
 
@@ -794,7 +794,7 @@ export default function CustomerLiveChat() {
                     {isStartingTicket ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Connecting with Atelier...</span>
+                        <span>Connecting with Support...</span>
                       </>
                     ) : (
                       <>

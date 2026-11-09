@@ -73,7 +73,7 @@ export function initSecurityConsole() {
     console.log('%cThis is a browser feature intended strictly for developers and engineers.', warningHeadingStyle);
 
     console.log(
-      '%cIf someone told you to copy-paste anything here or run a script to get discounts, free garments, or access hidden features, %cIT IS A SCAM (Self-XSS)%c.\n\n' +
+      '%cIf someone told you to copy-paste anything here or run a script to get discounts, free items, or access hidden features, %cIT IS A SCAM (Self-XSS)%c.\n\n' +
       'Pasting unknown code here can give attackers full access to your session, personal data, and customer account.\n\n' +
       'For official customer inquiries or security reporting, contact: auraofficialph@gmail.com',
       bodyStyle,

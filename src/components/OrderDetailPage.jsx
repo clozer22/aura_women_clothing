@@ -41,7 +41,7 @@ const RATING_LABELS = {
   2: 'Fair / Needs Improvement',
   3: 'Good / Met Expectations',
   4: 'Very Good / Loved It',
-  5: 'Exceptional Atelier Quality',
+  5: 'Exceptional Quality',
 };
 
 export default function OrderDetailPage({
@@ -263,7 +263,7 @@ export default function OrderDetailPage({
       handleFormChange(
         item.id,
         'error',
-        'Garment reviews can only be submitted once your order has been delivered or successfully completed.'
+        'Product reviews can only be submitted once your order has been delivered or successfully completed.'
       );
       return;
     }
@@ -274,7 +274,7 @@ export default function OrderDetailPage({
     const commentVal = (form.comment || '').trim();
 
     if (!commentVal) {
-      handleFormChange(pId, 'error', 'Please share your thoughts or feedback about this garment.');
+      handleFormChange(pId, 'error', 'Please share your thoughts or feedback about this product.');
       return;
     }
 
@@ -302,7 +302,7 @@ export default function OrderDetailPage({
       order_id: order.id ? String(order.id) : null,
       order_reference: order.order_reference,
       product_id: String(item.id),
-      product_name: item.name || 'Aura Garment',
+      product_name: item.name || 'Aura Item',
       user_id: user?.id || order.user_id || null,
       user_name: reviewerName,
       user_email: user?.email || order.customer_email || null,
@@ -587,7 +587,7 @@ export default function OrderDetailPage({
                   <p className="text-[11px] text-[#705B56] mt-0.5">
                     {(order.status || '').toUpperCase() === 'CANCELLED'
                       ? 'Shipment cancelled'
-                      : 'Awaiting dispatch pickup at the Aura Atelier'}
+                      : 'Awaiting dispatch pickup at Aura'}
                   </p>
                 )}
               </div>
@@ -742,18 +742,18 @@ export default function OrderDetailPage({
           </div>
         </div>
 
-        {/* Garment Items & Rating Feedback Section */}
+        {/* Purchased Items & Rating Feedback Section */}
         <div className="bg-white border border-[#E8DCD7] shadow-xs">
           <div className="p-6 border-b border-[#E8DCD7] bg-slate-50/50">
             <div className="flex items-center gap-2">
               <h2 className="font-brand text-lg font-bold text-[#2C1E1B]">
-                Purchased Garments {isDelivered ? '& Client Feedback' : ''}
+                Purchased Items {isDelivered ? '& Client Feedback' : ''}
               </h2>
             </div>
             <p className="text-xs text-[#705B56] mt-1">
               {isDelivered
-                ? 'Your order has arrived! Rate your atelier pieces and share fit, tailoring, and fabric reviews below.'
-                : 'Itemized garment list for this order. Reviews will unlock once your package has been delivered.'}
+                ? 'Your order has arrived! Rate your items and share fit, tailoring, and fabric reviews below.'
+                : 'Itemized list for this order. Reviews will unlock once your package has been delivered.'}
             </p>
           </div>
 
@@ -877,7 +877,7 @@ export default function OrderDetailPage({
                           <div>
                             <span className="text-xs font-bold uppercase tracking-wider text-[#2C1E1B] flex items-center gap-1.5">
                               <MessageSquare className="w-3.5 h-3.5 text-[#B86B60]" />
-                              {existingReview ? 'Update Your Garment Feedback' : 'Leave a Feedback & Rating'}
+                              {existingReview ? 'Update Your Product Feedback' : 'Leave a Feedback & Rating'}
                             </span>
                             <p className="text-[11px] text-[#705B56] mt-0.5">
                               How was the tailoring, fabric quality, and fit of this piece?
@@ -1013,7 +1013,7 @@ export default function OrderDetailPage({
                             <div>
                               <label className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-dashed border-[#B86B60] hover:border-[#2C1E1B] text-[#705B56] hover:text-[#2C1E1B] text-[11px] uppercase tracking-wider font-bold transition-all cursor-pointer">
                                 <Camera className="w-4 h-4 text-[#B86B60]" />
-                                <span>Upload Garment Photo</span>
+                                <span>Upload Photo</span>
                                 <input
                                   type="file"
                                   accept="image/jpeg,image/png,image/webp,image/heic"
@@ -1119,7 +1119,7 @@ export default function OrderDetailPage({
                         <div className="flex items-center gap-2.5 text-[#705B56]">
                           <Truck className="w-4 h-4 text-[#B86B60] flex-shrink-0" />
                           <span>
-                            Garment reviews & ratings will unlock once your package has been <strong>delivered</strong>.
+                            Product reviews & ratings will unlock once your package has been <strong>delivered</strong>.
                           </span>
                         </div>
                         <span className="text-[10px] uppercase font-mono font-bold tracking-wider px-2 py-0.5 bg-[#FAF5F2] border border-[#E8DCD7] text-[#705B56] self-start sm:self-auto">

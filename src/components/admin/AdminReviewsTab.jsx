@@ -88,7 +88,7 @@ const AdminReviewsTab = memo(({
             Customer Reviews
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Verified customer ratings submitted on delivered garments.
+            Verified customer ratings submitted on delivered orders.
           </p>
         </div>
 
@@ -195,7 +195,7 @@ const AdminReviewsTab = memo(({
           <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Search reviews or garments..."
+            placeholder="Search reviews or products..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-9 pr-4 py-1.5 bg-slate-50 border border-slate-200 text-xs text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white rounded-xl placeholder:text-slate-400"
@@ -216,7 +216,7 @@ const AdminReviewsTab = memo(({
           <h3 className="font-sans font-bold text-sm text-slate-800">No Reviews Found</h3>
           <p className="text-xs text-slate-500 max-w-sm mx-auto">
             {reviews.length === 0
-              ? 'When customers receive their delivered garments, their ratings and feedback will stream here.'
+              ? 'When customers receive their delivered orders, their ratings and feedback will stream here.'
               : 'No reviews match your current star or search filter.'}
           </p>
         </div>

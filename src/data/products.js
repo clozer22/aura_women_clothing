@@ -34,7 +34,7 @@ export const PRODUCTS = [
   },
   {
     id: 'aura-02',
-    name: 'Atelier Tailored Blush Blazer',
+    name: 'Tailored Blush Blazer',
     subtitle: 'Structured Power Suit',
     category: 'Tops',
     mainCategory: 'top',
@@ -46,7 +46,7 @@ export const PRODUCTS = [
     rating: 4.8,
     reviewsCount: 29,
     solds: 98,
-    shopeeLink: 'https://shopee.ph/Aura-Atelier-Blush-Blazer-i.123456.78911',
+    shopeeLink: 'https://shopee.ph/Aura-Blush-Blazer-i.123456.78911',
     isNew: true,
     isBestSeller: false,
     description: 'Double-breasted tailoring in our iconic soft rose blush hue. Sharp structured shoulders meet soft feminine curves for effortless sophistication.',
@@ -67,7 +67,7 @@ export const PRODUCTS = [
   {
     id: 'aura-03',
     name: 'Pink Fur Micro Halter Top',
-    subtitle: 'Atelier Runway Capsule',
+    subtitle: 'Signature Runway Capsule',
     category: 'Tops',
     mainCategory: 'top',
     subType: 'Micro Tops & Fur Tops',
@@ -98,7 +98,7 @@ export const PRODUCTS = [
   {
     id: 'aura-04',
     name: 'Gray Fur Micro Halter Top',
-    subtitle: 'Atelier Runway Capsule',
+    subtitle: 'Signature Runway Capsule',
     category: 'Tops',
     mainCategory: 'top',
     subType: 'Micro Tops & Fur Tops',
@@ -366,7 +366,7 @@ export const PRODUCTS = [
   {
     id: 'aura-13',
     name: 'Tailored High-Waist Shorts',
-    subtitle: 'Summer Atelier Essentials',
+    subtitle: 'Summer Signature Essentials',
     category: 'Bottoms',
     mainCategory: 'bottom',
     subType: 'Fur Micro Sets & Shorts',
