@@ -45,3 +45,52 @@ export function getSupabaseServerClient(customKey = null, customHeaders = {}) {
     },
   });
 }
+
+/**
+ * Validates whether the incoming request contains an authenticated admin session
+ * @param {import('http').IncomingMessage} req
+ * @param {import('@supabase/supabase-js').SupabaseClient} supabase
+ * @returns {Promise<{ isAuthorized: boolean, user?: object, email?: string, error?: string }>}
+ */
+export async function verifyAdminSession(req, supabase) {
+  const authHeader = req.headers?.authorization || req.headers?.Authorization || '';
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return { isAuthorized: false, user: null, error: 'Administrative authorization token required' };
+  }
+
+  const token = authHeader.substring(7).trim();
+  if (!token) {
+    return { isAuthorized: false, user: null, error: 'Empty administrative authorization token' };
+  }
+
+  const { data: userData, error: userErr } = await supabase.auth.getUser(token);
+  if (userErr || !userData?.user?.email) {
+    return { isAuthorized: false, user: null, error: 'Invalid or expired administrative session' };
+  }
+
+  const user = userData.user;
+  const userEmail = (user.email || '').toLowerCase().trim();
+
+  const isHardcodedAdmin =
+    userEmail.endsWith('@superadmin.com') ||
+    userEmail.endsWith('@aura.com') ||
+    userEmail.endsWith('@admin.com') ||
+    userEmail === 'markjosephaballe1@gmail.com';
+
+  if (isHardcodedAdmin) {
+    return { isAuthorized: true, user, email: userEmail, isAdmin: true };
+  }
+
+  const { data: adminProf } = await supabase
+    .from('admin_profiles')
+    .select('id, is_active, role')
+    .eq('email', userEmail)
+    .maybeSingle();
+
+  if (adminProf?.is_active) {
+    return { isAuthorized: true, user, email: userEmail, isAdmin: true, role: adminProf.role };
+  }
+
+  return { isAuthorized: false, user, error: 'Forbidden: Administrative privileges required' };
+}
+

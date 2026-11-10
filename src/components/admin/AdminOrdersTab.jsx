@@ -676,9 +676,14 @@ const AdminOrdersTab = ({
     }
     setIsSendingDeliveryEmail(order.id);
     try {
+      const { data: { session: ssn } } = await supabase.auth.getSession();
+      const token = ssn?.access_token;
       const res = await fetch('/api/notify-delivery', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ orderId: order.id, orderReference: order.order_reference }),
       });
       const data = await res.json();

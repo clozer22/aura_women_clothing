@@ -154,9 +154,7 @@ export default async function handler(req, res) {
         ? {
             id: orderRecord.id,
             order_reference: orderRecord.order_reference,
-            customer_name: orderRecord.customer_name,
-            shipping_address: orderRecord.shipping_address,
-            total_amount: orderRecord.total_amount,
+            tracking_number: orderRecord.tracking_number,
             status: currentFulfillmentStatus,
             payment_method: orderRecord.payment_method,
             payment_status: orderRecord.payment_status,

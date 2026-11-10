@@ -1,4 +1,4 @@
-import { getSupabaseServerClient } from './_lib/supabaseServer.js';
+import { getSupabaseServerClient, verifyAdminSession } from './_lib/supabaseServer.js';
 import { ensureServerEnv } from './_lib/envHelper.js';
 import { sendOutForDeliveryEmail } from './_lib/emailService.js';
 
@@ -19,6 +19,17 @@ export default async function handler(req, res) {
   try {
     ensureServerEnv();
 
+    const supabase = getSupabaseServerClient();
+    if (!supabase) {
+      return res.status(500).json({ success: false, error: 'Database connection unavailable.' });
+    }
+
+    // Verify administrative privileges
+    const adminCheck = await verifyAdminSession(req, supabase);
+    if (!adminCheck.isAuthorized) {
+      return res.status(401).json({ success: false, error: adminCheck.error || 'Administrative authorization required.' });
+    }
+
     const { orderId, orderReference } = req.body || req.query || {};
 
     if (!orderId && !orderReference) {
@@ -28,10 +39,6 @@ export default async function handler(req, res) {
       });
     }
 
-    const supabase = getSupabaseServerClient();
-    if (!supabase) {
-      return res.status(500).json({ success: false, error: 'Database connection unavailable.' });
-    }
 
     let query = supabase.from('orders').select('*');
     if (orderId) {
