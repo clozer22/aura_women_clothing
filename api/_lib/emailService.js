@@ -17,7 +17,10 @@ export async function sendEmail({
   const host = process.env.SMTP_HOST || 'smtp.gmail.com';
   const port = parseInt(process.env.SMTP_PORT || '465', 10);
   const user = process.env.SMTP_USER || 'auraofficialph@gmail.com';
-  const pass = (process.env.SMTP_PASS || 'ouqovyjoevrlqvvo').replace(/\s+/g, '');
+  const pass = (process.env.SMTP_PASS || '').replace(/\s+/g, '');
+  if (!pass) {
+    throw new Error('SMTP_PASS is not configured in server environment variables.');
+  }
   const sender = from || process.env.EMAIL_FROM || `"Aura Women's Clothing" <${user}>`;
 
   if (!to || !to.includes('@')) {

@@ -56,10 +56,9 @@ export default async function handler(req, res) {
             orderReference: cleanRef,
             paymentStatus: 'COD_PENDING',
             fulfillmentStatus: existingOrder.status || 'TO_SHIP',
-            trackingNumber: existingOrder.tracking_number,
-            courierName: existingOrder.courier_name,
-            waybillUrl: existingOrder.waybill_url,
-            order: existingOrder,
+            trackingNumber: existingOrder.tracking_number || null,
+            courierName: existingOrder.courier_name || 'J&T Express',
+            waybillUrl: existingOrder.waybill_url || null,
           });
         }
       } catch (e) {

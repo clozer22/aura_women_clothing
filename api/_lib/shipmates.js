@@ -34,7 +34,10 @@ export async function bookShipmentWithShipmates(order, options = {}) {
   }
 
   const isTestMode = process.env.SHIPMATES_TEST_MODE !== 'false';
-  const apiKey = process.env.SHIPMATES_API_KEY || 'sm_test_aura_atelier_sandbox_token';
+  const apiKey = process.env.SHIPMATES_API_KEY;
+  if (!apiKey) {
+    throw new Error('SHIPMATES_API_KEY is not configured in server environment variables.');
+  }
   const baseUrl = (process.env.SHIPMATES_BASE_URL || 'https://api.shipmates.app/v1').replace(/\/$/, '');
 
   // 1. Prepare Atelier Pickup / Sender Address

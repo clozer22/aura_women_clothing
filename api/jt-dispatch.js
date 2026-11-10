@@ -45,7 +45,35 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Database configuration missing' });
     }
 
-    // 2. Fetch Order from Supabase (with secure RPC fallback)
+    // 2. Verify Administrative Privileges (Prevent unauthorized courier dispatches)
+    const authHeader = req.headers.authorization || req.headers.Authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Administrative authorization token required to book courier shipments' });
+    }
+    const token = authHeader.substring(7).trim();
+    const { data: userData, error: userErr } = await supabase.auth.getUser(token);
+    if (userErr || !userData?.user?.email) {
+      return res.status(401).json({ error: 'Invalid or expired administrative session' });
+    }
+
+    const { data: adminProfile } = await supabase
+      .from('admin_profiles')
+      .select('id, is_active')
+      .eq('email', userData.user.email.toLowerCase())
+      .maybeSingle();
+
+    const isAuraAdmin =
+      userData.user.email.toLowerCase().endsWith('@superadmin.com') ||
+      userData.user.email.toLowerCase().endsWith('@aura.com') ||
+      userData.user.email.toLowerCase().endsWith('@admin.com') ||
+      userData.user.email.toLowerCase() === 'markjosephaballe1@gmail.com' ||
+      adminProfile?.is_active === true;
+
+    if (!isAuraAdmin) {
+      return res.status(403).json({ error: 'Forbidden: Admin access required to dispatch courier shipments' });
+    }
+
+    // 3. Fetch Order from Supabase (with secure RPC fallback)
     let order = null;
     try {
       const { data: rpcOrder } = await supabase.rpc('get_order_by_reference', { p_order_ref: cleanRef });

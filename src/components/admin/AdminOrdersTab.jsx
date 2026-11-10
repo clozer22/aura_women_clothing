@@ -378,9 +378,14 @@ const AdminOrdersTab = ({
       // 1. If tracking number not yet assigned, call J&T Express dispatch API
       if (!order.tracking_number) {
         try {
+          const { data: { session: ssn } } = await supabase.auth.getSession();
+          const adminTok = ssn?.access_token || '';
           const res = await fetch(`/api/jt-dispatch?ref=${order.order_reference}`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...(adminTok ? { Authorization: `Bearer ${adminTok}` } : {}),
+            },
             body: JSON.stringify({
               orderReference: order.order_reference,
               status: 'AWAITING_COLLECTION',
@@ -468,9 +473,14 @@ const AdminOrdersTab = ({
       // Ensure J&T tracking number is present
       if (!finalOrder.tracking_number) {
         try {
+          const { data: { session: ssn } } = await supabase.auth.getSession();
+          const adminTok = ssn?.access_token || '';
           const res = await fetch(`/api/jt-dispatch?ref=${noteModalOrder.order_reference}`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...(adminTok ? { Authorization: `Bearer ${adminTok}` } : {}),
+            },
             body: JSON.stringify({
               orderReference: noteModalOrder.order_reference,
               status: 'AWAITING_COLLECTION',

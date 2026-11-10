@@ -79,14 +79,22 @@ export default function OrderDetailPage({
     setCancelError(null);
     try {
       const fullReason = cancelNotes.trim() ? `${cancelReason} (${cancelNotes.trim()})` : cancelReason;
+      let authToken = '';
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) authToken = session.access_token;
+      } catch (_) {}
+
       const res = await fetch('/api/cancel-order', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        },
         body: JSON.stringify({
           orderReference: order.order_reference,
           reason: fullReason,
           customerEmail: user?.email || order.customer_email,
-          userId: user?.id || order.user_id,
         }),
       });
 

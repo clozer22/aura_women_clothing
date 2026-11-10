@@ -44,12 +44,57 @@ export default async function handler(req, res) {
       return res.status(404).json({ success: false, error: 'Order not found' });
     }
 
-    // 2. Ownership verification safeguard (if provided)
-    if (userId && order.user_id && order.user_id !== userId) {
-      return res.status(403).json({ success: false, error: 'Unauthorized to cancel this order' });
+    // 2. Ownership & Authorization Verification Safeguard
+    const authHeader = req.headers.authorization || req.headers.Authorization;
+    let authUser = null;
+    let isAdmin = false;
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.substring(7).trim();
+      if (token) {
+        try {
+          const { data: userData } = await supabase.auth.getUser(token);
+          if (userData?.user) {
+            authUser = userData.user;
+            const userEmail = (authUser.email || '').toLowerCase();
+            if (
+              userEmail.endsWith('@superadmin.com') ||
+              userEmail.endsWith('@aura.com') ||
+              userEmail.endsWith('@admin.com') ||
+              userEmail === 'markjosephaballe1@gmail.com'
+            ) {
+              isAdmin = true;
+            } else {
+              const { data: adminProf } = await supabase
+                .from('admin_profiles')
+                .select('id, is_active')
+                .eq('email', userEmail)
+                .maybeSingle();
+              if (adminProf?.is_active) isAdmin = true;
+            }
+          }
+        } catch (_) {}
+      }
     }
-    if (customerEmail && order.customer_email && order.customer_email.toLowerCase() !== customerEmail.toLowerCase() && !order.user_id) {
-      return res.status(403).json({ success: false, error: 'Email does not match order record' });
+
+    // If order was placed by an authenticated user, require authenticated session matching user_id or admin
+    if (order.user_id) {
+      if (!isAdmin && (!authUser || authUser.id !== order.user_id)) {
+        return res.status(403).json({
+          success: false,
+          error: 'Unauthorized: You must be signed into the account that placed this order to cancel it.',
+        });
+      }
+    } else {
+      // Guest order: require exact email match or admin privilege
+      const incomingEmail = (customerEmail || authUser?.email || '').toLowerCase().trim();
+      const orderEmail = (order.customer_email || '').toLowerCase().trim();
+      if (!isAdmin && (!incomingEmail || incomingEmail !== orderEmail)) {
+        return res.status(403).json({
+          success: false,
+          error: 'Unauthorized: Email address does not match order record.',
+        });
+      }
     }
 
     // 3. Status eligibility check: only allow cancellation if order is awaiting shipment
