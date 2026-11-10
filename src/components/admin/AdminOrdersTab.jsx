@@ -582,9 +582,14 @@ const AdminOrdersTab = ({
     setIsSyncingAllJt(true);
     setJtSyncFeedback(null);
     try {
+      const { data: { session: ssn } } = await supabase.auth.getSession();
+      const adminTok = ssn?.access_token || '';
       const res = await fetch('/api/jt-sync-orders', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(adminTok ? { Authorization: `Bearer ${adminTok}` } : {}),
+        },
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
@@ -613,9 +618,14 @@ const AdminOrdersTab = ({
     if (!order?.tracking_number) return;
     setSyncingOrderId(order.id);
     try {
+      const { data: { session: ssn } } = await supabase.auth.getSession();
+      const adminTok = ssn?.access_token || '';
       const res = await fetch('/api/jt-sync-orders', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(adminTok ? { Authorization: `Bearer ${adminTok}` } : {}),
+        },
         body: JSON.stringify({ orderId: order.id, trackingNumber: order.tracking_number }),
       });
       const data = await res.json();

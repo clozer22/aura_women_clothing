@@ -24,6 +24,41 @@ export default async function handler(req, res) {
       return res.status(500).json({ success: false, error: 'Database client unavailable' });
     }
 
+    // Administrative session or Cron Secret verification
+    const cronSecret = process.env.CRON_SECRET || process.env.VERCEL_CRON_SECRET;
+    const authHeader = req.headers.authorization || req.headers.Authorization || '';
+    const incomingCronSecret = req.headers['x-cron-secret'] || req.headers['authorization'];
+
+    let isAuthorized = false;
+    if (cronSecret && incomingCronSecret && incomingCronSecret.includes(cronSecret)) {
+      isAuthorized = true;
+    } else if (authHeader.startsWith('Bearer ')) {
+      const token = authHeader.substring(7).trim();
+      const { data: userData, error: userErr } = await supabase.auth.getUser(token);
+      if (!userErr && userData?.user?.email) {
+        const callerEmail = userData.user.email.toLowerCase();
+        const { data: adminProfile } = await supabase
+          .from('admin_profiles')
+          .select('id, is_active')
+          .eq('email', callerEmail)
+          .maybeSingle();
+
+        if (
+          callerEmail.endsWith('@superadmin.com') ||
+          callerEmail.endsWith('@aura.com') ||
+          callerEmail.endsWith('@admin.com') ||
+          callerEmail === 'markjosephaballe1@gmail.com' ||
+          adminProfile?.is_active === true
+        ) {
+          isAuthorized = true;
+        }
+      }
+    }
+
+    if (!isAuthorized) {
+      return res.status(401).json({ success: false, error: 'Administrative authorization required to sync tracking' });
+    }
+
     const { orderId, orderReference, trackingNumber } = req.body || req.query || {};
 
     let targetOrders = [];

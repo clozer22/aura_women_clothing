@@ -1,6 +1,8 @@
+import crypto from 'crypto';
 import { getSupabaseServerClient } from './_lib/supabaseServer.js';
 import { ensureServerEnv } from './_lib/envHelper.js';
 import { sendOutForDeliveryEmail } from './_lib/emailService.js';
+import { generateJtDigest, getJtConfig } from './_lib/jtExpress.js';
 
 export default async function handler(req, res) {
   // CORS Preflight & Headers
@@ -48,6 +50,27 @@ export default async function handler(req, res) {
       }
     } else if (rawBody && typeof rawBody === 'object') {
       body = rawBody;
+    }
+
+    // Cryptographic signature digest verification (VULN-03)
+    const incomingDigest = body.data_digest || req.headers['data-digest'] || req.headers['data_digest'];
+    const jtConfig = getJtConfig();
+
+    if (incomingDigest && jtConfig.privateKey) {
+      const contentToVerify = typeof body.bizContent === 'string'
+        ? body.bizContent
+        : (body.bizContent ? JSON.stringify(body.bizContent) : '');
+
+      if (contentToVerify) {
+        const computedDigest = generateJtDigest(contentToVerify, jtConfig.privateKey);
+        const incBuf = Buffer.from(incomingDigest);
+        const expBuf = Buffer.from(computedDigest);
+        const isMatch = incBuf.length === expBuf.length && crypto.timingSafeEqual(incBuf, expBuf);
+        if (!isMatch) {
+          console.warn('[J&T Webhook] Invalid signature digest rejected.');
+          return res.status(401).json({ code: '0', msg: 'Invalid signature digest', succ: false });
+        }
+      }
     }
 
     console.log('[J&T Webhook] Incoming push tracking payload:', JSON.stringify(body));

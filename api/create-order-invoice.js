@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { getSupabaseServerClient } from './_lib/supabaseServer.js';
 import { PRODUCTS } from '../src/data/products.js';
 import { calculateShippingFee } from '../src/lib/shippingCalculator.js';
@@ -278,8 +279,8 @@ export default async function handler(req, res) {
     const shippingFee = shippingCalc.fee;
     const totalAmount = netSubtotal + shippingFee;
 
-    // 7. Generate Cryptographically Non-Guessable Order Reference
-    const orderReference = `AC-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    // 7. Generate Cryptographically Non-Guessable Order Reference (CSPRNG)
+    const orderReference = `AC-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
 
     // 8. Special Handling for Cash on Delivery (COD)
     if (paymentMethod === 'COD') {
@@ -321,10 +322,11 @@ export default async function handler(req, res) {
             console.warn('Notice: Could not deduct inventory via RPC:', deductErr.message);
           }
           if (promoRecord?.id) {
-            await supabase
-              .from('promotions')
-              .update({ times_used: (promoRecord.times_used || 0) + 1 })
-              .eq('id', promoRecord.id);
+            try {
+              await supabase.rpc('increment_promo_usage', { p_promo_id: promoRecord.id });
+            } catch (pErr) {
+              console.warn('[Create Order] Atomic promo usage increment warning:', pErr.message);
+            }
           }
         } catch (insertErr) {
           console.warn('Notice: Could not insert COD order into Supabase:', insertErr.message);
@@ -466,10 +468,11 @@ export default async function handler(req, res) {
         await supabase.from('orders').insert([newOrder]);
         // Inventory deduction is idempotently deferred until payment is verified as PAID via webhook or verify-payment.
         if (promoRecord?.id) {
-          await supabase
-            .from('promotions')
-            .update({ times_used: (promoRecord.times_used || 0) + 1 })
-            .eq('id', promoRecord.id);
+          try {
+            await supabase.rpc('increment_promo_usage', { p_promo_id: promoRecord.id });
+          } catch (pErr) {
+            console.warn('[Create Order] Atomic promo usage increment warning:', pErr.message);
+          }
         }
       } catch (insertErr) {
         console.warn('Notice: Could not insert pending order into Supabase:', insertErr.message);
