@@ -1,6 +1,6 @@
 import crypto from 'crypto';
-import { getSupabaseServerClient } from './_lib/supabaseServer.js';
-import { ensureServerEnv } from './_lib/envHelper.js';
+import { getSupabaseServerClient } from '../supabaseServer.js';
+import { ensureServerEnv } from '../envHelper.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {

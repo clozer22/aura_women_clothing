@@ -1,6 +1,18 @@
 {
   "rewrites": [
     {
+      "source": "/api/maya-webhook",
+      "destination": "/api/payment-webhook?gateway=maya"
+    },
+    {
+      "source": "/api/paymongo-webhook",
+      "destination": "/api/payment-webhook?gateway=paymongo"
+    },
+    {
+      "source": "/api/xendit-webhook",
+      "destination": "/api/payment-webhook?gateway=xendit"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }

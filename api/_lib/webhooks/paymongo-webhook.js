@@ -1,6 +1,6 @@
 import crypto from 'crypto';
-import { getSupabaseServerClient } from './_lib/supabaseServer.js';
-import { ensureServerEnv } from './_lib/envHelper.js';
+import { getSupabaseServerClient } from '../supabaseServer.js';
+import { ensureServerEnv } from '../envHelper.js';
 
 /**
  * Verifies PayMongo's `Paymongo-Signature` header (`t=...,te=...,li=...`)
