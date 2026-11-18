@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, memo } from 'react';
 import { motion } from 'framer-motion';
 import ShopTheLook from './ShopTheLook';
 
-export default function AboutSection({
+function AboutSection({
   config,
   products = [],
   onSelectProduct,
@@ -12,26 +12,13 @@ export default function AboutSection({
   const safeConfig = config || {};
   const mediaUrl = safeConfig.aboutMediaUrl || 'https://pcmlleeuxbymomjxhwlv.supabase.co/storage/v1/object/public/storefront/about_media_1788531122753.png';
   const mediaType = safeConfig.aboutMediaType || 'image';
-  const isVideoUrl = mediaUrl && (
-    mediaType === 'video' ||
-    mediaUrl.startsWith('data:video/') ||
-    (typeof mediaUrl === 'string' && !!mediaUrl.match(/\.(mp4|webm|mov|ogg)($|\?)/i))
+  const isVideoUrl = Boolean(
+    mediaUrl && (
+      mediaType === 'video' ||
+      mediaUrl.startsWith('data:video/') ||
+      (typeof mediaUrl === 'string' && !!mediaUrl.match(/\.(mp4|webm|mov|ogg)($|\?)/i))
+    )
   );
-
-  // If the about media is an image, render the interactive ShopTheLook lookbook
-  if (!isVideoUrl) {
-    return (
-      <section id="about" className="w-full bg-white select-none">
-        <ShopTheLook
-          bannerImage={mediaUrl}
-          catalogProducts={products}
-          onSelectProduct={onSelectProduct}
-          onNavigateFullCatalog={onNavigateFullCatalog}
-          devMode={devMode}
-        />
-      </section>
-    );
-  }
 
   const [loaded, setLoaded] = useState(false);
   const mediaRef = useRef(null);
@@ -39,6 +26,7 @@ export default function AboutSection({
 
   // Center scroll position on mobile view once media is loaded
   useEffect(() => {
+    if (!isVideoUrl) return;
     const centerScroll = () => {
       if (scrollContainerRef.current) {
         const container = scrollContainerRef.current;
@@ -59,9 +47,10 @@ export default function AboutSection({
         clearTimeout(timer2);
       };
     }
-  }, [loaded]);
+  }, [loaded, isVideoUrl]);
 
   useEffect(() => {
+    if (!isVideoUrl) return;
     const handleResize = () => {
       if (scrollContainerRef.current) {
         const container = scrollContainerRef.current;
@@ -74,7 +63,7 @@ export default function AboutSection({
 
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  }, [isVideoUrl]);
 
   // Viewport & Tab visibility observer: pause video when scrolled out of view, unmounted, or tab minimized
   useEffect(() => {
@@ -124,6 +113,21 @@ export default function AboutSection({
       }
     };
   }, [isVideoUrl, mediaUrl]);
+
+  // If the about media is an image, render the interactive ShopTheLook lookbook
+  if (!isVideoUrl) {
+    return (
+      <section id="about" className="w-full bg-white select-none">
+        <ShopTheLook
+          bannerImage={mediaUrl}
+          catalogProducts={products}
+          onSelectProduct={onSelectProduct}
+          onNavigateFullCatalog={onNavigateFullCatalog}
+          devMode={devMode}
+        />
+      </section>
+    );
+  }
 
   return (
     <section id="about" className="relative min-h-[600px] sm:min-h-[850px] w-full overflow-hidden select-none bg-white">
@@ -176,3 +180,5 @@ export default function AboutSection({
     </section>
   );
 }
+
+export default memo(AboutSection);

@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 // Global memory cache of successfully loaded image URLs
 const LOADED_IMAGE_CACHE = new Set();
 
-export default function ShimmerImage({
+function ShimmerImage({
   src,
   alt = '',
   className = '',
@@ -65,3 +65,5 @@ export default function ShimmerImage({
     </div>
   );
 }
+
+export default React.memo(ShimmerImage);

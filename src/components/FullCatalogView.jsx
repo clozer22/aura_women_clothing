@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect, useTransition } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useTransition, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, ChevronsUpDown, ArrowLeft, Eye, RotateCcw, Filter, Search, X, ShoppingBag, Sparkles, ChevronLeft, ChevronRight } from 'lucide-react';
 import ShimmerImage from './ShimmerImage';
@@ -30,7 +30,7 @@ function SkeletonCard() {
   );
 }
 
-export default function FullCatalogView({ products, isLoading, onBackToHome, onSelectProduct, initialSearchQuery = '' }) {
+function FullCatalogView({ products, isLoading, onBackToHome, onSelectProduct, initialSearchQuery = '' }) {
   const activeList = products || [];
   const [selectedTops, setSelectedTops] = useState([]);
   const [selectedBottoms, setSelectedBottoms] = useState([]);
@@ -462,7 +462,7 @@ export default function FullCatalogView({ products, isLoading, onBackToHome, onS
                 <div
                   key={product.id}
                   onClick={() => onSelectProduct(product)}
-                  className="group bg-white p-3 sm:p-4 flex flex-col justify-between cursor-pointer hover:bg-[#FAF5F2]/40 transition-colors relative min-h-[380px] sm:min-h-[460px] rounded-none border-r border-b border-[#E8DCD7]"
+                  className="catalog-card-cv group bg-white p-3 sm:p-4 flex flex-col justify-between cursor-pointer hover:bg-[#FAF5F2]/40 transition-colors relative min-h-[380px] sm:min-h-[460px] rounded-none border-r border-b border-[#E8DCD7]"
                 >
                   {/* Top Badges Header */}
                   <div className="flex items-center justify-between text-[11px] font-bold text-[#2C1E1B] uppercase tracking-wider mb-2 z-10">
@@ -647,3 +647,5 @@ export default function FullCatalogView({ products, isLoading, onBackToHome, onS
     </div>
   );
 }
+
+export default memo(FullCatalogView);

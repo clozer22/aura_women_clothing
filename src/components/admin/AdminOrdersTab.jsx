@@ -54,8 +54,13 @@ const AdminOrdersTab = ({
   currentAdmin = null,
 }) => {
   const getInitialActiveOrderTab = () => {
+    if (initialFilterTab && initialFilterTab !== 'ALL') {
+      return initialFilterTab;
+    }
     try {
       const params = new URLSearchParams(window.location.search);
+      const urlSub = params.get('subfilter');
+      if (urlSub) return urlSub;
       const urlTab = params.get('orderTab');
       if (urlTab) return urlTab;
       const savedTab = sessionStorage.getItem('aura_admin_order_tab');
@@ -77,6 +82,13 @@ const AdminOrdersTab = ({
 
   const [activeTab, setActiveTab] = useState(getInitialActiveOrderTab);
   const [toShipSubTab, setToShipSubTab] = useState(getInitialToShipSubTab);
+
+  // Synchronize activeTab when navigated from Dashboard pipeline cards (`initialFilterTab`)
+  useEffect(() => {
+    if (initialFilterTab) {
+      setActiveTab(initialFilterTab);
+    }
+  }, [initialFilterTab]);
 
   // Sync orderTab and pipelineStage with URL query parameters and sessionStorage
   useEffect(() => {
@@ -1310,7 +1322,7 @@ const AdminOrdersTab = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
           <button
             onClick={handleExportCSV}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-xl border border-emerald-200 shadow-xs transition-all cursor-pointer"

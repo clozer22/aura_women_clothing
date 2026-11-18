@@ -22,7 +22,11 @@ export default async function handler(req, res) {
 
   try {
     ensureServerEnv();
-    const supabase = getSupabaseServerClient();
+    const authHeader = req.headers.authorization || req.headers.Authorization || '';
+    const hasServiceRole = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
+    const customHeaders = !hasServiceRole && authHeader ? { Authorization: authHeader } : {};
+
+    const supabase = getSupabaseServerClient(null, customHeaders);
     if (!supabase) {
       return res.status(500).json({ success: false, error: 'Database connection unavailable' });
     }
@@ -45,7 +49,6 @@ export default async function handler(req, res) {
     }
 
     // 2. Ownership & Authorization Verification Safeguard
-    const authHeader = req.headers.authorization || req.headers.Authorization;
     let authUser = null;
     let isAdmin = false;
 
@@ -99,7 +102,9 @@ export default async function handler(req, res) {
 
     // 3. Status eligibility check: only allow cancellation if order is awaiting shipment
     const currentStatus = (order.status || '').toUpperCase();
-    const cancellableStatuses = ['PENDING', 'TO_SHIP', 'PROCESSING', 'UNPAID', 'AWAITING_SHIPMENT'];
+    const cancellableStatuses = isAdmin
+      ? ['PENDING', 'TO_SHIP', 'PROCESSING', 'UNPAID', 'AWAITING_SHIPMENT', 'AWAITING_COLLECTION']
+      : ['PENDING', 'TO_SHIP', 'PROCESSING', 'UNPAID', 'AWAITING_SHIPMENT'];
 
     if (!cancellableStatuses.includes(currentStatus)) {
       if (['SHIPPED', 'TO_DELIVER', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(currentStatus)) {
@@ -135,9 +140,9 @@ export default async function handler(req, res) {
           for (const item of order.items) {
             if (item.id) {
               const qty = Number(item.quantity) || 1;
-              const { data: prod } = await supabase.from('products').select('stock').eq('id', item.id).single();
+              const { data: prod } = await supabase.from('products').select('qty').eq('id', item.id).maybeSingle();
               if (prod) {
-                await supabase.from('products').update({ stock: (Number(prod.stock) || 0) + qty }).eq('id', item.id);
+                await supabase.from('products').update({ qty: Math.max(0, (Number(prod.qty) || 0) + qty) }).eq('id', item.id);
               }
             }
           }
@@ -166,7 +171,7 @@ export default async function handler(req, res) {
       status: 'CANCELLED',
       payment_status: newPaymentStatus,
       cancellation_reason: reason,
-      cancelled_by: 'CUSTOMER',
+      cancelled_by: isAdmin ? 'ADMIN' : 'CUSTOMER',
       cancelled_at: new Date().toISOString(),
       inventory_deducted: false,
       audit_trail: updatedAudit,
@@ -174,16 +179,31 @@ export default async function handler(req, res) {
       updated_at: new Date().toISOString(),
     };
 
-    const { data: updatedOrder, error: updateErr } = await supabase
+    let { error: updateErr } = await supabase
       .from('orders')
       .update(updatePayload)
-      .eq('id', order.id)
-      .select()
-      .single();
+      .eq('id', order.id);
+
+    // Fallback in case schema cache hasn't reloaded optional cancellation columns yet
+    if (updateErr) {
+      const fallbackPayload = {
+        status: 'CANCELLED',
+        payment_status: newPaymentStatus,
+        inventory_deducted: false,
+        audit_trail: updatedAudit,
+        last_touched_by: auditEntry,
+        updated_at: new Date().toISOString(),
+      };
+      const fallbackRes = await supabase
+        .from('orders')
+        .update(fallbackPayload)
+        .eq('id', order.id);
+      updateErr = fallbackRes.error;
+    }
 
     if (updateErr) {
       console.error('[Cancel Order] Database update error:', updateErr);
-      return res.status(500).json({ success: false, error: 'Failed to update order status' });
+      return res.status(500).json({ success: false, error: updateErr.message || 'Failed to update order status' });
     }
 
     return res.status(200).json({

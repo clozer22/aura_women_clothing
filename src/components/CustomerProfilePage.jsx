@@ -48,6 +48,7 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
 
   // VIP Customer Ranking States
   const [totalItemsOrdered, setTotalItemsOrdered] = useState(0);
+  const [usedVoucherCodes, setUsedVoucherCodes] = useState([]);
   const [tierBenefits, setTierBenefits] = useState(getCustomerTierBenefits);
   const [copiedVoucher, setCopiedVoucher] = useState(false);
 
@@ -147,25 +148,34 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
     // Load Philippine Regions
     getRegions().then((data) => setRegions(data || []));
 
-    // Load customer ranking order data
+    // Load customer ranking order data & used voucher history
     async function loadCustomerRanking() {
       if (!user) return;
       try {
         const { data, error } = await supabase
           .from('orders')
-          .select('id, items, items_count, status, payment_status')
-          .or(`user_id.eq.${user.id},customer_email.eq.${user.email}`);
+          .select('id, items, promo_code, status, payment_status')
+          .or(`user_id.eq.${user.id},customer_email.ilike.${user.email}`);
 
         if (!error && Array.isArray(data)) {
           let itemsCount = 0;
-          data.forEach(ord => {
+          const usedSet = new Set();
+          data.forEach((ord) => {
+            const st = (ord.status || '').toUpperCase();
+            if (['CANCELLED', 'RETURNED', 'REFUNDED'].includes(st)) return;
+
+            if (ord.promo_code) {
+              usedSet.add(String(ord.promo_code).trim().toUpperCase());
+            }
+
             if (Array.isArray(ord.items) && ord.items.length > 0) {
               itemsCount += ord.items.reduce((s, it) => s + (Number(it?.quantity) || 1), 0);
             } else {
-              itemsCount += (Number(ord.items_count) || 1);
+              itemsCount += 1;
             }
           });
           setTotalItemsOrdered(itemsCount);
+          setUsedVoucherCodes(Array.from(usedSet));
         }
       } catch (err) {
         console.warn('Customer ranking orders fetch notice:', err);
@@ -793,6 +803,7 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
               {/* TIER 1: AURA MUSE */}
               {(() => {
                 const cfg = tierBenefits[TIER_KEYS.MUSE] || DEFAULT_TIER_CONFIG[TIER_KEYS.MUSE];
+                const vouchers = cfg.vouchers || DEFAULT_TIER_CONFIG[TIER_KEYS.MUSE].vouchers || [];
                 const isActive = currentTier === TIER_KEYS.MUSE;
                 return (
                   <div className={`bg-white border transition-all flex flex-col justify-between p-6 sm:p-7 shadow-xs relative ${
@@ -808,35 +819,56 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
                         <Sparkles className="w-5 h-5" />
                       </div>
                       <span className="text-[10px] uppercase font-bold tracking-widest text-[#A38E88] block">
-                        Tier 1 • {cfg.thresholdLabel || '5 items or below'}
+                        Tier 1 • {cfg.thresholdLabel || '1–5 items'}
                       </span>
                       <h3 className="text-lg font-brand font-bold text-[#2C1E1B] mt-0.5">
                         {TIER_KEYS.MUSE}
                       </h3>
                       <p className="text-xs italic text-[#705B56] mt-0.5">
-                        {cfg.tagline}
+                        {cfg.tagline || 'Entry Membership'}
                       </p>
 
-                      {/* Voucher Card */}
-                      {cfg.voucherCode && (
-                        <div className="mt-4 p-3 bg-[#FAF5F2] border border-[#E8DCD7] flex items-center justify-between">
-                          <div>
-                            <span className="text-[9px] uppercase font-bold tracking-wider text-[#A38E88] block">
-                              Voucher ({cfg.voucherDiscount})
-                            </span>
-                            <span className="text-xs font-mono font-bold text-[#2C1E1B]">
-                              {cfg.voucherCode}
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleCopyVoucher(cfg.voucherCode)}
-                            className="px-2.5 py-1 bg-[#2C1E1B] hover:bg-[#B86B60] text-white text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer"
-                          >
-                            {copiedVoucher === cfg.voucherCode ? 'Copied' : 'Copy'}
-                          </button>
-                        </div>
-                      )}
+                      {/* One-Time Vouchers List */}
+                      <div className="mt-4 space-y-2">
+                        {vouchers.map((v) => {
+                          const isUsed = usedVoucherCodes.includes(v.code);
+                          return (
+                            <div
+                              key={v.code}
+                              className={`p-2.5 border flex items-center justify-between gap-2 ${
+                                isUsed
+                                  ? 'bg-slate-50 border-slate-200 opacity-65'
+                                  : 'bg-[#FAF5F2] border-[#E8DCD7]'
+                              }`}
+                            >
+                              <div className="min-w-0">
+                                <span className="text-[10px] font-bold text-[#2C1E1B] block truncate">
+                                  {v.label}
+                                </span>
+                                <span className="text-[9px] text-[#705B56] block">
+                                  {v.sublabel}
+                                </span>
+                                <span className="text-[11px] font-mono font-bold text-[#9E6D5F]">
+                                  {v.code}
+                                </span>
+                              </div>
+                              {isUsed ? (
+                                <span className="px-2 py-1 bg-slate-200 text-slate-600 text-[9px] font-bold uppercase tracking-wider whitespace-nowrap">
+                                  Used (1x)
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyVoucher(v.code)}
+                                  className="px-2.5 py-1 bg-[#2C1E1B] hover:bg-[#B86B60] text-white text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer flex-shrink-0"
+                                >
+                                  {copiedVoucher === v.code ? 'Copied' : 'Copy'}
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
 
                       {/* Perks */}
                       <ul className="mt-5 space-y-2.5 text-xs text-[#2C1E1B]">
@@ -855,6 +887,7 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
               {/* TIER 2: AURA ICON */}
               {(() => {
                 const cfg = tierBenefits[TIER_KEYS.ICON] || DEFAULT_TIER_CONFIG[TIER_KEYS.ICON];
+                const vouchers = cfg.vouchers || DEFAULT_TIER_CONFIG[TIER_KEYS.ICON].vouchers || [];
                 const isActive = currentTier === TIER_KEYS.ICON;
                 return (
                   <div className={`bg-white border transition-all flex flex-col justify-between p-6 sm:p-7 shadow-xs relative ${
@@ -870,35 +903,56 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
                         <ShieldCheck className="w-5 h-5" />
                       </div>
                       <span className="text-[10px] uppercase font-bold tracking-widest text-[#A38E88] block">
-                        Tier 2 • {cfg.thresholdLabel || '6–15 items'}
+                        Tier 2 • {cfg.thresholdLabel || '6–14 items'}
                       </span>
                       <h3 className="text-lg font-brand font-bold text-[#2C1E1B] mt-0.5">
                         {TIER_KEYS.ICON}
                       </h3>
                       <p className="text-xs italic text-[#705B56] mt-0.5">
-                        {cfg.tagline}
+                        {cfg.tagline || 'VIP Membership'}
                       </p>
 
-                      {/* Voucher Card */}
-                      {cfg.voucherCode && (
-                        <div className="mt-4 p-3 bg-purple-50/50 border border-purple-200/70 flex items-center justify-between">
-                          <div>
-                            <span className="text-[9px] uppercase font-bold tracking-wider text-purple-600 block">
-                              Voucher ({cfg.voucherDiscount})
-                            </span>
-                            <span className="text-xs font-mono font-bold text-[#2C1E1B]">
-                              {cfg.voucherCode}
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleCopyVoucher(cfg.voucherCode)}
-                            className="px-2.5 py-1 bg-purple-700 hover:bg-purple-800 text-white text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer"
-                          >
-                            {copiedVoucher === cfg.voucherCode ? 'Copied' : 'Copy'}
-                          </button>
-                        </div>
-                      )}
+                      {/* One-Time Vouchers List */}
+                      <div className="mt-4 space-y-2">
+                        {vouchers.map((v) => {
+                          const isUsed = usedVoucherCodes.includes(v.code);
+                          return (
+                            <div
+                              key={v.code}
+                              className={`p-2.5 border flex items-center justify-between gap-2 ${
+                                isUsed
+                                  ? 'bg-slate-50 border-slate-200 opacity-65'
+                                  : 'bg-purple-50/50 border-purple-200/70'
+                              }`}
+                            >
+                              <div className="min-w-0">
+                                <span className="text-[10px] font-bold text-[#2C1E1B] block truncate">
+                                  {v.label}
+                                </span>
+                                <span className="text-[9px] text-[#705B56] block">
+                                  {v.sublabel}
+                                </span>
+                                <span className="text-[11px] font-mono font-bold text-purple-700">
+                                  {v.code}
+                                </span>
+                              </div>
+                              {isUsed ? (
+                                <span className="px-2 py-1 bg-slate-200 text-slate-600 text-[9px] font-bold uppercase tracking-wider whitespace-nowrap">
+                                  Used (1x)
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyVoucher(v.code)}
+                                  className="px-2.5 py-1 bg-purple-700 hover:bg-purple-800 text-white text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer flex-shrink-0"
+                                >
+                                  {copiedVoucher === v.code ? 'Copied' : 'Copy'}
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
 
                       {/* Perks */}
                       <ul className="mt-5 space-y-2.5 text-xs text-[#2C1E1B]">
@@ -917,6 +971,7 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
               {/* TIER 3: AURA ROYAL */}
               {(() => {
                 const cfg = tierBenefits[TIER_KEYS.ROYAL] || DEFAULT_TIER_CONFIG[TIER_KEYS.ROYAL];
+                const vouchers = cfg.vouchers || DEFAULT_TIER_CONFIG[TIER_KEYS.ROYAL].vouchers || [];
                 const isActive = currentTier === TIER_KEYS.ROYAL;
                 return (
                   <div className={`bg-white border transition-all flex flex-col justify-between p-6 sm:p-7 shadow-xs relative ${
@@ -932,36 +987,57 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
                         <Crown className="w-5 h-5 text-amber-600" />
                       </div>
                       <span className="text-[10px] uppercase font-bold tracking-widest text-amber-700 block">
-                        Tier 3 • {cfg.thresholdLabel || 'More than 15 items'}
+                        Tier 3 • {cfg.thresholdLabel || '16+ items'}
                       </span>
                       <h3 className="text-lg font-brand font-bold text-[#2C1E1B] mt-0.5 flex items-center gap-1.5">
                         <span>{TIER_KEYS.ROYAL}</span>
                         <Crown className="w-4 h-4 text-amber-600" />
                       </h3>
                       <p className="text-xs italic text-[#705B56] mt-0.5">
-                        {cfg.tagline}
+                        {cfg.tagline || 'Elite Membership'}
                       </p>
 
-                      {/* Voucher Card */}
-                      {cfg.voucherCode && (
-                        <div className="mt-4 p-3 bg-amber-50/70 border border-amber-300/80 flex items-center justify-between">
-                          <div>
-                            <span className="text-[9px] uppercase font-bold tracking-wider text-amber-800 block">
-                              Voucher ({cfg.voucherDiscount})
-                            </span>
-                            <span className="text-xs font-mono font-bold text-[#2C1E1B]">
-                              {cfg.voucherCode}
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleCopyVoucher(cfg.voucherCode)}
-                            className="px-2.5 py-1 bg-amber-700 hover:bg-amber-800 text-white text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer"
-                          >
-                            {copiedVoucher === cfg.voucherCode ? 'Copied' : 'Copy'}
-                          </button>
-                        </div>
-                      )}
+                      {/* One-Time Vouchers List */}
+                      <div className="mt-4 space-y-2">
+                        {vouchers.map((v) => {
+                          const isUsed = usedVoucherCodes.includes(v.code);
+                          return (
+                            <div
+                              key={v.code}
+                              className={`p-2.5 border flex items-center justify-between gap-2 ${
+                                isUsed
+                                  ? 'bg-slate-50 border-slate-200 opacity-65'
+                                  : 'bg-amber-50/70 border-amber-300/80'
+                              }`}
+                            >
+                              <div className="min-w-0">
+                                <span className="text-[10px] font-bold text-[#2C1E1B] block truncate">
+                                  {v.label}
+                                </span>
+                                <span className="text-[9px] text-[#705B56] block">
+                                  {v.sublabel}
+                                </span>
+                                <span className="text-[11px] font-mono font-bold text-amber-800">
+                                  {v.code}
+                                </span>
+                              </div>
+                              {isUsed ? (
+                                <span className="px-2 py-1 bg-slate-200 text-slate-600 text-[9px] font-bold uppercase tracking-wider whitespace-nowrap">
+                                  Used (1x)
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyVoucher(v.code)}
+                                  className="px-2.5 py-1 bg-amber-700 hover:bg-amber-800 text-white text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer flex-shrink-0"
+                                >
+                                  {copiedVoucher === v.code ? 'Copied' : 'Copy'}
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
 
                       {/* Perks */}
                       <ul className="mt-5 space-y-2.5 text-xs text-[#2C1E1B]">

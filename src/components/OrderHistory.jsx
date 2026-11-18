@@ -32,6 +32,103 @@ export default function OrderHistory({ onBackToShop, onSelectOrder }) {
   const [isLoading, setIsLoading] = useState(true);
   const [trackingModalOrder, setTrackingModalOrder] = useState(null);
 
+  // Direct Order Cancellation modal states
+  const [cancellingOrder, setCancellingOrder] = useState(null);
+  const [cancelReason, setCancelReason] = useState('Changed my mind');
+  const [cancelNotes, setCancelNotes] = useState('');
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState(null);
+
+  const handleConfirmCancelOrder = async () => {
+    if (!cancellingOrder) return;
+    setIsCancelling(true);
+    setCancelError(null);
+    try {
+      const fullReason = cancelNotes.trim() ? `${cancelReason} (${cancelNotes.trim()})` : cancelReason;
+      let authToken = '';
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) authToken = session.access_token;
+      } catch (_) {}
+
+      const res = await fetch('/api/cancel-order', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        },
+        body: JSON.stringify({
+          orderReference: cancellingOrder.order_reference,
+          reason: fullReason,
+          customerEmail: user?.email || cancellingOrder.customer_email,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      const wasPaid = (cancellingOrder.payment_status || '').toUpperCase() === 'PAID';
+      const fallbackPayStatus = wasPaid ? 'REFUND_PENDING' : 'CANCELLED';
+
+      if (!res.ok || !data.success) {
+        const auditEntry = {
+          name: cancellingOrder.customer_name || 'Customer',
+          email: user?.email || cancellingOrder.customer_email || '',
+          role: 'Customer',
+          action: `Order cancelled by customer. Reason: ${fullReason}`,
+          timestamp: new Date().toISOString(),
+        };
+        const updatedAudit = [auditEntry, ...(Array.isArray(cancellingOrder.audit_trail) ? cancellingOrder.audit_trail : [])].slice(0, 50);
+
+        const { error: directErr } = await supabase
+          .from('orders')
+          .update({
+            status: 'CANCELLED',
+            payment_status: fallbackPayStatus,
+            cancellation_reason: fullReason,
+            cancelled_by: 'CUSTOMER',
+            cancelled_at: new Date().toISOString(),
+            audit_trail: updatedAudit,
+            last_touched_by: auditEntry,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('order_reference', cancellingOrder.order_reference);
+
+        if (directErr) {
+          throw new Error(data.error || directErr.message || 'Failed to cancel order');
+        }
+      }
+
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.order_reference === cancellingOrder.order_reference
+            ? {
+                ...o,
+                status: 'CANCELLED',
+                payment_status: data.paymentStatus || fallbackPayStatus,
+                cancellation_reason: fullReason,
+                cancelled_by: 'CUSTOMER',
+              }
+            : o
+        )
+      );
+
+      try {
+        const savedLast = JSON.parse(localStorage.getItem('aura_last_order') || 'null');
+        if (savedLast && savedLast.order_reference === cancellingOrder.order_reference) {
+          savedLast.status = 'CANCELLED';
+          savedLast.payment_status = data.paymentStatus || fallbackPayStatus;
+          localStorage.setItem('aura_last_order', JSON.stringify(savedLast));
+        }
+      } catch (_) {}
+
+      setCancellingOrder(null);
+      setCancelNotes('');
+    } catch (err) {
+      setCancelError(err.message || 'Unable to cancel order.');
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
   const handleOrderSelect = (order) => {
     if (onSelectOrder) {
       onSelectOrder(order);
@@ -118,21 +215,60 @@ export default function OrderHistory({ onBackToShop, onSelectOrder }) {
 
       setIsLoading(true);
       try {
-        const { data, error } = await supabase
-          .from('orders')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false });
+        // Recover and sync any recently placed order in localStorage (`aura_last_order`) that hasn't synced yet
+        try {
+          const rawLast = localStorage.getItem('aura_last_order');
+          const lastOrd = rawLast ? JSON.parse(rawLast) : null;
+          if (
+            lastOrd &&
+            lastOrd.order_reference &&
+            (lastOrd.user_id === user.id ||
+              (lastOrd.customer_email &&
+                user.email &&
+                lastOrd.customer_email.toLowerCase() === user.email.toLowerCase()))
+          ) {
+            const { data: existingRow } = await supabase
+              .from('orders')
+              .select('id')
+              .eq('order_reference', lastOrd.order_reference)
+              .maybeSingle();
+
+            if (!existingRow && Array.isArray(lastOrd.items)) {
+              await supabase.from('orders').insert([
+                {
+                  ...lastOrd,
+                  user_id: user.id,
+                },
+              ]);
+            }
+          }
+        } catch (syncErr) {}
+
+        const { data: sessionData } = await supabase.auth.getSession();
+        const accessToken = sessionData?.session?.access_token;
+        const authHeader = accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
+
+        let query = supabase.from('orders').select('*');
+        if (user.email) {
+          query = query.or(`user_id.eq.${user.id},customer_email.ilike.${user.email}`);
+        } else {
+          query = query.eq('user_id', user.id);
+        }
+
+        const { data, error } = await query.order('created_at', { ascending: false });
 
         if (!error && data) {
           setOrders(data);
           loadUserReviews(data);
 
-          // Auto-reconcile any pending orders directly with Xendit
+          // Auto-reconcile any pending orders directly with payment gateway
           data.forEach(async (ord) => {
-            if (ord.order_reference && ord.payment_status !== 'PAID') {
+            if (ord.order_reference && ord.payment_status !== 'PAID' && ord.payment_method !== 'COD') {
               try {
-                const res = await fetch(`/api/verify-payment?ref=${encodeURIComponent(ord.order_reference)}`);
+                const res = await fetch(
+                  `/api/verify-payment?ref=${encodeURIComponent(ord.order_reference)}`,
+                  { headers: authHeader }
+                );
                 if (res.ok) {
                   const check = await res.json();
                   if (check.paymentStatus === 'PAID') {
@@ -142,7 +278,7 @@ export default function OrderHistory({ onBackToShop, onSelectOrder }) {
                           ? {
                               ...item,
                               payment_status: 'PAID',
-                              status: check.fulfillmentStatus || item.status || 'PROCESSING',
+                              status: check.fulfillmentStatus || item.status || 'TO_SHIP',
                             }
                           : item
                       )
@@ -595,8 +731,8 @@ export default function OrderHistory({ onBackToShop, onSelectOrder }) {
                       </p>
                     </div>
 
-                    <div className="flex items-center justify-between md:justify-end gap-4">
-                      <div className="text-right">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between md:justify-end gap-3 sm:gap-4">
+                      <div className="flex items-center justify-between sm:block sm:text-right">
                         <span className="block text-[10px] font-brand uppercase tracking-wider text-[#705B56]">
                           Total Amount
                         </span>
@@ -605,14 +741,30 @@ export default function OrderHistory({ onBackToShop, onSelectOrder }) {
                         </span>
                       </div>
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {['PENDING', 'TO_SHIP', 'PROCESSING', 'UNPAID', 'AWAITING_SHIPMENT'].includes(
+                          (order?.status || '').toUpperCase()
+                        ) && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCancelError(null);
+                              setCancellingOrder(order);
+                            }}
+                            className="border border-rose-300 bg-rose-50/70 hover:bg-rose-600 text-rose-700 hover:text-white px-3.5 py-2.5 sm:py-3 text-[11px] uppercase tracking-wider font-bold transition-colors flex items-center gap-1.5 rounded-none cursor-pointer"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                            <span>Cancel Order</span>
+                          </button>
+                        )}
                         {order.tracking_number && (
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               setTrackingModalOrder(order);
                             }}
-                            className="bg-[#DA291C] hover:bg-[#b01e14] text-white px-3.5 py-3 text-xs uppercase tracking-wider font-bold transition-colors flex items-center gap-1.5 rounded-none cursor-pointer shadow-sm"
+                            className="bg-[#DA291C] hover:bg-[#b01e14] text-white px-3.5 py-2.5 sm:py-3 text-xs uppercase tracking-wider font-bold transition-colors flex items-center gap-1.5 rounded-none cursor-pointer shadow-sm"
                             title="Track J&T Package"
                           >
                             <Truck className="w-3.5 h-3.5" />
@@ -621,7 +773,7 @@ export default function OrderHistory({ onBackToShop, onSelectOrder }) {
                         )}
                         <button
                           onClick={() => handleOrderSelect(order)}
-                          className="bg-[#2C1E1B] hover:bg-[#B86B60] text-white px-5 py-3 text-xs uppercase tracking-[0.18em] font-bold transition-colors flex items-center gap-2 rounded-none cursor-pointer"
+                          className="flex-1 sm:flex-initial justify-center bg-[#2C1E1B] hover:bg-[#B86B60] text-white px-4 sm:px-5 py-2.5 sm:py-3 text-xs uppercase tracking-[0.18em] font-bold transition-colors flex items-center gap-2 rounded-none cursor-pointer"
                         >
                           <span>{isDelivered ? 'View & Review' : 'View Details'}</span>
                           <ChevronRight className="w-4 h-4" />
@@ -992,6 +1144,95 @@ export default function OrderHistory({ onBackToShop, onSelectOrder }) {
         orderReference={trackingModalOrder?.order_reference}
         initialOrder={trackingModalOrder}
       />
+
+      {/* Direct Customer Order Cancellation Modal */}
+      <AnimatePresence>
+        {cancellingOrder && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 12 }}
+              className="bg-white border border-[#E8DCD7] max-w-md w-full p-6 sm:p-7 shadow-2xl space-y-5 rounded-none"
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-[#E8DCD7]">
+                <div>
+                  <span className="text-[10px] font-brand uppercase tracking-[0.2em] text-rose-700 font-bold">
+                    Cancel Order Request
+                  </span>
+                  <h3 className="font-brand text-xl font-bold text-[#2C1E1B] mt-0.5">
+                    Cancel {cancellingOrder.order_reference}?
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCancellingOrder(null)}
+                  className="text-[#705B56] hover:text-[#2C1E1B] p-1 cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-3 text-xs">
+                <div>
+                  <label className="block text-[10px] uppercase tracking-wider font-bold text-[#705B56] mb-1.5">
+                    Reason for Cancellation
+                  </label>
+                  <select
+                    value={cancelReason}
+                    onChange={(e) => setCancelReason(e.target.value)}
+                    className="w-full px-3 py-2.5 bg-[#FAF5F2] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B] rounded-none"
+                  >
+                    <option value="Changed my mind">Changed my mind</option>
+                    <option value="Need to change size / item">Need to change size / item</option>
+                    <option value="Need to update delivery address">Need to update delivery address</option>
+                    <option value="Ordered by mistake / duplicate order">Ordered by mistake / duplicate order</option>
+                    <option value="Found a different payment option">Found a different payment option</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] uppercase tracking-wider font-bold text-[#705B56] mb-1.5">
+                    Additional Notes (Optional)
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={cancelNotes}
+                    onChange={(e) => setCancelNotes(e.target.value)}
+                    placeholder="Optional details..."
+                    className="w-full px-3 py-2 bg-[#FAF5F2] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B] rounded-none"
+                  />
+                </div>
+
+                {cancelError && (
+                  <p className="text-xs text-rose-600 bg-rose-50 border border-rose-200 p-2.5">
+                    {cancelError}
+                  </p>
+                )}
+              </div>
+
+              <div className="flex flex-col-reverse sm:flex-row items-center justify-end gap-2.5 pt-2 border-t border-[#E8DCD7]">
+                <button
+                  type="button"
+                  disabled={isCancelling}
+                  onClick={() => setCancellingOrder(null)}
+                  className="w-full sm:w-auto px-5 py-2.5 border border-[#E8DCD7] text-xs font-bold uppercase tracking-wider text-[#705B56] hover:bg-[#FAF5F2] cursor-pointer"
+                >
+                  Keep Order
+                </button>
+                <button
+                  type="button"
+                  disabled={isCancelling}
+                  onClick={handleConfirmCancelOrder}
+                  className="w-full sm:w-auto px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold uppercase tracking-wider cursor-pointer disabled:opacity-50"
+                >
+                  {isCancelling ? 'Cancelling...' : 'Confirm Cancel'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Photo Proof Lightbox Modal */}
       <AnimatePresence>

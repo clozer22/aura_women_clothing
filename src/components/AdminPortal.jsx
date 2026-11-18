@@ -4,20 +4,22 @@ import { User, ShoppingBag, Sliders, ArrowLeft, Search, Plus, X, Globe, Save, Tr
 import { PRODUCTS } from '../data/products';
 import { supabaseAdmin as supabase } from '../lib/supabaseClient';
 import { invalidateProductsCache, saveCachedProducts, getCachedProducts } from '../lib/productCache';
-import AdminDashboardTab from './admin/AdminDashboardTab';
-import AdminProductsTab from './admin/AdminProductsTab';
-import AdminOrdersTab from './admin/AdminOrdersTab';
-import AdminReviewsTab from './admin/AdminReviewsTab';
-import AdminCustomizerTab from './admin/AdminCustomizerTab';
-import AdminProfileTab from './admin/AdminProfileTab';
-import AdminStaffTab from './admin/AdminStaffTab';
-import AdminCustomersTab from './admin/AdminCustomersTab';
-import AdminPromotionsTab from './admin/AdminPromotionsTab';
-import AdminChatTab from './admin/AdminChatTab';
-import AdminFinanceTab from './admin/AdminFinanceTab';
-import AdminProductModal from './admin/AdminProductModal';
-import AdminBulkModal from './admin/AdminBulkModal';
 import { fetchSiteVisitorStats } from '../lib/visitorTracking';
+
+// Lazy-load admin tabs & modals so only the active tab is downloaded and parsed
+const AdminDashboardTab = React.lazy(() => import('./admin/AdminDashboardTab'));
+const AdminProductsTab = React.lazy(() => import('./admin/AdminProductsTab'));
+const AdminOrdersTab = React.lazy(() => import('./admin/AdminOrdersTab'));
+const AdminReviewsTab = React.lazy(() => import('./admin/AdminReviewsTab'));
+const AdminCustomizerTab = React.lazy(() => import('./admin/AdminCustomizerTab'));
+const AdminProfileTab = React.lazy(() => import('./admin/AdminProfileTab'));
+const AdminStaffTab = React.lazy(() => import('./admin/AdminStaffTab'));
+const AdminCustomersTab = React.lazy(() => import('./admin/AdminCustomersTab'));
+const AdminPromotionsTab = React.lazy(() => import('./admin/AdminPromotionsTab'));
+const AdminChatTab = React.lazy(() => import('./admin/AdminChatTab'));
+const AdminFinanceTab = React.lazy(() => import('./admin/AdminFinanceTab'));
+const AdminProductModal = React.lazy(() => import('./admin/AdminProductModal'));
+const AdminBulkModal = React.lazy(() => import('./admin/AdminBulkModal'));
 
 const isVideoUrl = (url) => url && (url.startsWith('data:video/') || url.match(/\.(mp4|mov|webm)($|\?)/i));
 
@@ -231,7 +233,9 @@ export default function AdminPortal({
       url.searchParams.set('tab', tab);
       if (subfilter) {
         url.searchParams.set('subfilter', subfilter);
+        url.searchParams.set('orderTab', subfilter);
         sessionStorage.setItem('aura_admin_order_subfilter', subfilter);
+        sessionStorage.setItem('aura_admin_order_tab', subfilter);
       }
       window.history.replaceState({}, '', url.toString());
     } catch (e) { }
@@ -2844,6 +2848,14 @@ export default function AdminPortal({
 
         {/* Main Panel Content Area */}
         <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 overflow-y-auto max-h-[calc(100vh-57px)] bg-[#F4F6F9] overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
+          <React.Suspense
+            fallback={
+              <div className="flex items-center justify-center py-24 text-slate-500 text-xs gap-2">
+                <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
+                <span>Loading workspace module...</span>
+              </div>
+            }
+          >
 
           {/* TAB CONTENTS */}
           {activeTab === 'dashboard' && (
@@ -2981,37 +2993,44 @@ export default function AdminPortal({
               onNotification={triggerNotification}
             />
           )}
+          </React.Suspense>
         </main>
       </div>
 
       {/* MODALS */}
-      <AdminProductModal
-        isOpen={isAddModalOpen}
-        initialMode={addProductModalMode}
-        editingProductId={editingProductId}
-        newProduct={newProduct}
-        setNewProduct={setNewProduct}
-        isUploadingProductImage={isUploadingProductImage}
-        onProductImageUpload={handleProductImageUpload}
-        onSaveProduct={handleSaveProduct}
-        onBulkSaveProducts={handleBulkSaveProducts}
-        onUploadVariantImage={handleUploadVariantImage}
-        onClose={() => setIsAddModalOpen(false)}
-      />
+      <React.Suspense fallback={null}>
+        {isAddModalOpen && (
+          <AdminProductModal
+            isOpen={isAddModalOpen}
+            initialMode={addProductModalMode}
+            editingProductId={editingProductId}
+            newProduct={newProduct}
+            setNewProduct={setNewProduct}
+            isUploadingProductImage={isUploadingProductImage}
+            onProductImageUpload={handleProductImageUpload}
+            onSaveProduct={handleSaveProduct}
+            onBulkSaveProducts={handleBulkSaveProducts}
+            onUploadVariantImage={handleUploadVariantImage}
+            onClose={() => setIsAddModalOpen(false)}
+          />
+        )}
 
-      <AdminBulkModal
-        isOpen={isBulkModalOpen}
-        selectedCount={selectedProductIds.length}
-        bulkSizeChart={bulkSizeChart}
-        setBulkSizeChart={setBulkSizeChart}
-        isUploadingSizeChart={isUploadingSizeChart}
-        onBulkSizeChartUpload={handleBulkSizeChartUpload}
-        onBulkUpdate={handleBulkUpdate}
-        onClose={() => {
-          setBulkSizeChart('');
-          setIsBulkModalOpen(false);
-        }}
-      />
+        {isBulkModalOpen && (
+          <AdminBulkModal
+            isOpen={isBulkModalOpen}
+            selectedCount={selectedProductIds.length}
+            bulkSizeChart={bulkSizeChart}
+            setBulkSizeChart={setBulkSizeChart}
+            isUploadingSizeChart={isUploadingSizeChart}
+            onBulkSizeChartUpload={handleBulkSizeChartUpload}
+            onBulkUpdate={handleBulkUpdate}
+            onClose={() => {
+              setBulkSizeChart('');
+              setIsBulkModalOpen(false);
+            }}
+          />
+        )}
+      </React.Suspense>
 
       {/* Custom Confirmation Dialog */}
       <AnimatePresence>

@@ -28,6 +28,11 @@ import { trackInitiateCheckout } from '../lib/metaPixel';
 import { calculateShippingFee, FREE_SHIPPING_THRESHOLD } from '../lib/shippingCalculator';
 import { getCachedProducts } from '../lib/productCache';
 import { PRODUCTS } from '../data/products';
+import {
+  RANK_VOUCHER_CATALOG,
+  DEFAULT_TIER_CONFIG,
+  calculateCustomerTier,
+} from '../lib/customerRanking';
 import CustomerAuthModal from './CustomerAuthModal';
 
 export default function CheckoutPage({
@@ -99,11 +104,62 @@ export default function CheckoutPage({
   const [isProcessingOrder, setIsProcessingOrder] = useState(false);
   const [paymentError, setPaymentError] = useState(null);
 
-  // Promo Code State
+  // Promo Code & Rank Voucher State
   const [promoCodeInput, setPromoCodeInput] = useState('');
   const [appliedPromo, setAppliedPromo] = useState(null);
   const [promoError, setPromoError] = useState('');
   const [isApplyingPromo, setIsApplyingPromo] = useState(false);
+  const [customerHistoricalItems, setCustomerHistoricalItems] = useState(0);
+  const [usedVoucherCodes, setUsedVoucherCodes] = useState([]);
+
+  // Load customer's historical item count & already-used one-time vouchers
+  useEffect(() => {
+    if (!user) {
+      setCustomerHistoricalItems(0);
+      setUsedVoucherCodes([]);
+      return;
+    }
+
+    async function fetchCustomerVoucherHistory() {
+      try {
+        let query = supabase
+          .from('orders')
+          .select('id, items, promo_code, status, payment_status');
+
+        if (user.email) {
+          query = query.or(`user_id.eq.${user.id},customer_email.ilike.${user.email}`);
+        } else {
+          query = query.eq('user_id', user.id);
+        }
+
+        const { data, error } = await query;
+        if (!error && Array.isArray(data)) {
+          let totalItems = 0;
+          const usedSet = new Set();
+
+          data.forEach((ord) => {
+            const st = (ord.status || '').toUpperCase();
+            if (['CANCELLED', 'RETURNED', 'REFUNDED'].includes(st)) return;
+
+            if (ord.promo_code) {
+              usedSet.add(String(ord.promo_code).trim().toUpperCase());
+            }
+
+            if (Array.isArray(ord.items) && ord.items.length > 0) {
+              totalItems += ord.items.reduce((s, it) => s + (Number(it?.quantity) || 1), 0);
+            } else {
+              totalItems += 1;
+            }
+          });
+
+          setCustomerHistoricalItems(totalItems);
+          setUsedVoucherCodes(Array.from(usedSet));
+        }
+      } catch (e) {}
+    }
+
+    fetchCustomerVoucherHistory();
+  }, [user]);
 
   // Real-time sold out item validation in checkout
   const soldOutItems = useMemo(() => {
@@ -409,36 +465,57 @@ export default function CheckoutPage({
   const totalAmount = netSubtotal + shippingFee;
   const isCodEligible = totalAmount <= 1000;
 
-  const handleApplyPromo = async () => {
-    if (!promoCodeInput.trim()) return;
-    const cleanCode = promoCodeInput.trim().toUpperCase();
+  const selectedTotalQty = useMemo(
+    () => selectedCheckoutItems.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0),
+    [selectedCheckoutItems]
+  );
+
+  const customerTier = useMemo(
+    () => calculateCustomerTier(customerHistoricalItems || selectedTotalQty),
+    [customerHistoricalItems, selectedTotalQty]
+  );
+
+  const handleApplyPromo = async (overrideCode = null) => {
+    const rawCode = typeof overrideCode === 'string' ? overrideCode : promoCodeInput;
+    if (!rawCode.trim()) return;
+    const cleanCode = rawCode.trim().toUpperCase();
     setIsApplyingPromo(true);
     setPromoError('');
     try {
-      // 1. Check Supabase promotions table
-      let promoData = null;
+      // 0. Strictly enforce one-time use per customer
+      if (usedVoucherCodes.includes(cleanCode)) {
+        throw new Error(`Voucher "${cleanCode}" has already been redeemed on your account (One-time use only).`);
+      }
+
+      // 1. Check Official Rank Voucher Catalog first
+      let promoData = RANK_VOUCHER_CATALOG[cleanCode]
+        ? { ...RANK_VOUCHER_CATALOG[cleanCode] }
+        : null;
+
+      // 2. Check Supabase promotions table
       try {
         const { data, error } = await supabase
           .from('promotions')
           .select('*')
           .eq('code', cleanCode)
-          .single();
+          .maybeSingle();
         if (!error && data) {
-          promoData = data;
+          promoData = {
+            ...(promoData || {}),
+            ...data,
+            min_order_value:
+              RANK_VOUCHER_CATALOG[cleanCode]?.min_order_value !== undefined
+                ? RANK_VOUCHER_CATALOG[cleanCode].min_order_value
+                : data.min_order_value,
+            min_order_items: RANK_VOUCHER_CATALOG[cleanCode]?.min_order_items || 1,
+            min_historical_items: RANK_VOUCHER_CATALOG[cleanCode]?.min_historical_items || 0,
+          };
         }
-      } catch (e) {
-        // Fallback to local
-      }
+      } catch (e) {}
 
-      // 2. Fallback to VIP Tier Vouchers and Local Custom Vouchers
+      // 3. Fallback to General Store Vouchers & Local Custom Vouchers
       if (!promoData) {
-        if (cleanCode === 'MUSE10') {
-          promoData = { code: 'MUSE10', promo_type: 'voucher', discount_type: 'percentage', discount_value: 10, is_active: true };
-        } else if (cleanCode === 'ICON15') {
-          promoData = { code: 'ICON15', promo_type: 'voucher', discount_type: 'percentage', discount_value: 15, is_active: true };
-        } else if (cleanCode === 'ROYAL20') {
-          promoData = { code: 'ROYAL20', promo_type: 'voucher', discount_type: 'percentage', discount_value: 20, is_active: true };
-        } else if (cleanCode === 'AURA100') {
+        if (cleanCode === 'AURA100') {
           promoData = { code: 'AURA100', promo_type: 'voucher', discount_type: 'fixed', discount_value: 100, min_order_value: 800, is_active: true };
         } else if (cleanCode === 'WELCOME50') {
           promoData = { code: 'WELCOME50', promo_type: 'voucher', discount_type: 'fixed', discount_value: 50, min_order_value: 500, is_active: true };
@@ -447,28 +524,49 @@ export default function CheckoutPage({
             const rawVouchers = localStorage.getItem('aura_custom_vouchers');
             if (rawVouchers) {
               const list = JSON.parse(rawVouchers);
-              const found = list.find(v => v.code?.toUpperCase() === cleanCode);
+              const found = list.find((v) => v.code?.toUpperCase() === cleanCode);
               if (found) promoData = found;
             }
           } catch (e) {}
         }
       }
 
-      if (!promoData) throw new Error("Invalid voucher or promo code.");
-      if (!promoData.is_active) throw new Error("This voucher or promo code is no longer active.");
-      if (promoData.expires_at && new Date(promoData.expires_at) < new Date()) throw new Error("This voucher or promo code has expired.");
-      if (promoData.usage_limit && promoData.times_used >= promoData.usage_limit) throw new Error("This voucher has reached its usage limit.");
-
-      // Customer tier/rank vouchers (MUSE10, ICON15, ROYAL20) are earned status perks and have NO minimum order requirement
-      const RANK_VOUCHERS = ['MUSE10', 'ICON15', 'ROYAL20'];
-      if (RANK_VOUCHERS.includes(cleanCode)) {
-        promoData.min_order_value = 0;
+      if (!promoData) throw new Error('Invalid voucher or promo code.');
+      if (!promoData.is_active) throw new Error('This voucher or promo code is no longer active.');
+      if (promoData.expires_at && new Date(promoData.expires_at) < new Date()) {
+        throw new Error('This voucher or promo code has expired.');
+      }
+      if (promoData.usage_limit && promoData.times_used >= promoData.usage_limit) {
+        throw new Error('This voucher has reached its usage limit.');
       }
 
+      // Enforce Tier / Milestone Historical Item Requirement
+      if (
+        promoData.min_historical_items &&
+        Number(promoData.min_historical_items) > 0 &&
+        customerHistoricalItems + selectedTotalQty < Number(promoData.min_historical_items)
+      ) {
+        throw new Error(
+          `Voucher "${cleanCode}" requires at least ${promoData.min_historical_items} purchased items (Your items: ${customerHistoricalItems}).`
+        );
+      }
+
+      // Enforce Loyalty Minimum Items in Current Order (3 for Muse, 4 for Icon, 6 for Royal)
+      if (
+        promoData.min_order_items &&
+        Number(promoData.min_order_items) > 1 &&
+        selectedTotalQty < Number(promoData.min_order_items)
+      ) {
+        throw new Error(
+          `Loyalty voucher "${cleanCode}" requires at least ${promoData.min_order_items} items in this order (Currently selected: ${selectedTotalQty}).`
+        );
+      }
+
+      // Enforce Minimum Spend Requirement (₱999 for MUSE50, ₱1,299 for ICON100, ₱1,999 for ROYAL300)
       if (promoData.min_order_value && Number(promoData.min_order_value) > 0 && subtotal < Number(promoData.min_order_value)) {
-        throw new Error(`Minimum order value of ₱${Number(promoData.min_order_value).toLocaleString()} required.`);
+        throw new Error(`Minimum spend of ₱${Number(promoData.min_order_value).toLocaleString()} required for "${cleanCode}".`);
       }
-      
+
       setAppliedPromo(promoData);
       setPromoCodeInput('');
     } catch (err) {
@@ -1539,16 +1637,24 @@ export default function CheckoutPage({
               </div>
 
               {/* Promo / Voucher Code Input */}
-              <div className="pt-4 border-t border-[#E8DCD7]">
+              <div className="pt-4 border-t border-[#E8DCD7] space-y-3">
                 {appliedPromo ? (
                   <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 p-3 text-xs">
                     <div className="flex items-center gap-2 text-emerald-800">
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span className="font-bold">Voucher {appliedPromo.code} applied!</span>
+                      <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                      <div>
+                        <span className="font-bold block">
+                          Voucher {appliedPromo.code} applied (-₱{discountAmount.toLocaleString()})
+                        </span>
+                        <span className="text-[10px] text-emerald-700">
+                          One-time use perk • Will be marked redeemed upon checkout
+                        </span>
+                      </div>
                     </div>
-                    <button 
+                    <button
+                      type="button"
                       onClick={() => setAppliedPromo(null)}
-                      className="text-emerald-700 hover:text-emerald-900 font-semibold underline"
+                      className="text-emerald-700 hover:text-emerald-900 font-semibold underline cursor-pointer ml-2"
                     >
                       Remove
                     </button>
@@ -1559,16 +1665,16 @@ export default function CheckoutPage({
                       Voucher, Gift Card or Promo Code
                     </label>
                     <div className="flex gap-2">
-                      <input 
-                        type="text" 
+                      <input
+                        type="text"
                         value={promoCodeInput}
                         onChange={(e) => setPromoCodeInput(e.target.value)}
-                        placeholder="Enter voucher code (e.g. MUSE10, ICON15)" 
+                        placeholder="Enter code (e.g. MUSE50, ICON100, ROYAL300)"
                         className="flex-1 px-3 py-2 border border-[#E8DCD7] bg-[#FAF5F2] text-xs focus:outline-none focus:border-[#2C1E1B] rounded-none uppercase"
                       />
-                      <button 
+                      <button
                         type="button"
-                        onClick={handleApplyPromo}
+                        onClick={() => handleApplyPromo()}
                         disabled={isApplyingPromo || !promoCodeInput.trim()}
                         className="px-4 py-2 bg-[#2C1E1B] text-white text-[10px] uppercase font-bold tracking-widest disabled:opacity-50 cursor-pointer"
                       >
@@ -1576,6 +1682,73 @@ export default function CheckoutPage({
                       </button>
                     </div>
                     {promoError && <p className="text-[10px] text-rose-600 mt-1.5">{promoError}</p>}
+
+                    {/* Customer Rank Perks Quick-Apply Selector */}
+                    {user && DEFAULT_TIER_CONFIG[customerTier]?.vouchers && (
+                      <div className="mt-3 p-3 bg-[#FAF5F2] border border-[#E8DCD7] space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-[#2C1E1B]">
+                            {customerTier} Perks ({DEFAULT_TIER_CONFIG[customerTier].tagline})
+                          </span>
+                          <span className="text-[9px] text-[#705B56] font-mono">
+                            1x Use Only
+                          </span>
+                        </div>
+                        <div className="space-y-1.5">
+                          {DEFAULT_TIER_CONFIG[customerTier].vouchers.map((v) => {
+                            const spec = RANK_VOUCHER_CATALOG[v.code];
+                            const isUsed = usedVoucherCodes.includes(v.code);
+                            const needsMoreSpend = spec?.min_order_value > 0 && subtotal < spec.min_order_value;
+                            const needsMoreItems = spec?.min_order_items > 1 && selectedTotalQty < spec.min_order_items;
+                            const needsMilestone =
+                              spec?.min_historical_items > 0 &&
+                              customerHistoricalItems + selectedTotalQty < spec.min_historical_items;
+                            const isEligible = !isUsed && !needsMoreSpend && !needsMoreItems && !needsMilestone;
+
+                            return (
+                              <div
+                                key={v.code}
+                                className={`p-2 bg-white border border-[#E8DCD7] flex items-center justify-between gap-2 text-[11px] ${
+                                  isUsed ? 'opacity-55' : ''
+                                }`}
+                              >
+                                <div className="min-w-0">
+                                  <span className="font-bold text-[#2C1E1B] block truncate">
+                                    {v.label}{' '}
+                                    <span className="font-mono text-[10px] text-[#B86B60]">({v.code})</span>
+                                  </span>
+                                  <span className="text-[9px] text-[#705B56] block">
+                                    {isUsed
+                                      ? 'Already redeemed (One-time use)'
+                                      : needsMilestone
+                                      ? `Unlocks at ${spec.min_historical_items} purchased items`
+                                      : needsMoreItems
+                                      ? `Add ${spec.min_order_items - selectedTotalQty} more item(s) to use`
+                                      : needsMoreSpend
+                                      ? `Min. spend ₱${spec.min_order_value.toLocaleString()} required`
+                                      : v.sublabel}
+                                  </span>
+                                </div>
+                                {isUsed ? (
+                                  <span className="px-2 py-0.5 bg-slate-200 text-slate-600 text-[9px] font-bold uppercase tracking-wider">
+                                    Used
+                                  </span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    disabled={!isEligible || isApplyingPromo}
+                                    onClick={() => handleApplyPromo(v.code)}
+                                    className="px-2.5 py-1 bg-[#2C1E1B] hover:bg-[#B86B60] text-white text-[9px] font-bold uppercase tracking-wider disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex-shrink-0"
+                                  >
+                                    Use
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

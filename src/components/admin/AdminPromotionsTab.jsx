@@ -3,11 +3,22 @@ import { Tag, Plus, Search, Trash2, CheckCircle, XCircle, AlertTriangle, Calenda
 import { supabaseAdmin as supabase } from '../../lib/supabaseClient';
 
 const DEFAULT_VOUCHER_PRESETS = [
-  { code: 'MUSE10', type: 'voucher', discount_type: 'percentage', discount_value: 10, min_order_value: 0, label: 'Muse Tier Voucher (10% OFF)' },
-  { code: 'ICON15', type: 'voucher', discount_type: 'percentage', discount_value: 15, min_order_value: 0, label: 'Icon Tier Voucher (15% OFF, No Min. Spend)' },
-  { code: 'ROYAL20', type: 'voucher', discount_type: 'percentage', discount_value: 20, min_order_value: 0, label: 'Royal Tier Voucher (20% OFF)' },
-  { code: 'AURA100', type: 'voucher', discount_type: 'fixed', discount_value: 100, min_order_value: 800, label: 'Gift Voucher (₱100 OFF, min ₱800)' },
-  { code: 'WELCOME50', type: 'voucher', discount_type: 'fixed', discount_value: 50, min_order_value: 500, label: 'Welcome Voucher (₱50 OFF, min ₱500)' },
+  // Tier 1: AURA Muse (1–5 items)
+  { code: 'MUSEBDAY50', type: 'voucher', discount_type: 'fixed', discount_value: 50, min_order_value: 0, label: 'Muse Birthday Voucher (₱50 OFF • 1x Use)' },
+  { code: 'MUSELOYAL30', type: 'voucher', discount_type: 'fixed', discount_value: 30, min_order_value: 0, label: 'Muse Loyalty Voucher (₱30 OFF • 3+ Items • 1x Use)' },
+  { code: 'MUSE50', type: 'voucher', discount_type: 'fixed', discount_value: 50, min_order_value: 999, label: 'Muse Spend Voucher (₱50 OFF • Min ₱999 • 1x Use)' },
+
+  // Tier 2: AURA Icon (6–14 items)
+  { code: 'ICONBDAY100', type: 'voucher', discount_type: 'fixed', discount_value: 100, min_order_value: 0, label: 'Icon Birthday Voucher (₱100 OFF • 1x Use)' },
+  { code: 'ICONLOYAL50', type: 'voucher', discount_type: 'fixed', discount_value: 50, min_order_value: 0, label: 'Icon Loyalty Voucher (₱50 OFF • 4+ Items • 1x Use)' },
+  { code: 'ICON100', type: 'voucher', discount_type: 'fixed', discount_value: 100, min_order_value: 1299, label: 'Icon Spend Voucher (₱100 OFF • Min ₱1,299 • 1x Use)' },
+  { code: 'ICON10ITEMS50', type: 'voucher', discount_type: 'fixed', discount_value: 50, min_order_value: 0, label: 'Icon 10-Item Milestone (₱50 OFF • 10+ Items • 1x Use)' },
+
+  // Tier 3: AURA Royal (16+ items)
+  { code: 'ROYALBDAY200', type: 'voucher', discount_type: 'fixed', discount_value: 200, min_order_value: 0, label: 'Royal Birthday Voucher (₱200 OFF • 1x Use)' },
+  { code: 'ROYALLOYAL100', type: 'voucher', discount_type: 'fixed', discount_value: 100, min_order_value: 0, label: 'Royal Loyalty Voucher (₱100 OFF • 6+ Items • 1x Use)' },
+  { code: 'ROYAL300', type: 'voucher', discount_type: 'fixed', discount_value: 300, min_order_value: 1999, label: 'Royal Spend Voucher (₱300 OFF • Min ₱1,999 • 1x Use)' },
+  { code: 'ROYAL10ITEMS100', type: 'voucher', discount_type: 'fixed', discount_value: 100, min_order_value: 0, label: 'Royal 10-Item Milestone (₱100 OFF • 10+ Items • 1x Use)' },
 ];
 
 const LOCAL_STORAGE_KEY = 'aura_custom_vouchers';

@@ -16,12 +16,18 @@ function localApiPlugin() {
         if (
           url === '/api/create-order-invoice' ||
           url === '/api/xendit-webhook' ||
+          url === '/api/paymongo-webhook' ||
+          url === '/api/maya-webhook' ||
           url === '/api/verify-payment' ||
           url === '/api/shipmates-book' ||
           url === '/api/admin-manage-staff' ||
           url === '/api/jt-dispatch' ||
           url === '/api/jt-track' ||
-          url === '/api/jt-webhook'
+          url === '/api/jt-webhook' ||
+          url === '/api/jt-sync-orders' ||
+          url === '/api/cancel-order' ||
+          url === '/api/notify-delivery' ||
+          url === '/api/notify-restock'
         ) {
           // Keep process.env in sync with .env during local development
           const freshEnv = loadEnv(server.config.mode || 'development', process.cwd(), '');
@@ -59,6 +65,12 @@ function localApiPlugin() {
               } else if (url === '/api/xendit-webhook') {
                 const mod = await server.ssrLoadModule('./api/xendit-webhook.js');
                 await mod.default(req, res);
+              } else if (url === '/api/paymongo-webhook') {
+                const mod = await server.ssrLoadModule('./api/paymongo-webhook.js');
+                await mod.default(req, res);
+              } else if (url === '/api/maya-webhook') {
+                const mod = await server.ssrLoadModule('./api/maya-webhook.js');
+                await mod.default(req, res);
               } else if (url === '/api/verify-payment') {
                 const mod = await server.ssrLoadModule('./api/verify-payment.js');
                 await mod.default(req, res);
@@ -76,6 +88,18 @@ function localApiPlugin() {
                 await mod.default(req, res);
               } else if (url === '/api/jt-webhook') {
                 const mod = await server.ssrLoadModule('./api/jt-webhook.js');
+                await mod.default(req, res);
+              } else if (url === '/api/jt-sync-orders') {
+                const mod = await server.ssrLoadModule('./api/jt-sync-orders.js');
+                await mod.default(req, res);
+              } else if (url === '/api/cancel-order') {
+                const mod = await server.ssrLoadModule('./api/cancel-order.js');
+                await mod.default(req, res);
+              } else if (url === '/api/notify-delivery') {
+                const mod = await server.ssrLoadModule('./api/notify-delivery.js');
+                await mod.default(req, res);
+              } else if (url === '/api/notify-restock') {
+                const mod = await server.ssrLoadModule('./api/notify-restock.js');
                 await mod.default(req, res);
               }
             } catch (err) {
@@ -116,6 +140,7 @@ export default defineConfig(({ mode }) => {
             'vendor-motion': ['framer-motion'],
             'vendor-icons': ['lucide-react'],
             'vendor-supabase': ['@supabase/supabase-js'],
+            'vendor-barcodes': ['jsbarcode', 'qrcode'],
           },
         },
       },

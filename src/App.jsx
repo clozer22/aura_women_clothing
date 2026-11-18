@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
@@ -135,6 +135,8 @@ function MainApp() {
 
   // Real-time products state loaded from database (initialized from persistent cache)
   const [dbProducts, setDbProducts] = useState(initialProducts);
+  const dbProductsRef = useRef(initialProducts);
+  dbProductsRef.current = dbProducts;
   const [isLoading, setIsLoading] = useState(initialProducts.length === 0);
 
   // Dynamic customization configs (loaded from Supabase / storefront_config)
@@ -158,14 +160,15 @@ function MainApp() {
 
   // Fetch products from database using Stale-While-Revalidate with persistent client-side cache
   const fetchProducts = async (forceRefresh = false) => {
+    const currentList = dbProductsRef.current;
     // 1. If cache is fresh and we already have products loaded, skip network entirely!
-    if (!forceRefresh && isProductsCacheFresh() && dbProducts.length > 0) {
+    if (!forceRefresh && isProductsCacheFresh() && currentList.length > 0) {
       setIsLoading(false);
       return;
     }
 
     // 2. Only show loading if we have zero products in cache
-    if (dbProducts.length === 0) {
+    if (currentList.length === 0) {
       setIsLoading(true);
     }
 
@@ -177,14 +180,14 @@ function MainApp() {
 
       if (error) throw error;
       if (data && Array.isArray(data)) {
-        // Compare with current products state to prevent wasteful DOM re-renders
-        const hasChanged = data.length !== dbProducts.length ||
-          JSON.stringify(data.map(p => `${p.id}-${p.qty}-${p.price}-${p.isFeatured}-${p.statusBadge}`)) !==
-          JSON.stringify(dbProducts.map(p => `${p.id}-${p.qty}-${p.price}-${p.isFeatured}-${p.statusBadge}`));
-
-        if (hasChanged || dbProducts.length === 0) {
-          setDbProducts(data);
-        }
+        // Compare against live state via functional update to prevent stale closure bugs and wasteful DOM re-renders
+        setDbProducts((prev) => {
+          const hasChanged =
+            data.length !== prev.length ||
+            JSON.stringify(data.map((p) => `${p.id}-${p.qty}-${p.price}-${p.isFeatured}-${p.statusBadge}`)) !==
+              JSON.stringify(prev.map((p) => `${p.id}-${p.qty}-${p.price}-${p.isFeatured}-${p.statusBadge}`));
+          return hasChanged || prev.length === 0 ? data : prev;
+        });
         saveCachedProducts(data);
       }
     } catch (err) {
@@ -326,7 +329,7 @@ function MainApp() {
         const id = params.get('id');
         if (id) {
           setSelectedProductId(id);
-          const found = dbProducts.find((p) => String(p.id) === String(id));
+          const found = dbProductsRef.current.find((p) => String(p.id) === String(id));
           if (found) setSelectedProduct(found);
         }
         setCurrentView('product');
@@ -524,9 +527,22 @@ function MainApp() {
     trackPageView(currentView);
   }, [currentView]);
 
+  // Sync selectedProduct when deep-linking to /product?id=... and dbProducts finishes loading
+  useEffect(() => {
+    if (selectedProductId && (!selectedProduct || String(selectedProduct.id) !== String(selectedProductId))) {
+      const found = dbProducts.find((p) => String(p.id) === String(selectedProductId));
+      if (found) {
+        setSelectedProduct(found);
+      }
+    }
+  }, [selectedProductId, dbProducts, selectedProduct]);
+
   // Resolve active products list from database (filter out ARCHIVE)
   const allProducts = dbProducts;
-  const activeProducts = allProducts.filter((p) => p.statusBadge !== 'ARCHIVE');
+  const activeProducts = useMemo(
+    () => allProducts.filter((p) => p.statusBadge !== 'ARCHIVE'),
+    [allProducts]
+  );
 
   // Render full-screen Admin View if selected
   if (currentView === 'admin') {

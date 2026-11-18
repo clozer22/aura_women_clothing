@@ -98,10 +98,48 @@ export default function OrderDetailPage({
         }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      const wasPaid = (order.payment_status || '').toUpperCase() === 'PAID';
+      const fallbackPayStatus = wasPaid ? 'REFUND_PENDING' : 'CANCELLED';
+
       if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to cancel order');
+        // Direct authenticated Supabase fallback if serverless API returned an error
+        const auditEntry = {
+          name: order.customer_name || 'Customer',
+          email: user?.email || order.customer_email || '',
+          role: 'Customer',
+          action: `Order cancelled by customer. Reason: ${fullReason}`,
+          timestamp: new Date().toISOString(),
+        };
+        const updatedAudit = [auditEntry, ...(Array.isArray(order.audit_trail) ? order.audit_trail : [])].slice(0, 50);
+
+        const { error: directErr } = await supabase
+          .from('orders')
+          .update({
+            status: 'CANCELLED',
+            payment_status: fallbackPayStatus,
+            cancellation_reason: fullReason,
+            cancelled_by: 'CUSTOMER',
+            cancelled_at: new Date().toISOString(),
+            audit_trail: updatedAudit,
+            last_touched_by: auditEntry,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('order_reference', order.order_reference);
+
+        if (directErr) {
+          throw new Error(data.error || directErr.message || 'Failed to cancel order');
+        }
       }
+
+      try {
+        const savedLast = JSON.parse(localStorage.getItem('aura_last_order') || 'null');
+        if (savedLast && savedLast.order_reference === order.order_reference) {
+          savedLast.status = 'CANCELLED';
+          savedLast.payment_status = data.paymentStatus || fallbackPayStatus;
+          localStorage.setItem('aura_last_order', JSON.stringify(savedLast));
+        }
+      } catch (_) {}
 
       setCancelSuccess(true);
       setOrder((prev) => ({
@@ -109,7 +147,7 @@ export default function OrderDetailPage({
         status: 'CANCELLED',
         cancellation_reason: fullReason,
         cancelled_by: 'CUSTOMER',
-        payment_status: data.paymentStatus || (prev.payment_status === 'PAID' ? 'REFUND_PENDING' : 'CANCELLED'),
+        payment_status: data.paymentStatus || fallbackPayStatus,
       }));
 
       setTimeout(() => {
@@ -496,7 +534,7 @@ export default function OrderDetailPage({
               </h1>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 border text-xs font-bold uppercase tracking-wider ${badge.bg}`}>
                 <span className={`w-2 h-2 rounded-full ${badge.dot}`} />
                 {badge.label}

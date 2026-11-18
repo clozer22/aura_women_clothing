@@ -78,10 +78,37 @@ export default function OrderConfirmed({ order, onContinueShopping, onViewOrders
         return;
       }
       try {
+        // Ensure order exists in Supabase if it was cached locally in aura_last_order
+        let authHeader = {};
+        try {
+          const { data: sessionData } = await supabase.auth.getSession();
+          const accessToken = sessionData?.session?.access_token;
+          if (accessToken) {
+            authHeader = { Authorization: `Bearer ${accessToken}` };
+          }
+          if (sessionData?.session?.user && activeOrder?.order_reference) {
+            const { data: existingRow } = await supabase
+              .from('orders')
+              .select('id')
+              .eq('order_reference', activeOrder.order_reference)
+              .maybeSingle();
+
+            if (!existingRow && activeOrder.items) {
+              await supabase.from('orders').insert([
+                {
+                  ...activeOrder,
+                  user_id: activeOrder.user_id || sessionData.session.user.id,
+                },
+              ]);
+            }
+          }
+        } catch (syncErr) {}
+
         // Direct server-side reconciliation
         try {
           const verifyRes = await fetch(
-            `/api/verify-payment?ref=${encodeURIComponent(activeOrder.order_reference)}`
+            `/api/verify-payment?ref=${encodeURIComponent(activeOrder.order_reference)}`,
+            { headers: authHeader }
           );
           if (verifyRes.ok) {
             const check = await verifyRes.json();
