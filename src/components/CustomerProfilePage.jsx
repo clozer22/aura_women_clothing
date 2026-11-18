@@ -109,23 +109,36 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
 
   // Load saved address on mount
   useEffect(() => {
+    let localAddr1 = null;
+    let localAddr2 = null;
+    let localDefKey = 'address1';
+
     try {
       const savedMulti = localStorage.getItem('aura_saved_addresses');
       if (savedMulti) {
         const parsed = JSON.parse(savedMulti);
-        if (parsed.address1) setAddress1(parsed.address1);
-        if (parsed.address2) {
+        if (parsed.address1) {
+          localAddr1 = parsed.address1;
+          setAddress1(parsed.address1);
+        }
+        if (parsed.address2 && (parsed.address2.street || parsed.address2.regionCode)) {
+          localAddr2 = parsed.address2;
           setAddress2(parsed.address2);
           setHasAddress2(true);
         }
-        if (parsed.defaultKey) setDefaultAddressKey(parsed.defaultKey);
+        if (parsed.defaultKey) {
+          localDefKey = parsed.defaultKey;
+          setDefaultAddressKey(parsed.defaultKey);
+        }
       } else {
         const saved = localStorage.getItem('aura_saved_shipping_address');
         if (saved) {
-          setAddress1(JSON.parse(saved));
+          const parsedSingle = JSON.parse(saved);
+          localAddr1 = parsedSingle;
+          setAddress1(parsedSingle);
         }
       }
-    } catch (e) { }
+    } catch (e) {}
 
     if (user?.id) {
       supabase
@@ -134,13 +147,38 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
         .eq('id', user.id)
         .maybeSingle()
         .then(({ data }) => {
-          if (data?.addresses) {
-            if (data.addresses.address1) setAddress1(data.addresses.address1);
-            if (data.addresses.address2) {
-              setAddress2(data.addresses.address2);
+          const dbAddr = data?.addresses;
+          const hasDbAddr1 = Boolean(dbAddr?.address1 && (dbAddr.address1.street || dbAddr.address1.regionCode));
+          const hasDbAddr2 = Boolean(dbAddr?.address2 && (dbAddr.address2.street || dbAddr.address2.regionCode));
+
+          if (hasDbAddr1 || hasDbAddr2) {
+            if (hasDbAddr1) setAddress1(dbAddr.address1);
+            if (hasDbAddr2) {
+              setAddress2(dbAddr.address2);
               setHasAddress2(true);
             }
-            if (data.addresses.defaultKey) setDefaultAddressKey(data.addresses.defaultKey);
+            const resolvedDef = dbAddr.defaultKey || 'address1';
+            setDefaultAddressKey(resolvedDef);
+
+            try {
+              localStorage.setItem('aura_saved_addresses', JSON.stringify(dbAddr));
+              const activeDef = resolvedDef === 'address2' && hasDbAddr2 ? dbAddr.address2 : dbAddr.address1;
+              if (activeDef) {
+                localStorage.setItem('aura_saved_shipping_address', JSON.stringify(activeDef));
+              }
+            } catch (e) {}
+          } else if (localAddr1 && (localAddr1.street || localAddr1.regionCode)) {
+            // Sync existing local address up to Supabase profile if DB had none yet
+            const syncPayload = {
+              address1: localAddr1,
+              address2: localAddr2,
+              defaultKey: localDefKey,
+            };
+            supabase
+              .from('user_profiles')
+              .update({ addresses: syncPayload, updated_at: new Date().toISOString() })
+              .eq('id', user.id)
+              .then(() => {});
           }
         });
     }
@@ -215,14 +253,14 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
 
   // Update dependent cities for active address
   useEffect(() => {
-    if (currentAddress.provinceCode) {
-      getCities(currentAddress.provinceCode).then((data) => {
+    if (currentAddress.provinceCode || currentAddress.regionCode === '130000000') {
+      getCities(currentAddress.provinceCode, currentAddress.regionCode).then((data) => {
         setCities(data || []);
       });
     } else {
       setCities([]);
     }
-  }, [currentAddress.provinceCode, activeAddressTab]);
+  }, [currentAddress.provinceCode, currentAddress.regionCode, activeAddressTab]);
 
   // Update dependent barangays for active address
   useEffect(() => {
@@ -310,11 +348,37 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
     zipCode: (addr?.zipCode || '').replace(/\D/g, '').trim().slice(0, 10),
   });
 
+  const persistAddressesToDatabase = async (multiPayload) => {
+    if (!user?.id) return;
+    const nowIso = new Date().toISOString();
+    const { error: updateErr, data: updatedRows } = await supabase
+      .from('user_profiles')
+      .update({ addresses: multiPayload, updated_at: nowIso })
+      .eq('id', user.id)
+      .select('id');
+
+    if (updateErr || !updatedRows || updatedRows.length === 0) {
+      await supabase
+        .from('user_profiles')
+        .upsert(
+          {
+            id: user.id,
+            email: user.email,
+            full_name: fullName || profile?.full_name || user.user_metadata?.full_name || '',
+            addresses: multiPayload,
+            updated_at: nowIso,
+          },
+          { onConflict: 'id' }
+        );
+    }
+  };
+
   // Save Shipping Address & Preferences
   const handleSaveAddress = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
     setIsSavingAddress(true);
     setErrorMsg('');
+    setAddressSuccess('');
     try {
       const sanitized1 = sanitizeAddressObj(address1);
       const sanitized2 = hasAddress2 ? sanitizeAddressObj(address2) : null;
@@ -332,17 +396,12 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
       localStorage.setItem('aura_saved_addresses', JSON.stringify(multiPayload));
       localStorage.setItem('aura_saved_shipping_address', JSON.stringify(defaultAddr));
 
-      if (user?.id) {
-        await supabase
-          .from('user_profiles')
-          .update({ addresses: multiPayload, updated_at: new Date().toISOString() })
-          .eq('id', user.id);
-      }
+      await persistAddressesToDatabase(multiPayload);
 
       setAddressSuccess(
         `Address saved! ${resolvedDefaultKey === 'address2' ? 'Address 2' : 'Address 1'} is set as your default delivery address.`
       );
-      setTimeout(() => setAddressSuccess(''), 4500);
+      setTimeout(() => setAddressSuccess(''), 5000);
     } catch (err) {
       console.error('Save address error:', err);
       setErrorMsg('Could not save address.');
@@ -367,23 +426,18 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
       localStorage.setItem('aura_saved_addresses', JSON.stringify(multiPayload));
       localStorage.setItem('aura_saved_shipping_address', JSON.stringify(defaultAddr));
 
-      if (user?.id) {
-        await supabase
-          .from('user_profiles')
-          .update({ addresses: multiPayload, updated_at: new Date().toISOString() })
-          .eq('id', user.id);
-      }
+      await persistAddressesToDatabase(multiPayload);
 
       setAddressSuccess(
         `${key === 'address2' ? 'Address 2' : 'Address 1'} is now saved as your default delivery address.`
       );
-      setTimeout(() => setAddressSuccess(''), 3500);
+      setTimeout(() => setAddressSuccess(''), 4000);
     } catch (err) {
       console.warn('Set default error:', err);
     }
   };
 
-  const handleRemoveAddress2 = () => {
+  const handleRemoveAddress2 = async () => {
     if (!window.confirm('Are you sure you want to remove Address 2?')) return;
     setHasAddress2(false);
     setAddress2(EMPTY_ADDRESS);
@@ -400,15 +454,10 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
       localStorage.setItem('aura_saved_addresses', JSON.stringify(multiPayload));
       localStorage.setItem('aura_saved_shipping_address', JSON.stringify(sanitized1));
 
-      if (user?.id) {
-        supabase
-          .from('user_profiles')
-          .update({ addresses: multiPayload, updated_at: new Date().toISOString() })
-          .eq('id', user.id);
-      }
+      await persistAddressesToDatabase(multiPayload);
 
       setAddressSuccess('Address 2 removed. Address 1 is now your default address.');
-      setTimeout(() => setAddressSuccess(''), 3500);
+      setTimeout(() => setAddressSuccess(''), 4000);
     } catch (err) {
       console.warn('Remove address 2 error:', err);
     }
@@ -1318,12 +1367,14 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
                     required
                     value={currentAddress.regionCode || ''}
                     onChange={(e) => {
-                      const sel = regions.find((r) => r.code === e.target.value);
+                      const code = e.target.value;
+                      const sel = regions.find((r) => r.code === code);
+                      const isNcr = code === '130000000';
                       handleCurrentAddressChange({
-                        regionCode: e.target.value,
+                        regionCode: code,
                         regionName: sel ? sel.name : '',
-                        provinceCode: '',
-                        provinceName: '',
+                        provinceCode: isNcr ? 'NCR_MANILA' : '',
+                        provinceName: isNcr ? 'Metro Manila' : '',
                         cityCode: '',
                         cityName: '',
                         barangayCode: '',
@@ -1443,6 +1494,13 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
                   />
                 </div>
               </div>
+
+              {addressSuccess && (
+                <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{addressSuccess}</span>
+                </div>
+              )}
 
               <div className="pt-4 border-t border-[#E8DCD7] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 {defaultAddressKey !== activeAddressTab ? (

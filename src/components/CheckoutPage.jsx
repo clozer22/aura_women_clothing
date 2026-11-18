@@ -234,19 +234,61 @@ export default function CheckoutPage({
     return filtered;
   }, [effectiveCheckoutItems, selectedItemIds, soldOutItems]);
 
-  // Load saved profile / address from localStorage on mount & report InitiateCheckout to Meta Pixel
+  const hydrateAddressDropdowns = async (addr) => {
+    if (!addr) return;
+    try {
+      if (addr.regionCode) {
+        const provs = await getProvinces(addr.regionCode);
+        setProvinces(provs || []);
+      }
+      if (addr.provinceCode || addr.regionCode === '130000000') {
+        const cts = await getCities(addr.provinceCode || 'NCR_MANILA', addr.regionCode);
+        setCities(cts || []);
+      }
+      if (addr.cityCode) {
+        const brgys = await getBarangays(addr.cityCode);
+        setBarangays(brgys || []);
+      }
+    } catch (e) {}
+  };
+
+  // Load saved profile / address from localStorage & Supabase on mount & report InitiateCheckout to Meta Pixel
   useEffect(() => {
+    let initialAddr = null;
     try {
       const multi = localStorage.getItem('aura_saved_addresses');
       if (multi) {
         const parsedMulti = JSON.parse(multi);
         setSavedAddresses(parsedMulti);
-        setSelectedAddressKey(parsedMulti.defaultKey || 'address1');
+        const defKey = parsedMulti.defaultKey || 'address1';
+        setSelectedAddressKey(defKey);
+        const defAddr = defKey === 'address2' && parsedMulti.address2 ? parsedMulti.address2 : parsedMulti.address1;
+        if (defAddr && (defAddr.street || defAddr.regionCode)) {
+          initialAddr = defAddr;
+        }
       }
       const saved = localStorage.getItem('aura_saved_shipping_address');
       if (saved) {
         const parsed = JSON.parse(saved);
-        setFormData((prev) => ({ ...prev, ...parsed }));
+        if (!initialAddr && (parsed.street || parsed.regionCode)) {
+          initialAddr = parsed;
+        }
+      }
+      if (initialAddr) {
+        setFormData((prev) => ({
+          ...prev,
+          street: initialAddr.street || prev.street || '',
+          regionCode: initialAddr.regionCode || prev.regionCode || '',
+          regionName: initialAddr.regionName || prev.regionName || '',
+          provinceCode: initialAddr.provinceCode || (initialAddr.regionCode === '130000000' ? 'NCR_MANILA' : prev.provinceCode || ''),
+          provinceName: initialAddr.provinceName || (initialAddr.regionCode === '130000000' ? 'Metro Manila' : prev.provinceName || ''),
+          cityCode: initialAddr.cityCode || prev.cityCode || '',
+          cityName: initialAddr.cityName || prev.cityName || '',
+          barangayCode: initialAddr.barangayCode || prev.barangayCode || '',
+          barangayName: initialAddr.barangayName || prev.barangayName || '',
+          zipCode: initialAddr.zipCode || prev.zipCode || '',
+        }));
+        hydrateAddressDropdowns(initialAddr);
       }
     } catch (e) {}
 
@@ -274,6 +316,51 @@ export default function CheckoutPage({
     }
   }, []);
 
+  // Also fetch saved addresses from Supabase user_profiles when user is authenticated
+  useEffect(() => {
+    if (!user?.id) return;
+    supabase
+      .from('user_profiles')
+      .select('addresses')
+      .eq('id', user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        const dbAddr = data?.addresses;
+        const hasAddr1 = Boolean(dbAddr?.address1 && (dbAddr.address1.street || dbAddr.address1.regionCode));
+        const hasAddr2 = Boolean(dbAddr?.address2 && (dbAddr.address2.street || dbAddr.address2.regionCode));
+        if (hasAddr1 || hasAddr2) {
+          setSavedAddresses(dbAddr);
+          const defKey = dbAddr.defaultKey || 'address1';
+          setSelectedAddressKey(defKey);
+          const activeAddr = defKey === 'address2' && hasAddr2 ? dbAddr.address2 : dbAddr.address1;
+          if (activeAddr) {
+            try {
+              localStorage.setItem('aura_saved_addresses', JSON.stringify(dbAddr));
+              localStorage.setItem('aura_saved_shipping_address', JSON.stringify(activeAddr));
+            } catch (e) {}
+            setFormData((prev) => {
+              // Pre-fill if current street/region wasn't typed yet
+              if (prev.street && prev.regionCode) return prev;
+              hydrateAddressDropdowns(activeAddr);
+              return {
+                ...prev,
+                street: activeAddr.street || prev.street || '',
+                regionCode: activeAddr.regionCode || prev.regionCode || '',
+                regionName: activeAddr.regionName || prev.regionName || '',
+                provinceCode: activeAddr.provinceCode || (activeAddr.regionCode === '130000000' ? 'NCR_MANILA' : prev.provinceCode || ''),
+                provinceName: activeAddr.provinceName || (activeAddr.regionCode === '130000000' ? 'Metro Manila' : prev.provinceName || ''),
+                cityCode: activeAddr.cityCode || prev.cityCode || '',
+                cityName: activeAddr.cityName || prev.cityName || '',
+                barangayCode: activeAddr.barangayCode || prev.barangayCode || '',
+                barangayName: activeAddr.barangayName || prev.barangayName || '',
+                zipCode: activeAddr.zipCode || prev.zipCode || '',
+              };
+            });
+          }
+        }
+      });
+  }, [user?.id]);
+
   const selectSavedAddress = async (key) => {
     if (!savedAddresses) return;
     const addr = key === 'address2' ? savedAddresses.address2 : savedAddresses.address1;
@@ -285,8 +372,8 @@ export default function CheckoutPage({
       street: addr.street || '',
       regionCode: addr.regionCode || '',
       regionName: addr.regionName || '',
-      provinceCode: addr.provinceCode || '',
-      provinceName: addr.provinceName || '',
+      provinceCode: addr.provinceCode || (addr.regionCode === '130000000' ? 'NCR_MANILA' : ''),
+      provinceName: addr.provinceName || (addr.regionCode === '130000000' ? 'Metro Manila' : ''),
       cityCode: addr.cityCode || '',
       cityName: addr.cityName || '',
       barangayCode: addr.barangayCode || '',
@@ -294,22 +381,7 @@ export default function CheckoutPage({
       zipCode: addr.zipCode || '',
     }));
 
-    if (addr.regionCode) {
-      const provs = await getProvinces(addr.regionCode);
-      setProvinces(provs || []);
-      if (addr.regionCode === '130000000') {
-        const ncrCities = await getCities('NCR_MANILA', addr.regionCode);
-        setCities(ncrCities || []);
-      }
-    }
-    if (addr.provinceCode) {
-      const cts = await getCities(addr.provinceCode);
-      setCities(cts || []);
-    }
-    if (addr.cityCode) {
-      const brgys = await getBarangays(addr.cityCode);
-      setBarangays(brgys || []);
-    }
+    await hydrateAddressDropdowns(addr);
   };
 
   // Pre-fill logged-in customer info (email is strictly locked to authenticated user)
@@ -346,13 +418,14 @@ export default function CheckoutPage({
     const code = e.target.value;
     const selected = regions.find((r) => r.code === code);
     const regionName = selected ? selected.name : '';
+    const isNcr = code === '130000000';
 
     setFormData((prev) => ({
       ...prev,
       regionCode: code,
       regionName,
-      provinceCode: '',
-      provinceName: '',
+      provinceCode: isNcr ? 'NCR_MANILA' : '',
+      provinceName: isNcr ? 'Metro Manila' : '',
       cityCode: '',
       cityName: '',
       barangayCode: '',
@@ -370,7 +443,7 @@ export default function CheckoutPage({
       setLoadingAddress((prev) => ({ ...prev, provinces: false }));
 
       // If NCR, also preload cities
-      if (code === '130000000') {
+      if (isNcr) {
         setLoadingAddress((prev) => ({ ...prev, cities: true }));
         const ncrCities = await getCities('NCR_MANILA', code);
         setCities(ncrCities);
@@ -611,6 +684,67 @@ export default function CheckoutPage({
     return Object.keys(errors).length === 0;
   };
 
+  const persistCheckoutAddressToProfile = async () => {
+    const cleanAddr = {
+      street: (formData.street || '').replace(/<[^>]*>?/gm, '').trim().slice(0, 150),
+      regionCode: formData.regionCode || '',
+      regionName: formData.regionName || '',
+      provinceCode: formData.provinceCode || (formData.regionCode === '130000000' ? 'NCR_MANILA' : ''),
+      provinceName: formData.provinceName || (formData.regionCode === '130000000' ? 'Metro Manila' : ''),
+      cityCode: formData.cityCode || '',
+      cityName: formData.cityName || '',
+      barangayCode: formData.barangayCode || '',
+      barangayName: formData.barangayName || '',
+      zipCode: (formData.zipCode || '').replace(/\D/g, '').trim().slice(0, 10),
+    };
+
+    try {
+      const targetKey = selectedAddressKey === 'address2' && savedAddresses?.address2 ? 'address2' : 'address1';
+      const updatedMulti = {
+        address1: targetKey === 'address1' ? cleanAddr : (savedAddresses?.address1 || cleanAddr),
+        address2: targetKey === 'address2' ? cleanAddr : (savedAddresses?.address2 || null),
+        defaultKey: savedAddresses?.defaultKey || targetKey,
+      };
+      setSavedAddresses(updatedMulti);
+      localStorage.setItem('aura_saved_addresses', JSON.stringify(updatedMulti));
+      localStorage.setItem('aura_saved_shipping_address', JSON.stringify({ ...formData, ...cleanAddr }));
+
+      if (user?.id) {
+        const nowIso = new Date().toISOString();
+        const cleanPhone = (formData.phone || '').replace(/\D/g, '').slice(0, 11);
+        const cleanName = (formData.fullName || '').replace(/<[^>]*>?/gm, '').trim().slice(0, 80);
+        const { error: updateErr, data: rows } = await supabase
+          .from('user_profiles')
+          .update({
+            addresses: updatedMulti,
+            ...(cleanPhone ? { phone: cleanPhone } : {}),
+            ...(cleanName ? { full_name: cleanName } : {}),
+            updated_at: nowIso,
+          })
+          .eq('id', user.id)
+          .select('id');
+
+        if (updateErr || !rows || rows.length === 0) {
+          await supabase
+            .from('user_profiles')
+            .upsert(
+              {
+                id: user.id,
+                email: user.email,
+                full_name: cleanName || profile?.full_name || user.user_metadata?.full_name || '',
+                phone: cleanPhone || profile?.phone || null,
+                addresses: updatedMulti,
+                updated_at: nowIso,
+              },
+              { onConflict: 'id' }
+            );
+        }
+      }
+    } catch (err) {
+      console.warn('Persist checkout address notice:', err);
+    }
+  };
+
   const handleContinueToReview = (e) => {
     e.preventDefault();
     if (selectedCheckoutItems.length === 0) {
@@ -625,9 +759,7 @@ export default function CheckoutPage({
     }
     if (validateShippingForm()) {
       if (formData.saveAddress) {
-        try {
-          localStorage.setItem('aura_saved_shipping_address', JSON.stringify(formData));
-        } catch (err) {}
+        persistCheckoutAddressToProfile();
       }
       setCurrentStep(2);
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -964,7 +1096,7 @@ export default function CheckoutPage({
                   </div>
 
                   {/* Saved Delivery Addresses Switcher */}
-                  {savedAddresses?.address1 && savedAddresses?.address2 && (
+                  {(savedAddresses?.address1?.street || savedAddresses?.address1?.regionCode || savedAddresses?.address2?.street) && (
                     <div className="p-3 bg-[#FAF5F2] border border-[#E8DCD7] space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-brand font-bold uppercase tracking-wider text-[#705B56]">
@@ -974,62 +1106,70 @@ export default function CheckoutPage({
                           From Profile
                         </span>
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => selectSavedAddress('address1')}
-                          className={`p-2.5 text-left text-xs border transition-all cursor-pointer ${
-                            selectedAddressKey === 'address1'
-                              ? 'bg-[#2C1E1B] text-white border-[#2C1E1B] shadow-2xs'
-                              : 'bg-white text-[#705B56] border-[#E8DCD7] hover:border-[#B86B60]'
-                          }`}
-                        >
-                          <div className="font-bold flex items-center justify-between">
-                            <span>Address 1 (Primary)</span>
-                            {savedAddresses.defaultKey === 'address1' && (
-                              <span
-                                className={`text-[9px] font-mono uppercase px-1 py-0.5 ${
-                                  selectedAddressKey === 'address1'
-                                    ? 'bg-white/20 text-white'
-                                    : 'bg-emerald-100 text-emerald-800'
-                                }`}
-                              >
-                                Default
-                              </span>
-                            )}
-                          </div>
-                          <div className="truncate text-[11px] opacity-80 mt-0.5">
-                            {savedAddresses.address1.street || 'Address 1'}
-                          </div>
-                        </button>
+                      <div className={`grid grid-cols-1 ${savedAddresses?.address2?.street || savedAddresses?.address2?.regionCode ? 'sm:grid-cols-2' : ''} gap-2`}>
+                        {(savedAddresses?.address1?.street || savedAddresses?.address1?.regionCode) && (
+                          <button
+                            type="button"
+                            onClick={() => selectSavedAddress('address1')}
+                            className={`p-2.5 text-left text-xs border transition-all cursor-pointer ${
+                              selectedAddressKey === 'address1'
+                                ? 'bg-[#2C1E1B] text-white border-[#2C1E1B] shadow-2xs'
+                                : 'bg-white text-[#705B56] border-[#E8DCD7] hover:border-[#B86B60]'
+                            }`}
+                          >
+                            <div className="font-bold flex items-center justify-between">
+                              <span>Address 1 (Primary)</span>
+                              {(savedAddresses.defaultKey || 'address1') === 'address1' && (
+                                <span
+                                  className={`text-[9px] font-mono uppercase px-1 py-0.5 ${
+                                    selectedAddressKey === 'address1'
+                                      ? 'bg-white/20 text-white'
+                                      : 'bg-emerald-100 text-emerald-800'
+                                  }`}
+                                >
+                                  Default
+                                </span>
+                              )}
+                            </div>
+                            <div className="truncate text-[11px] opacity-80 mt-0.5">
+                              {[savedAddresses.address1.street, savedAddresses.address1.cityName, savedAddresses.address1.provinceName]
+                                .filter(Boolean)
+                                .join(', ') || 'Address 1'}
+                            </div>
+                          </button>
+                        )}
 
-                        <button
-                          type="button"
-                          onClick={() => selectSavedAddress('address2')}
-                          className={`p-2.5 text-left text-xs border transition-all cursor-pointer ${
-                            selectedAddressKey === 'address2'
-                              ? 'bg-[#2C1E1B] text-white border-[#2C1E1B] shadow-2xs'
-                              : 'bg-white text-[#705B56] border-[#E8DCD7] hover:border-[#B86B60]'
-                          }`}
-                        >
-                          <div className="font-bold flex items-center justify-between">
-                            <span>Address 2 (Secondary)</span>
-                            {savedAddresses.defaultKey === 'address2' && (
-                              <span
-                                className={`text-[9px] font-mono uppercase px-1 py-0.5 ${
-                                  selectedAddressKey === 'address2'
-                                    ? 'bg-white/20 text-white'
-                                    : 'bg-emerald-100 text-emerald-800'
-                                }`}
-                              >
-                                Default
-                              </span>
-                            )}
-                          </div>
-                          <div className="truncate text-[11px] opacity-80 mt-0.5">
-                            {savedAddresses.address2.street || 'Address 2'}
-                          </div>
-                        </button>
+                        {(savedAddresses?.address2?.street || savedAddresses?.address2?.regionCode) && (
+                          <button
+                            type="button"
+                            onClick={() => selectSavedAddress('address2')}
+                            className={`p-2.5 text-left text-xs border transition-all cursor-pointer ${
+                              selectedAddressKey === 'address2'
+                                ? 'bg-[#2C1E1B] text-white border-[#2C1E1B] shadow-2xs'
+                                : 'bg-white text-[#705B56] border-[#E8DCD7] hover:border-[#B86B60]'
+                            }`}
+                          >
+                            <div className="font-bold flex items-center justify-between">
+                              <span>Address 2 (Secondary)</span>
+                              {savedAddresses.defaultKey === 'address2' && (
+                                <span
+                                  className={`text-[9px] font-mono uppercase px-1 py-0.5 ${
+                                    selectedAddressKey === 'address2'
+                                      ? 'bg-white/20 text-white'
+                                      : 'bg-emerald-100 text-emerald-800'
+                                  }`}
+                                >
+                                  Default
+                                </span>
+                              )}
+                            </div>
+                            <div className="truncate text-[11px] opacity-80 mt-0.5">
+                              {[savedAddresses.address2.street, savedAddresses.address2.cityName, savedAddresses.address2.provinceName]
+                                .filter(Boolean)
+                                .join(', ') || 'Address 2'}
+                            </div>
+                          </button>
+                        )}
                       </div>
                     </div>
                   )}

@@ -101,14 +101,31 @@ export async function getCities(provinceCode, regionCode) {
   if (regionCode === '130000000' || provinceCode === 'NCR_MANILA') {
     const data = await fetchWithCache('/regions/130000000/cities-municipalities/');
     if (data && data.length > 0) {
-      return data.sort((a, b) => a.name.localeCompare(b.name));
+      return [...data].sort((a, b) => a.name.localeCompare(b.name));
     }
   }
 
   if (provinceCode && provinceCode !== 'NCR_MANILA') {
-    const data = await fetchWithCache(`/provinces/${provinceCode}/cities-municipalities/`);
-    if (data && data.length > 0) {
-      return data.sort((a, b) => a.name.localeCompare(b.name));
+    const provCities = (await fetchWithCache(`/provinces/${provinceCode}/cities-municipalities/`)) || [];
+    const effectiveRegionCode =
+      regionCode || (String(provinceCode).length === 9 ? `${String(provinceCode).slice(0, 2)}0000000` : '');
+
+    // In PSGC, Highly Urbanized / Independent Cities (e.g. Davao City, Cebu City, CDO, Baguio)
+    // have provinceCode === false and live under the region endpoint. Merge them so users never miss their city.
+    let independentCities = [];
+    if (effectiveRegionCode && effectiveRegionCode !== '130000000') {
+      const regCities = (await fetchWithCache(`/regions/${effectiveRegionCode}/cities-municipalities/`)) || [];
+      independentCities = regCities.filter((c) => !c.provinceCode);
+    }
+
+    const mergedMap = new Map();
+    [...provCities, ...independentCities].forEach((c) => {
+      if (c && c.code) mergedMap.set(c.code, c);
+    });
+
+    const combined = Array.from(mergedMap.values());
+    if (combined.length > 0) {
+      return combined.sort((a, b) => a.name.localeCompare(b.name));
     }
   }
 

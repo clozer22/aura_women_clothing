@@ -19,14 +19,16 @@ export default async function handler(req, res) {
 
   try {
     ensureServerEnv();
-    const supabase = getSupabaseServerClient();
+    const authHeader = req.headers.authorization || req.headers.Authorization || '';
+    const hasServiceRole = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
+    const customHeaders = !hasServiceRole && authHeader.startsWith('Bearer ') ? { Authorization: authHeader } : {};
+    const supabase = getSupabaseServerClient(null, customHeaders);
     if (!supabase) {
       return res.status(500).json({ success: false, error: 'Database client unavailable' });
     }
 
     // Administrative session or Cron Secret verification
     const cronSecret = process.env.CRON_SECRET || process.env.VERCEL_CRON_SECRET;
-    const authHeader = req.headers.authorization || req.headers.Authorization || '';
     const incomingCronSecret = req.headers['x-cron-secret'] || req.headers['authorization'];
 
     let isAuthorized = false;

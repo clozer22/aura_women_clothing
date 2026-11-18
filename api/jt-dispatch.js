@@ -39,17 +39,19 @@ export default async function handler(req, res) {
 
     const cleanRef = String(orderRef).trim().toUpperCase();
 
-    // 1. Initialize Supabase
-    const supabase = getSupabaseServerClient();
+    // 1. Initialize Supabase (forward admin JWT if service role key is not present)
+    const authHeader = req.headers.authorization || req.headers.Authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Administrative authorization token required to book courier shipments' });
+    }
+    const hasServiceRole = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
+    const customHeaders = !hasServiceRole ? { Authorization: authHeader } : {};
+    const supabase = getSupabaseServerClient(null, customHeaders);
     if (!supabase) {
       return res.status(500).json({ error: 'Database configuration missing' });
     }
 
     // 2. Verify Administrative Privileges (Prevent unauthorized courier dispatches)
-    const authHeader = req.headers.authorization || req.headers.Authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Administrative authorization token required to book courier shipments' });
-    }
     const token = authHeader.substring(7).trim();
     const { data: userData, error: userErr } = await supabase.auth.getUser(token);
     if (userErr || !userData?.user?.email) {

@@ -151,12 +151,35 @@ export default function AdminFinanceTab({ orders = [], isLoading = false, onRefr
     );
   };
 
-  // Filter orders by date range, channel, and search query
+  // Strictly determine if an order is actually paid and eligible for Sales / Finance accounting:
+  // - COD orders: ONLY when status is DELIVERED (or COMPLETED) and not cancelled/refunded
+  // - Online orders: ONLY when payment_status is PAID and not cancelled/refunded
+  const isOrderPaidForSales = (order) => {
+    if (!order) return false;
+    const st = (order.status || '').toUpperCase();
+    const pst = (order.payment_status || '').toUpperCase();
+    if (
+      st === 'CANCELLED' ||
+      st === 'RETURNED' ||
+      st === 'REFUNDED' ||
+      pst === 'CANCELLED' ||
+      pst === 'REFUNDED' ||
+      pst === 'REFUND_PENDING'
+    ) {
+      return false;
+    }
+    if (isCodOrder(order)) {
+      return st === 'DELIVERED' || st === 'COMPLETED';
+    }
+    return pst === 'PAID';
+  };
+
+  // Filter orders by paid/delivered eligibility, date range, channel, and search query
   const { filteredOrders, activeDateLabel } = useMemo(() => {
     let list = Array.isArray(orders) ? orders : [];
 
-    // Filter out cancelled orders from sales tracking
-    list = list.filter((o) => (o.status || '').toUpperCase() !== 'CANCELLED');
+    // Strictly include only paid orders (for COD: must be DELIVERED; for Online: must be PAID)
+    list = list.filter((o) => isOrderPaidForSales(o));
 
     // Date range filter
     if (startDate || endDate) {
@@ -695,14 +718,8 @@ export default function AdminFinanceTab({ orders = [], isLoading = false, onRefr
 
                       {/* Status */}
                       <td className="px-5 py-3.5 align-middle">
-                        <span
-                          className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${
-                            order.payment_status === 'PAID' || order.status === 'DELIVERED'
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                              : 'bg-slate-100 text-slate-700 border-slate-200'
-                          }`}
-                        >
-                          {order.payment_status === 'PAID' ? 'PAID' : (order.status || 'PENDING')}
+                        <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200">
+                          {isCod ? 'PAID • DELIVERED' : 'PAID'}
                         </span>
                       </td>
 

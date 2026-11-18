@@ -867,10 +867,15 @@ export default function AdminPortal({
           ordersData.forEach(o => {
             const s = (o.status || 'PENDING').toUpperCase();
             const p = (o.payment_status || '').toUpperCase();
+            const m = (o.payment_method || '').toUpperCase();
+            const isCod = m === 'COD' || m.includes('CASH ON DELIVERY') || m === 'CASH';
             const isCancelledOrRefunded = s === 'CANCELLED' || s === 'RETURNED' || s === 'REFUNDED' || p === 'REFUNDED' || p === 'REFUND_PENDING';
 
+            // COD orders are ONLY counted in Total Sales when actually DELIVERED (never before delivery)
             const isPaid = !isCancelledOrRefunded && (
-              p === 'PAID' || s === 'COMPLETED' || s === 'DELIVERED'
+              isCod
+                ? ((s === 'DELIVERED' || s === 'COMPLETED') && p !== 'CANCELLED')
+                : p === 'PAID'
             );
             if (isPaid) {
               const netSales = Math.max(0, (Number(o.total_amount) || 0) - (Number(o.shipping_fee) || 0));
@@ -1013,8 +1018,27 @@ export default function AdminPortal({
       returned: 0,
       failedToDeliver: 0
     };
+    let nextTotalSales = 0;
+    let nextPaidCount = 0;
+
     updatedOrders.forEach(o => {
       const s = (o.status || 'PENDING').toUpperCase();
+      const p = (o.payment_status || '').toUpperCase();
+      const m = (o.payment_method || '').toUpperCase();
+      const isCod = m === 'COD' || m.includes('CASH ON DELIVERY') || m === 'CASH';
+      const isCancelledOrRefunded = s === 'CANCELLED' || s === 'RETURNED' || s === 'REFUNDED' || p === 'REFUNDED' || p === 'REFUND_PENDING';
+
+      const isPaid = !isCancelledOrRefunded && (
+        isCod
+          ? ((s === 'DELIVERED' || s === 'COMPLETED') && p !== 'CANCELLED')
+          : p === 'PAID'
+      );
+      if (isPaid) {
+        const netSales = Math.max(0, (Number(o.total_amount) || 0) - (Number(o.shipping_fee) || 0));
+        nextTotalSales += netSales;
+        nextPaidCount += 1;
+      }
+
       if (s === 'AWAITING_COLLECTION') {
         counts.toShip += 1;
         counts.awaitingCollection += 1;
@@ -1036,6 +1060,12 @@ export default function AdminPortal({
       }
     });
     setOrderCounts(counts);
+    setDashboardStats(prev => ({
+      ...prev,
+      totalSales: nextTotalSales,
+      paidOrdersCount: nextPaidCount,
+      recentOrders: updatedOrders.slice(0, 6),
+    }));
   };
 
   const handleUpdateOrderStatus = async (orderId, newStatus, modifierInfo = null, additionalFields = {}) => {
@@ -1074,6 +1104,24 @@ export default function AdminPortal({
         }
       }
 
+      // Enforce strict COD payment_status rule:
+      // COD is NEVER tagged as PAID until the order status is DELIVERED (or COMPLETED)
+      const orderPayMethod = (existingOrder?.payment_method || '').toUpperCase();
+      const isCodOrder = orderPayMethod === 'COD' || orderPayMethod.includes('CASH ON DELIVERY') || orderPayMethod === 'CASH';
+      let resolvedPaymentStatus = additionalFields?.payment_status;
+      if (!resolvedPaymentStatus && isCodOrder) {
+        const upperNew = (newStatus || '').toUpperCase();
+        if (upperNew === 'DELIVERED' || upperNew === 'COMPLETED') {
+          resolvedPaymentStatus = 'PAID';
+        } else if (upperNew === 'CANCELLED') {
+          resolvedPaymentStatus = 'CANCELLED';
+        } else if (upperNew === 'RETURNED' || upperNew === 'REFUNDED') {
+          resolvedPaymentStatus = 'REFUNDED';
+        } else {
+          resolvedPaymentStatus = 'PENDING';
+        }
+      }
+
       const updatePayload = {
         status: newStatus,
         last_touched_by: modifier,
@@ -1081,6 +1129,9 @@ export default function AdminPortal({
         updated_at: new Date().toISOString(),
         ...(additionalFields || {})
       };
+      if (resolvedPaymentStatus) {
+        updatePayload.payment_status = resolvedPaymentStatus;
+      }
       if (newInventoryDeducted !== undefined) {
         updatePayload.inventory_deducted = newInventoryDeducted;
       }

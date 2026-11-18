@@ -164,9 +164,11 @@ export default async function handler(req, res) {
                   }
                 }
 
+                const isCodOrder = (ord.payment_method || '').toUpperCase() === 'COD';
                 const fullUpdate = {
                   ...updatePayload,
                   shipment_payload: payload,
+                  ...(isCodOrder && newStatus === 'DELIVERED' ? { payment_status: 'PAID' } : {}),
                 };
 
                 await supabase.from('orders').update(fullUpdate).eq('id', ord.id);

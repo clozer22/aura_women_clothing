@@ -540,28 +540,31 @@ export default function OrderDetailPage({
                 {badge.label}
               </span>
 
-              <span className={`inline-flex items-center gap-1 px-3 py-1.5 border text-xs font-semibold uppercase tracking-wider ${order.payment_status === 'PAID'
-                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                : order.payment_status === 'REFUND_PENDING'
+              <span className={`inline-flex items-center gap-1 px-3 py-1.5 border text-xs font-semibold uppercase tracking-wider ${
+                order.payment_status === 'REFUND_PENDING'
                   ? 'bg-amber-50 text-amber-800 border-amber-300 font-bold'
                   : order.payment_status === 'REFUNDED'
                     ? 'bg-orange-50 text-orange-900 border-orange-300 font-bold'
                     : order.payment_status === 'CANCELLED'
                       ? 'bg-neutral-100 text-neutral-600 border-neutral-300'
-                      : order.payment_method === 'COD'
-                        ? 'bg-amber-50 text-amber-800 border-amber-200'
-                        : 'bg-amber-50 text-amber-800 border-amber-200'
+                      : (order.payment_method || '').toUpperCase() === 'COD'
+                        ? (isDelivered
+                            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                            : 'bg-amber-50 text-amber-800 border-amber-200')
+                        : order.payment_status === 'PAID'
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                          : 'bg-amber-50 text-amber-800 border-amber-200'
                 }`}>
-                {order.payment_status === 'PAID'
-                  ? 'Paid'
-                  : order.payment_status === 'REFUND_PENDING'
-                    ? 'Refund Pending'
-                    : order.payment_status === 'REFUNDED'
-                      ? 'Refunded'
-                      : order.payment_status === 'CANCELLED'
-                        ? 'Voided'
-                        : order.payment_method === 'COD'
-                          ? 'COD • Unpaid'
+                {order.payment_status === 'REFUND_PENDING'
+                  ? 'Refund Pending'
+                  : order.payment_status === 'REFUNDED'
+                    ? 'Refunded'
+                    : order.payment_status === 'CANCELLED'
+                      ? 'Voided'
+                      : (order.payment_method || '').toUpperCase() === 'COD'
+                        ? (isDelivered ? 'COD • Paid' : 'COD • Unpaid')
+                        : order.payment_status === 'PAID'
+                          ? 'Paid'
                           : 'Payment Pending'}
               </span>
             </div>

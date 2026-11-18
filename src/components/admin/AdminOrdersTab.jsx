@@ -566,12 +566,23 @@ const AdminOrdersTab = ({
       action: `Status changed to ${newStatus}`,
       timestamp: new Date().toISOString(),
     };
+    const isCod = (order?.payment_method || '').toUpperCase() === 'COD';
+    const upperNew = (newStatus || '').toUpperCase();
+    const resolvedPaymentStatus = isCod
+      ? (upperNew === 'DELIVERED' || upperNew === 'COMPLETED'
+          ? 'PAID'
+          : upperNew === 'CANCELLED'
+          ? 'CANCELLED'
+          : 'PENDING')
+      : order?.payment_status;
+
     try {
       await onUpdateOrderStatus(order.id, newStatus, modifierInfo);
       if (selectedOrder && selectedOrder.id === order.id) {
         setSelectedOrder((prev) => ({
           ...prev,
           status: newStatus,
+          ...(resolvedPaymentStatus ? { payment_status: resolvedPaymentStatus } : {}),
           last_touched_by: modifierInfo,
           audit_trail: [modifierInfo, ...(Array.isArray(prev.audit_trail) ? prev.audit_trail : [])],
           ...(newStatus === 'TO_DELIVER'
@@ -1629,10 +1640,11 @@ const AdminOrdersTab = ({
       ) : (
         <div className="space-y-4">
           {filteredOrders.map((order) => {
-            const isPaid =
-              (order.payment_status || '').toUpperCase() === 'PAID' ||
-              (order.status || '').toUpperCase() === 'COMPLETED';
             const isCod = (order.payment_method || '').toUpperCase() === 'COD';
+            const isDeliveredOrder = ['DELIVERED', 'COMPLETED'].includes((order.status || '').toUpperCase());
+            const isPaid = isCod
+              ? isDeliveredOrder && (order.payment_status || '').toUpperCase() === 'PAID'
+              : (order.payment_status || '').toUpperCase() === 'PAID';
             const itemsCount = order.items?.reduce((sum, it) => sum + (it.quantity || 1), 0) || 1;
             const isEditingThisTracking = editingTrackingId === order.id;
             const isBookingThis = bookingShipmateId === order.id;
@@ -1727,9 +1739,15 @@ const AdminOrdersTab = ({
                             VOIDED
                           </span>
                         ) : isCod ? (
-                          <span className="text-[10px] uppercase font-bold px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-300 rounded-full">
-                            COD (₱{(Number(order.total_amount) || 0).toLocaleString()})
-                          </span>
+                          isDeliveredOrder ? (
+                            <span className="text-[10px] uppercase font-bold px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full">
+                              COD • PAID (₱{(Number(order.total_amount) || 0).toLocaleString()})
+                            </span>
+                          ) : (
+                            <span className="text-[10px] uppercase font-bold px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-300 rounded-full">
+                              COD • UNPAID (₱{(Number(order.total_amount) || 0).toLocaleString()})
+                            </span>
+                          )
                         ) : isPaid ? (
                           <span className="text-[10px] uppercase font-bold px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full">
                             PAID

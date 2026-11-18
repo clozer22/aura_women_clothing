@@ -401,6 +401,7 @@ export default async function handler(req, res) {
           const { error: codInsertErr } = await supabase.from('orders').insert([codOrder]);
           if (codInsertErr) {
             console.error('[Create Order] Failed to insert COD order into Supabase:', codInsertErr.message);
+            return res.status(500).json({ error: 'Unable to record your order right now. Please try again.' });
           }
           // Atomically deduct product stock in Supabase database
           try {
@@ -416,7 +417,8 @@ export default async function handler(req, res) {
             }
           }
         } catch (insertErr) {
-          console.warn('Notice: Could not insert COD order into Supabase:', insertErr.message);
+          console.error('[Create Order] Unexpected error inserting COD order into Supabase:', insertErr.message);
+          return res.status(500).json({ error: 'Unable to record your order right now. Please try again.' });
         }
       }
 

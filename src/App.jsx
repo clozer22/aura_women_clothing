@@ -350,8 +350,12 @@ function MainApp() {
             const savedOrders = JSON.parse(localStorage.getItem('aura_guest_orders') || '[]');
             const found = savedOrders.find((o) => o.order_reference === ref);
             if (found) {
-              found.payment_status = 'PAID';
-              found.status = 'PROCESSING';
+              if ((found.payment_method || '').toUpperCase() !== 'COD') {
+                found.payment_status = 'PAID';
+                found.status = 'TO_SHIP';
+              } else {
+                found.payment_status = 'PENDING';
+              }
               localStorage.setItem('aura_guest_orders', JSON.stringify(savedOrders));
               setCompletedOrder(found);
             }
