@@ -37,3 +37,5 @@ scratch/
 
 # Supabase temp & local files
 supabase/.temp/
+.vercel
+.env*
