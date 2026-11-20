@@ -569,35 +569,40 @@ function MainApp() {
     );
   }
 
+  const renderCustomerAuthGuard = (title, description) => (
+    <div className="min-h-screen bg-[#FAF5F2] flex items-center justify-center p-4">
+      <div className="bg-white border border-[#E8DCD7] p-8 max-w-md w-full text-center shadow-xl">
+        <span className="text-[10px] font-brand uppercase tracking-[0.25em] text-[#B86B60] font-bold block mb-1">
+          AUTHENTICATION REQUIRED
+        </span>
+        <h2 className="font-brand text-2xl text-[#2C1E1B] mb-2">{title}</h2>
+        <p className="text-xs text-[#705B56] mb-6 leading-relaxed">
+          {description}
+        </p>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <button
+            onClick={navigateToHome}
+            className="flex-1 py-3 border border-[#2C1E1B] text-xs font-bold uppercase tracking-wider text-[#2C1E1B] hover:bg-[#FAF5F2] cursor-pointer"
+          >
+            Return to Shop
+          </button>
+          <button
+            onClick={() => setAuthModalOpen(true)}
+            className="flex-1 py-3 bg-[#2C1E1B] text-white text-xs font-bold uppercase tracking-wider hover:bg-[#B86B60] cursor-pointer"
+          >
+            Sign In
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   // Render full-screen Checkout View (Guarded: login required)
   if (currentView === 'checkout') {
     if (!user) {
-      return (
-        <div className="min-h-screen bg-[#FAF5F2] flex items-center justify-center p-4">
-          <div className="bg-white border border-[#E8DCD7] p-8 max-w-md w-full text-center shadow-xl">
-            <span className="text-[10px] font-brand uppercase tracking-[0.25em] text-[#B86B60] font-bold block mb-1">
-              AUTHENTICATION REQUIRED
-            </span>
-            <h2 className="font-brand text-2xl text-[#2C1E1B] mb-2">Sign In to Checkout</h2>
-            <p className="text-xs text-[#705B56] mb-6 leading-relaxed">
-              Please sign in with Google or your email account to proceed with your checkout and track your order.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <button
-                onClick={navigateToHome}
-                className="flex-1 py-3 border border-[#2C1E1B] text-xs font-bold uppercase tracking-wider text-[#2C1E1B] hover:bg-[#FAF5F2] cursor-pointer"
-              >
-                Return to Shop
-              </button>
-              <button
-                onClick={() => setAuthModalOpen(true)}
-                className="flex-1 py-3 bg-[#2C1E1B] text-white text-xs font-bold uppercase tracking-wider hover:bg-[#B86B60] cursor-pointer"
-              >
-                Sign In
-              </button>
-            </div>
-          </div>
-        </div>
+      return renderCustomerAuthGuard(
+        'Sign In to Checkout',
+        'Please sign in with Google or your email account to proceed with your checkout and track your order.'
       );
     }
 
@@ -632,8 +637,14 @@ function MainApp() {
     );
   }
 
-  // Render full-screen Order History View
+  // Render full-screen Order History View (Guarded: login required)
   if (currentView === 'orders') {
+    if (!user) {
+      return renderCustomerAuthGuard(
+        'Sign In to View Orders',
+        'Please sign in to your account to view your order history, shipment tracking, and reviews.'
+      );
+    }
     return (
       <React.Suspense fallback={<PageSkeleton label="Loading Order History..." />}>
         <OrderHistory
@@ -644,8 +655,14 @@ function MainApp() {
     );
   }
 
-  // Render full-screen dedicated Order Details & Customer Ratings/Feedback View
+  // Render full-screen dedicated Order Details & Customer Ratings/Feedback View (Guarded: login required)
   if (currentView === 'order-details') {
+    if (!user) {
+      return renderCustomerAuthGuard(
+        'Sign In to View Order Details',
+        'Please sign in to your account to view full order details and courier tracking.'
+      );
+    }
     return (
       <React.Suspense fallback={<PageSkeleton label="Retrieving Order Details & Reviews..." />}>
         <OrderDetailPage
@@ -657,8 +674,14 @@ function MainApp() {
     );
   }
 
-  // Render full-screen Customer Profile & Settings View
+  // Render full-screen Customer Profile & Settings View (Guarded: login required)
   if (currentView === 'profile') {
+    if (!user) {
+      return renderCustomerAuthGuard(
+        'Sign In to Access Profile',
+        'Please sign in to manage your personal details, saved delivery addresses, and VIP rewards.'
+      );
+    }
     return (
       <React.Suspense fallback={<PageSkeleton label="Loading Profile & Settings..." />}>
         <CustomerProfilePage

@@ -42,16 +42,10 @@ export default async function handler(req, res) {
         const { data: adminProfile } = await supabase
           .from('admin_profiles')
           .select('id, is_active')
-          .eq('email', callerEmail)
+          .or(`id.eq.${userData.user.id},email.ilike.${callerEmail}`)
           .maybeSingle();
 
-        if (
-          callerEmail.endsWith('@superadmin.com') ||
-          callerEmail.endsWith('@aura.com') ||
-          callerEmail.endsWith('@admin.com') ||
-          callerEmail === 'markjosephaballe1@gmail.com' ||
-          adminProfile?.is_active === true
-        ) {
+        if (adminProfile?.is_active === true) {
           isAuthorized = true;
         }
       }

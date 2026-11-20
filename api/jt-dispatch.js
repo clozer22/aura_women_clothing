@@ -61,18 +61,13 @@ export default async function handler(req, res) {
     const { data: adminProfile } = await supabase
       .from('admin_profiles')
       .select('id, is_active')
-      .eq('email', userData.user.email.toLowerCase())
+      .or(`id.eq.${userData.user.id},email.ilike.${userData.user.email.toLowerCase()}`)
       .maybeSingle();
 
-    const isAuraAdmin =
-      userData.user.email.toLowerCase().endsWith('@superadmin.com') ||
-      userData.user.email.toLowerCase().endsWith('@aura.com') ||
-      userData.user.email.toLowerCase().endsWith('@admin.com') ||
-      userData.user.email.toLowerCase() === 'markjosephaballe1@gmail.com' ||
-      adminProfile?.is_active === true;
+    const isAuraAdmin = adminProfile?.is_active === true;
 
     if (!isAuraAdmin) {
-      return res.status(403).json({ error: 'Forbidden: Admin access required to dispatch courier shipments' });
+      return res.status(403).json({ error: 'Forbidden: Active admin access required to dispatch courier shipments' });
     }
 
     // 3. Fetch Order from Supabase (with secure RPC fallback)

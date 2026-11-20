@@ -748,6 +748,13 @@ export default function AdminPortal({
         .maybeSingle();
 
       if (profErr) throw profErr;
+      if (!profData || profData.is_active === false) {
+        await supabase.auth.signOut();
+        setSession(null);
+        setAuthError('Access Denied: Your administrator account is inactive or not authorized.');
+        return;
+      }
+
       if (profData) {
         const profObj = {
           name: profData.name || session.user.user_metadata?.full_name || 'Administrator',
@@ -768,19 +775,6 @@ export default function AdminPortal({
             setActiveTab(firstAllowed);
           }
         }
-      } else {
-        const defaultProf = {
-          name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Administrator',
-          role_title: adminRole === 'Super Admin' ? 'Super Administrator' : 'Administrator',
-          avatar_url: '',
-          bio: 'Bespoke designer commanding elegance for the modern profile.',
-          email: session.user.email,
-          role: adminRole,
-          permissions: ['dashboard', 'products', 'orders', 'finance', 'reviews', 'customize', 'profile'],
-          is_active: true,
-        };
-        setProfile(defaultProf);
-        setEditProfileForm(defaultProf);
       }
     } catch (err) {
       console.warn('Admin profile fetch notice:', err.message);
@@ -1469,6 +1463,19 @@ export default function AdminPortal({
       if (data?.user && !isAdminEmail(data.user.email)) {
         await supabase.auth.signOut();
         throw new Error('Access Denied: Account does not have administrator privileges.');
+      }
+
+      if (data?.user) {
+        const { data: profData, error: profErr } = await supabase
+          .from('admin_profiles')
+          .select('id, is_active')
+          .eq('id', data.user.id)
+          .maybeSingle();
+
+        if (profErr || !profData || profData.is_active === false) {
+          await supabase.auth.signOut();
+          throw new Error('Access Denied: Your administrator account is inactive or not registered.');
+        }
       }
     } catch (err) {
       setAuthError(err.message);

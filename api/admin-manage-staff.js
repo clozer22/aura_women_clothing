@@ -43,35 +43,34 @@ export default async function handler(req, res) {
     const action = body.action || req.query?.action || 'list';
 
     let callerUser = null;
-    let callerEmail = '';
+    let callerProfile = null;
     let isSuperAdminCaller = false;
 
     if (token) {
       const { data: authUserData, error: authUserErr } = await supabase.auth.getUser(token);
       if (!authUserErr && authUserData?.user) {
         callerUser = authUserData.user;
-        callerEmail = (callerUser.email || '').toLowerCase().trim();
-        isSuperAdminCaller = callerEmail.endsWith('@superadmin.com');
+        const { data: profData } = await supabase
+          .from('admin_profiles')
+          .select('id, role, is_active')
+          .eq('id', callerUser.id)
+          .maybeSingle();
 
-        if (!isSuperAdminCaller) {
-          const { data: callerProfile } = await supabase
-            .from('admin_profiles')
-            .select('role')
-            .eq('id', callerUser.id)
-            .maybeSingle();
-          if (callerProfile?.role === 'Super Admin') {
-            isSuperAdminCaller = true;
-          }
+        callerProfile = profData || null;
+        if (callerProfile?.is_active === true && callerProfile?.role === 'Super Admin') {
+          isSuperAdminCaller = true;
         }
       }
     }
 
-    // Check if any admin profiles exist yet (initial bootstrapping check)
-    const { count: profileCount } = await supabase
-      .from('admin_profiles')
-      .select('*', { count: 'exact', head: true });
-
-    const isBootstrapping = (profileCount === 0 || profileCount === null);
+    // Check if any admin profiles exist yet (only valid when service role key can bypass RLS)
+    let isBootstrapping = false;
+    if (serviceRoleKey) {
+      const { count: profileCount } = await supabase
+        .from('admin_profiles')
+        .select('*', { count: 'exact', head: true });
+      isBootstrapping = profileCount === 0;
+    }
 
     // Enforce administrative authentication if not bootstrapping
     if (!isBootstrapping) {
@@ -80,9 +79,9 @@ export default async function handler(req, res) {
           error: 'Unauthorized: Valid administrative session bearer token required.',
         });
       }
-      if (!callerEmail.endsWith('@admin.com') && !callerEmail.endsWith('@superadmin.com') && !isSuperAdminCaller) {
+      if (!callerProfile || callerProfile.is_active !== true) {
         return res.status(403).json({
-          error: 'Forbidden: Caller is not an authorized administrator.',
+          error: 'Forbidden: Caller is not an active authorized administrator.',
         });
       }
     }
