@@ -147,6 +147,11 @@ export default function AdminPortal({
   // Orders Management & TikTok Shop Fulfillment Pipeline states
   const [ordersList, setOrdersList] = useState([]);
   const [isLoadingOrders, setIsLoadingOrders] = useState(false);
+  const [paginatedOrders, setPaginatedOrders] = useState([]);
+  const [ordersPage, setOrdersPage] = useState(1);
+  const ordersPageSize = 20;
+  const [totalOrdersCount, setTotalOrdersCount] = useState(0);
+  const [isLoadingOrdersPage, setIsLoadingOrdersPage] = useState(false);
   const [orderFilterTab, setOrderFilterTab] = useState(getInitialSubfilter);
   const [orderCounts, setOrderCounts] = useState({
     total: 0,
