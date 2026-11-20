@@ -427,25 +427,19 @@ export default function OrderHistory({ onBackToShop, onSelectOrder }) {
       updated_at: new Date().toISOString()
     };
 
+    if (reviewModal.existingReview) {
+      setIsSubmittingReview(false);
+      return;
+    }
+
     try {
-      if (existingReview?.id) {
-        const { data, error } = await supabase
-          .from('product_reviews')
-          .update(payload)
-          .eq('id', existingReview.id)
-          .select()
-          .single();
-        if (error) throw error;
-        setUserReviewsMap((prev) => ({ ...prev, [key]: data || { ...existingReview, ...payload } }));
-      } else {
-        const { data, error } = await supabase
-          .from('product_reviews')
-          .insert([payload])
-          .select()
-          .single();
-        if (error) throw error;
-        setUserReviewsMap((prev) => ({ ...prev, [key]: data || payload }));
-      }
+      const { data, error } = await supabase
+        .from('product_reviews')
+        .insert([payload])
+        .select()
+        .single();
+      if (error) throw error;
+      setUserReviewsMap((prev) => ({ ...prev, [key]: data || payload }));
 
       setReviewSuccessMessage('Thank you! Your product review has been submitted.');
       setTimeout(() => {

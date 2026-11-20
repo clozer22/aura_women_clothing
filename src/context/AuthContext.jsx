@@ -85,6 +85,7 @@ export function AuthProvider({ children }) {
             null,
           role: 'customer',
           has_set_password: !isGoogle,
+          birthdate: currentUser.user_metadata?.birthdate || null,
         };
 
         const { data: created } = await supabase
@@ -187,9 +188,12 @@ export function AuthProvider({ children }) {
   };
 
   // Sign Up with Email and Password (triggers OTP email from Supabase)
-  const signUpWithEmail = async ({ email, password, fullName }) => {
+  const signUpWithEmail = async ({ email, password, fullName, birthdate }) => {
     const cleanEmail = (email || '').trim().toLowerCase();
     const cleanName = (fullName || '').replace(/<[^>]*>?/gm, '').trim().slice(0, 80);
+    const cleanBirthdate = typeof birthdate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(birthdate.trim())
+      ? birthdate.trim()
+      : null;
 
     if (isAdminEmail(cleanEmail)) {
       throw new Error('This email address cannot be registered as a customer account.');
@@ -219,6 +223,7 @@ export function AuthProvider({ children }) {
         emailRedirectTo: `${origin}/`,
         data: {
           full_name: cleanName,
+          ...(cleanBirthdate ? { birthdate: cleanBirthdate } : {}),
         },
       },
     });
@@ -380,6 +385,13 @@ export function AuthProvider({ children }) {
 
     if (typeof updates.avatar_url === 'string') {
       allowed.avatar_url = updates.avatar_url.trim().slice(0, 500);
+    }
+
+    // Birthdate is strictly one-time set only (for Birthday Voucher privileges)
+    if (typeof updates.birthdate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(updates.birthdate.trim())) {
+      if (!profile?.birthdate) {
+        allowed.birthdate = updates.birthdate.trim();
+      }
     }
 
     if (Object.keys(allowed).length === 0) return;

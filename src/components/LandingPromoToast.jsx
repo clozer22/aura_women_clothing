@@ -2,10 +2,23 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, Copy, Check, X, Tag } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
+import { useAuth } from '../context/AuthContext';
+import { RANK_VOUCHER_CATALOG, calculateCustomerTier } from '../lib/customerRanking';
 
 const LOCAL_STORAGE_KEY = 'aura_custom_vouchers';
 
+const isRankVoucherCode = (code) => {
+  const upper = String(code || '').trim().toUpperCase();
+  return Boolean(
+    RANK_VOUCHER_CATALOG[upper] ||
+      upper.startsWith('MUSE') ||
+      upper.startsWith('ICON') ||
+      upper.startsWith('ROYAL')
+  );
+};
+
 export default function LandingPromoToast({ onSelectPromo }) {
+  const { user } = useAuth();
   const [activePromo, setActivePromo] = useState(null);
   const [copied, setCopied] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
@@ -64,13 +77,61 @@ export default function LandingPromoToast({ onSelectPromo }) {
 
       const allPromos = Array.from(promoMap.values());
 
-      // Filter valid non-expired promos
+      // Determine logged-in customer's rank & already-used vouchers (only when authenticated)
+      let totalItemsOrdered = 0;
+      let customerTier = null;
+      const usedCodes = new Set();
+
+      if (user?.id) {
+        try {
+          const { data: userOrders } = await supabase
+            .from('orders')
+            .select('items, promo_code, status')
+            .or(`user_id.eq.${user.id},customer_email.ilike.${user.email}`);
+
+          if (Array.isArray(userOrders)) {
+            userOrders.forEach((ord) => {
+              const st = (ord.status || '').toUpperCase();
+              if (['CANCELLED', 'RETURNED', 'REFUNDED'].includes(st)) return;
+              if (ord.promo_code) {
+                usedCodes.add(String(ord.promo_code).trim().toUpperCase());
+              }
+              if (Array.isArray(ord.items) && ord.items.length > 0) {
+                totalItemsOrdered += ord.items.reduce((s, it) => s + (Number(it?.quantity) || 1), 0);
+              } else {
+                totalItemsOrdered += 1;
+              }
+            });
+          }
+          if (totalItemsOrdered > 0) {
+            customerTier = calculateCustomerTier(totalItemsOrdered);
+          }
+        } catch (e) {}
+      }
+
+      // Filter valid non-expired promos and strictly gate rank vouchers by login + earned tier
       const validPromos = allPromos.filter((p) => {
         if (!p.code || p.is_active === false) return false;
+        const upperCode = String(p.code).trim().toUpperCase();
+
         if (p.expires_at) {
           const expDate = new Date(p.expires_at);
           if (expDate <= now) return false;
         }
+
+        if (isRankVoucherCode(upperCode)) {
+          // Never show rank/tier vouchers to logged-out visitors or users with 0 ordered items
+          if (!user?.id || !customerTier || totalItemsOrdered <= 0) return false;
+          if (usedCodes.has(upperCode)) return false;
+
+          const rankMeta = RANK_VOUCHER_CATALOG[upperCode];
+          if (!rankMeta) return false;
+          if (rankMeta.tier !== customerTier) return false;
+          if (rankMeta.min_historical_items && totalItemsOrdered < Number(rankMeta.min_historical_items)) {
+            return false;
+          }
+        }
+
         return true;
       });
 
@@ -88,7 +149,7 @@ export default function LandingPromoToast({ onSelectPromo }) {
     } catch (err) {
       console.warn('Error finding active promo for toast:', err);
     }
-  }, []);
+  }, [user?.id, user?.email]);
 
   useEffect(() => {
     findActivePromo();

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, User, Mail, Phone, Lock, ShieldCheck, CheckCircle2, Loader2, AlertCircle, KeyRound } from 'lucide-react';
+import { X, User, Mail, Phone, Lock, ShieldCheck, CheckCircle2, Loader2, AlertCircle, KeyRound, Calendar } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function CustomerProfileModal({ isOpen, onClose }) {
@@ -8,6 +8,7 @@ export default function CustomerProfileModal({ isOpen, onClose }) {
 
   const [fullName, setFullName] = useState(profile?.full_name || user?.user_metadata?.full_name || '');
   const [phone, setPhone] = useState(profile?.phone || '');
+  const [birthdate, setBirthdate] = useState(profile?.birthdate || '');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
@@ -58,6 +59,9 @@ export default function CustomerProfileModal({ isOpen, onClose }) {
 
     try {
       await updatePassword(newPassword);
+      if (birthdate && !profile?.birthdate) {
+        await updateProfileData({ birthdate });
+      }
       setPasswordSuccess(
         hasSetPassword
           ? 'Password successfully updated.'
@@ -240,6 +244,27 @@ export default function CustomerProfileModal({ isOpen, onClose }) {
                 />
               </div>
             </div>
+
+            {!profile?.birthdate && (
+              <div>
+                <label className="block text-[11px] uppercase font-bold tracking-wider text-[#705B56] mb-1">
+                  Birthdate (Optional — For Birthday Vouchers)
+                </label>
+                <div className="relative">
+                  <Calendar className="w-4 h-4 text-[#A38E88] absolute left-3.5 top-3" />
+                  <input
+                    type="date"
+                    max={new Date().toISOString().split('T')[0]}
+                    value={birthdate}
+                    onChange={(e) => setBirthdate(e.target.value)}
+                    className="w-full pl-10 pr-3.5 py-2 bg-[#FAF5F2] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B] rounded-none"
+                  />
+                </div>
+                <p className="text-[10px] text-[#705B56] mt-1">
+                  Optional: Set once for Birthday Vouchers (one-time setup only, cannot be changed later).
+                </p>
+              </div>
+            )}
 
             <button
               type="submit"

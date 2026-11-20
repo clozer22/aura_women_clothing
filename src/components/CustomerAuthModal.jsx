@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Mail, Lock, User, ArrowRight, ShieldCheck, KeyRound, Loader2, CheckCircle2 } from 'lucide-react';
+import { X, Mail, Lock, User, ArrowRight, ShieldCheck, KeyRound, Loader2, CheckCircle2, Calendar } from 'lucide-react';
 import { useAuth, isAdminEmail } from '../context/AuthContext';
 import { trackLead } from '../lib/metaPixel';
 import { supabase } from '../lib/supabaseClient';
@@ -24,6 +24,7 @@ export default function CustomerAuthModal({
 
   const [mode, setMode] = useState(initialMode); // 'signin' | 'signup' | 'verify_otp'
   const [fullName, setFullName] = useState('');
+  const [birthdate, setBirthdate] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [otpCode, setOtpCode] = useState('');
@@ -284,7 +285,13 @@ export default function CustomerAuthModal({
         return;
       }
 
-      await signUpWithEmail({ email: cleanEmail, password, fullName: cleanName });
+      if (!birthdate) {
+        setErrorMsg('Please enter your birthdate (set once for your Birthday Voucher privilege).');
+        setIsLoading(false);
+        return;
+      }
+
+      await signUpWithEmail({ email: cleanEmail, password, fullName: cleanName, birthdate });
       try {
         trackLead('Customer Sign Up', { email: cleanEmail });
       } catch (e) { }
@@ -614,6 +621,26 @@ export default function CustomerAuthModal({
                     className="w-full pl-10 pr-3.5 py-2.5 bg-[#FAF5F2] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B] rounded-none transition-colors"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] uppercase font-bold tracking-wider text-[#705B56] mb-1.5">
+                  Birthdate * (For Birthday Vouchers)
+                </label>
+                <div className="relative">
+                  <Calendar className="w-4 h-4 text-[#A38E88] absolute left-3.5 top-3.5" />
+                  <input
+                    type="date"
+                    required
+                    max={new Date().toISOString().split('T')[0]}
+                    value={birthdate}
+                    onChange={(e) => setBirthdate(e.target.value)}
+                    className="w-full pl-10 pr-3.5 py-2.5 bg-[#FAF5F2] border border-[#E8DCD7] text-xs text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B] rounded-none transition-colors"
+                  />
+                </div>
+                <p className="text-[10px] text-[#705B56] mt-1">
+                  Note: Your birthdate can only be set <strong>one time</strong> and is used to unlock your exclusive Birthday Voucher.
+                </p>
               </div>
 
               <button

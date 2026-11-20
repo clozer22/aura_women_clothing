@@ -544,8 +544,8 @@ export default function CheckoutPage({
   );
 
   const customerTier = useMemo(
-    () => calculateCustomerTier(customerHistoricalItems || selectedTotalQty),
-    [customerHistoricalItems, selectedTotalQty]
+    () => (customerHistoricalItems > 0 ? calculateCustomerTier(customerHistoricalItems) : null),
+    [customerHistoricalItems]
   );
 
   const handleApplyPromo = async (overrideCode = null) => {
@@ -613,15 +613,40 @@ export default function CheckoutPage({
         throw new Error('This voucher has reached its usage limit.');
       }
 
-      // Enforce Tier / Milestone Historical Item Requirement
+      // Enforce Tier / Rank Requirement (AURA Muse: 1+, AURA Icon: 6+, AURA Royal: 16+)
+      const tierMinMap = { 'AURA Muse': 1, 'AURA Icon': 6, 'AURA Royal': 16 };
+      const requiredTierItems = promoData.tier ? (tierMinMap[promoData.tier] || 0) : 0;
+      if (requiredTierItems > 0 && customerHistoricalItems < requiredTierItems) {
+        throw new Error(
+          `Voucher "${cleanCode}" is exclusive to ${promoData.tier} members (${requiredTierItems}+ purchased items required; your account has ${customerHistoricalItems}).`
+        );
+      }
+
+      // Enforce Tier / Milestone Historical Item Requirement (strictly based on purchased items)
       if (
         promoData.min_historical_items &&
         Number(promoData.min_historical_items) > 0 &&
-        customerHistoricalItems + selectedTotalQty < Number(promoData.min_historical_items)
+        customerHistoricalItems < Number(promoData.min_historical_items)
       ) {
         throw new Error(
-          `Voucher "${cleanCode}" requires at least ${promoData.min_historical_items} purchased items (Your items: ${customerHistoricalItems}).`
+          `Voucher "${cleanCode}" requires at least ${promoData.min_historical_items} purchased items (Your purchased items: ${customerHistoricalItems}).`
         );
+      }
+
+      // Enforce Birthday Voucher Eligibility (Birthdate must be set & birth month must match current month)
+      if (cleanCode.includes('BDAY')) {
+        if (!profile?.birthdate) {
+          throw new Error(
+            `Please set your birthdate in your Profile first to claim Birthday Voucher "${cleanCode}" (one-time setup).`
+          );
+        }
+        const birthMonth = new Date(`${profile.birthdate}T00:00:00`).getMonth();
+        const currentMonth = new Date().getMonth();
+        if (birthMonth !== currentMonth) {
+          throw new Error(
+            `Birthday Voucher "${cleanCode}" can only be redeemed during your birth month.`
+          );
+        }
       }
 
       // Enforce Loyalty Minimum Items in Current Order (3 for Muse, 4 for Icon, 6 for Royal)
@@ -1803,7 +1828,7 @@ export default function CheckoutPage({
                     {promoError && <p className="text-[10px] text-rose-600 mt-1.5">{promoError}</p>}
 
                     {/* Customer Rank Perks Quick-Apply Selector */}
-                    {user && DEFAULT_TIER_CONFIG[customerTier]?.vouchers && (
+                    {user && customerTier && DEFAULT_TIER_CONFIG[customerTier]?.vouchers && (
                       <div className="mt-3 p-3 bg-[#FAF5F2] border border-[#E8DCD7] space-y-2">
                         <div className="flex items-center justify-between">
                           <span className="text-[10px] font-bold uppercase tracking-wider text-[#2C1E1B]">
@@ -1821,8 +1846,20 @@ export default function CheckoutPage({
                             const needsMoreItems = spec?.min_order_items > 1 && selectedTotalQty < spec.min_order_items;
                             const needsMilestone =
                               spec?.min_historical_items > 0 &&
-                              customerHistoricalItems + selectedTotalQty < spec.min_historical_items;
-                            const isEligible = !isUsed && !needsMoreSpend && !needsMoreItems && !needsMilestone;
+                              customerHistoricalItems < spec.min_historical_items;
+                            const isBdayCode = v.code.includes('BDAY');
+                            const missingBirthdate = isBdayCode && !profile?.birthdate;
+                            const wrongBirthMonth =
+                              isBdayCode &&
+                              Boolean(profile?.birthdate) &&
+                              new Date(`${profile.birthdate}T00:00:00`).getMonth() !== new Date().getMonth();
+                            const isEligible =
+                              !isUsed &&
+                              !needsMoreSpend &&
+                              !needsMoreItems &&
+                              !needsMilestone &&
+                              !missingBirthdate &&
+                              !wrongBirthMonth;
 
                             return (
                               <div
@@ -1840,7 +1877,11 @@ export default function CheckoutPage({
                                     {isUsed
                                       ? 'Already redeemed (One-time use)'
                                       : needsMilestone
-                                      ? `Unlocks at ${spec.min_historical_items} purchased items`
+                                      ? `Unlocks at ${spec.min_historical_items} purchased items (You have ${customerHistoricalItems})`
+                                      : missingBirthdate
+                                      ? 'Set your birthdate in Profile to unlock'
+                                      : wrongBirthMonth
+                                      ? 'Available during your birth month'
                                       : needsMoreItems
                                       ? `Add ${spec.min_order_items - selectedTotalQty} more item(s) to use`
                                       : needsMoreSpend

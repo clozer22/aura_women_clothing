@@ -293,8 +293,21 @@ export default async function handler(req, res) {
                   : data.min_order_value,
               min_order_items: PRESET_VOUCHERS[cleanCode]?.min_order_items || 1,
               min_historical_items: PRESET_VOUCHERS[cleanCode]?.min_historical_items || 0,
+              tier: PRESET_VOUCHERS[cleanCode]?.tier || null,
             };
           }
+        }
+
+        // Attach tier from PRESET_VOUCHERS if matched
+        if (promo && !promo.tier && PRESET_VOUCHERS[cleanCode]) {
+          const tierByPrefix = cleanCode.startsWith('ROYAL')
+            ? 'AURA Royal'
+            : cleanCode.startsWith('ICON')
+            ? 'AURA Icon'
+            : cleanCode.startsWith('MUSE')
+            ? 'AURA Muse'
+            : null;
+          if (tierByPrefix) promo.tier = tierByPrefix;
         }
 
         if (!promo) {
@@ -310,15 +323,47 @@ export default async function handler(req, res) {
           return res.status(400).json({ error: `Promo code "${cleanCode}" has reached its maximum usage limit.` });
         }
 
-        // Enforce Tier / Milestone Historical Item Requirement
+        // Enforce Tier / Rank Requirement (AURA Muse: 1+, AURA Icon: 6+, AURA Royal: 16+)
+        const tierMinMap = { 'AURA Muse': 1, 'AURA Icon': 6, 'AURA Royal': 16 };
+        const requiredTierItems = promo.tier ? (tierMinMap[promo.tier] || 0) : 0;
+        if (requiredTierItems > 0 && customerHistoricalItems < requiredTierItems) {
+          return res.status(400).json({
+            error: `Voucher "${cleanCode}" is exclusive to ${promo.tier} members (${requiredTierItems}+ purchased items required; your account has ${customerHistoricalItems}).`,
+          });
+        }
+
+        // Enforce Tier / Milestone Historical Item Requirement (strictly based on purchased items)
         if (
           promo.min_historical_items &&
           Number(promo.min_historical_items) > 0 &&
-          customerHistoricalItems + orderTotalItemsCount < Number(promo.min_historical_items)
+          customerHistoricalItems < Number(promo.min_historical_items)
         ) {
           return res.status(400).json({
             error: `Voucher "${cleanCode}" requires at least ${promo.min_historical_items} purchased items on your account (Current: ${customerHistoricalItems}).`,
           });
+        }
+
+        // Enforce Birthday Voucher Eligibility (Birthdate must be set & birth month must match)
+        if (cleanCode.includes('BDAY') && supabase && verifiedUserId) {
+          const { data: profData } = await supabase
+            .from('user_profiles')
+            .select('birthdate')
+            .eq('id', verifiedUserId)
+            .maybeSingle();
+
+          const bdayStr = profData?.birthdate || authUser?.user_metadata?.birthdate || null;
+          if (!bdayStr) {
+            return res.status(400).json({
+              error: `Please set your birthdate in your Profile first to claim Birthday Voucher "${cleanCode}".`,
+            });
+          }
+          const birthMonth = new Date(`${bdayStr}T00:00:00`).getMonth();
+          const currentMonth = new Date().getMonth();
+          if (birthMonth !== currentMonth) {
+            return res.status(400).json({
+              error: `Birthday Voucher "${cleanCode}" can only be redeemed during your birth month.`,
+            });
+          }
         }
 
         // Enforce Loyalty Minimum Items in Current Order (e.g. 3 items for Muse, 4 for Icon, 6 for Royal)

@@ -160,7 +160,7 @@ const MessageBubble = memo(function MessageBubble({
     <div className={`flex flex-col mb-3.5 ${isAdmin ? 'items-end' : 'items-start'}`}>
       <div className="flex items-center gap-1.5 mb-1 text-[11px] text-slate-500">
         <span className="font-semibold text-slate-700">
-          {message.sender_name || (isAdmin ? 'Aura Staff' : 'Customer')}
+          {isAdmin ? 'Aura Admin' : (message.sender_name || 'Customer')}
         </span>
         {isAutoReply && (
           <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 text-[9px] font-bold">
@@ -454,7 +454,7 @@ export default function AdminChatTab({
       await sendChatMessage({
         ticketId: selectedTicketId,
         senderType: 'ADMIN',
-        senderName: currentAdmin.name || 'Aura Staff',
+        senderName: 'Aura Admin',
         senderId: null,
         messageText: text,
         mediaFile: mediaFile,
@@ -547,7 +547,7 @@ export default function AdminChatTab({
       await sendChatMessage({
         ticketId: selectedTicket.id,
         senderType: 'ADMIN',
-        senderName: currentAdmin.name || 'Aura Support Staff',
+        senderName: 'Aura Admin',
         senderId: currentAdmin.id || null,
         messageText: msg.content,
       });

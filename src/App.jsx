@@ -45,6 +45,55 @@ import {
 // Secret Admin Route driven by .env (defaults to obscure path if not specified)
 const ADMIN_ROUTE = (import.meta.env.VITE_ADMIN_ROUTE || '/hq-atelier-gateway-92x').trim();
 
+class RouteErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, errorMessage: '' };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, errorMessage: error?.message || 'Unexpected rendering error' };
+  }
+
+  componentDidCatch(error) {
+    const msg = String(error?.message || '');
+    const isChunkError =
+      msg.includes('Failed to fetch dynamically imported module') ||
+      msg.includes('Importing a module script failed') ||
+      msg.includes('Loading chunk');
+    if (isChunkError) {
+      try {
+        const reloaded = sessionStorage.getItem('aura_chunk_reloaded');
+        if (!reloaded) {
+          sessionStorage.setItem('aura_chunk_reloaded', '1');
+          window.location.reload();
+        }
+      } catch (e) {}
+    }
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-[#FAF5F2] flex items-center justify-center p-6 text-center">
+          <div className="bg-white border border-[#E8DCD7] p-8 max-w-md w-full shadow-lg space-y-4">
+            <h2 className="font-brand text-xl font-bold text-[#2C1E1B]">Page Failed to Load</h2>
+            <p className="text-xs text-[#705B56] break-words">{this.state.errorMessage}</p>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="px-6 py-3 bg-[#2C1E1B] hover:bg-[#B86B60] text-white text-xs font-bold uppercase tracking-widest cursor-pointer"
+            >
+              Reload Page
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function MainApp() {
   const { user } = useAuth();
 
@@ -551,21 +600,23 @@ function MainApp() {
   // Render full-screen Admin View if selected
   if (currentView === 'admin') {
     return (
-      <React.Suspense fallback={<PageSkeleton label="Loading Administration Hub..." />}>
-        <AdminPortal
-          onClosePortal={() => {
-            fetchProducts();
-            fetchStorefrontConfig();
-            navigateToHome();
-          }}
-          heroConfig={heroConfig}
-          onUpdateHeroConfig={setHeroConfig}
-          onRefreshData={() => {
-            fetchProducts();
-            fetchStorefrontConfig();
-          }}
-        />
-      </React.Suspense>
+      <RouteErrorBoundary>
+        <React.Suspense fallback={<PageSkeleton label="Loading Administration Hub..." />}>
+          <AdminPortal
+            onClosePortal={() => {
+              fetchProducts();
+              fetchStorefrontConfig();
+              navigateToHome();
+            }}
+            heroConfig={heroConfig}
+            onUpdateHeroConfig={setHeroConfig}
+            onRefreshData={() => {
+              fetchProducts();
+              fetchStorefrontConfig();
+            }}
+          />
+        </React.Suspense>
+      </RouteErrorBoundary>
     );
   }
 

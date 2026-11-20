@@ -368,9 +368,9 @@ export default function ProductDetailPage({
 
   if (isLoadingProduct) {
     return (
-      <div className="min-h-screen bg-[#FAF5F2] flex flex-col items-center justify-center p-6 text-[#2C1E1B]">
+      <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6 text-[#2C1E1B]">
         <div className="w-10 h-10 border-2 border-[#2C1E1B] border-t-transparent rounded-full animate-spin mb-4" />
-        <p className="font-brand text-xs uppercase tracking-[0.25em] font-semibold text-[#705B56]">
+        <p className="font-brand text-xs uppercase tracking-[0.25em] font-semibold text-[#4E3D39]">
           Loading Product...
         </p>
       </div>
@@ -379,12 +379,12 @@ export default function ProductDetailPage({
 
   if (!product) {
     return (
-      <div className="min-h-screen bg-[#FAF5F2] flex flex-col items-center justify-center p-6 text-[#2C1E1B]">
-        <Package className="w-12 h-12 text-[#A38E88] stroke-[1.2] mb-3" />
+      <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6 text-[#2C1E1B]">
+        <Package className="w-12 h-12 text-[#6B5852] stroke-[1.2] mb-3" />
         <h2 className="font-brand text-xl font-bold uppercase tracking-wider mb-2">
           Product Not Found
         </h2>
-        <p className="text-xs text-[#705B56] max-w-sm text-center mb-6">
+        <p className="text-xs text-[#4E3D39] max-w-sm text-center mb-6">
           The requested piece may have been retired from our current collection.
         </p>
         <button
@@ -398,7 +398,7 @@ export default function ProductDetailPage({
   }
 
   return (
-    <div className="min-h-screen bg-[#FAF5F2] text-[#2C1E1B] pt-24 sm:pt-28 pb-36 sm:pb-28 md:pb-20 selection:bg-[#D99B91] selection:text-white">
+    <div className="min-h-screen bg-white text-[#2C1E1B] pt-24 sm:pt-28 pb-36 sm:pb-28 md:pb-20 selection:bg-[#D99B91] selection:text-white">
 
       {/* Share Toast Notification */}
       <AnimatePresence>
@@ -418,24 +418,24 @@ export default function ProductDetailPage({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
         {/* Top Breadcrumb & Back Navigation Strip */}
-        <div className="flex flex-wrap items-center justify-between gap-4 pb-6 border-b border-[#E8DCD7] text-xs">
-          <div className="flex items-center gap-2 text-[#705B56]">
+        <div className="flex flex-wrap items-center justify-between gap-4 pb-6 border-b border-[#E5D7D1] text-xs">
+          <div className="flex items-center gap-2 text-[#4E3D39]">
             <button
               onClick={onBack}
-              className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-[#2C1E1B] hover:text-[#B86B60] transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-[#2C1E1B] hover:text-[#9A4E44] transition-colors cursor-pointer"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>Back to Shop</span>
             </button>
-            <span className="text-[#D1C2BD]">/</span>
-            <span className="hidden sm:inline uppercase tracking-wider text-[#705B56]">
+            <span className="text-[#9C8A84]">/</span>
+            <span className="hidden sm:inline uppercase tracking-wider text-[#4E3D39]">
               {(() => {
                 const cat = (product.category || '').toLowerCase();
                 const main = (product.mainCategory || '').toLowerCase();
                 return cat.includes('bottom') || cat.includes('pant') || cat.includes('skirt') || main === 'bottom' ? 'Bottoms' : 'Tops';
               })()}
             </span>
-            <span className="hidden sm:inline text-[#D1C2BD]">/</span>
+            <span className="hidden sm:inline text-[#9C8A84]">/</span>
             <span className="font-semibold text-[#2C1E1B] truncate max-w-xs sm:max-w-md">
               {product.name}
             </span>
@@ -443,7 +443,7 @@ export default function ProductDetailPage({
 
           <button
             onClick={handleShare}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#E8DCD7] hover:border-[#B86B60] text-[#705B56] hover:text-[#2C1E1B] transition-colors rounded-none cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FAF7F5] border border-[#D8C7C1] hover:border-[#9A4E44] text-[#4E3D39] hover:text-[#2C1E1B] transition-colors rounded-none cursor-pointer"
             title="Share this product"
           >
             <Share2 className="w-3.5 h-3.5" />
@@ -593,7 +593,7 @@ export default function ProductDetailPage({
                   return (
                     <>
                       {orig && Number(orig) > Number(product.price) && (
-                        <span className="font-hero text-lg text-[#A38E88] line-through">
+                        <span className="font-hero text-lg text-[#6B5852] line-through">
                           ₱{Number(orig)?.toLocaleString()}
                         </span>
                       )}
@@ -641,11 +641,11 @@ export default function ProductDetailPage({
               )}
 
               {/* Product Details / Feature Highlights */}
-              <div className="p-4 bg-white border border-[#E8DCD7] space-y-2 text-xs">
-                <span className="text-[10px] uppercase font-brand tracking-wider font-bold text-[#705B56] block">
+              <div className="p-4 bg-[#FAF7F5] border border-[#DFD0CA] space-y-2 text-xs">
+                <span className="text-[10px] uppercase font-brand tracking-wider font-bold text-[#4E3D39] block">
                   Tailoring Specifications
                 </span>
-                <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[#705B56]">
+                <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[#4E3D39]">
                   {Array.isArray(product.details) && product.details.length > 0 ? (
                     product.details.map((detail, idx) => (
                       <li key={idx} className="flex items-center gap-1.5">
@@ -824,18 +824,18 @@ export default function ProductDetailPage({
           </div>
 
           {/* Rating Summary Card & Distribution Overview */}
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-6 bg-white border border-[#E8DCD7] p-6 sm:p-8 shadow-sm">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-6 bg-[#FAF7F5] border border-[#DFD0CA] p-6 sm:p-8 shadow-sm">
 
             {/* Score Column */}
-            <div className="md:col-span-4 flex flex-col justify-center items-center md:items-start text-center md:text-left md:border-r md:border-[#E8DCD7] md:pr-8 space-y-2">
-              <span className="text-[11px] font-brand uppercase tracking-wider text-[#705B56] font-bold">
+            <div className="md:col-span-4 flex flex-col justify-center items-center md:items-start text-center md:text-left md:border-r md:border-[#DFD0CA] md:pr-8 space-y-2">
+              <span className="text-[11px] font-brand uppercase tracking-wider text-[#4E3D39] font-bold">
                 Overall Product Rating
               </span>
               <div className="flex items-baseline gap-2">
                 <span className="font-hero text-5xl font-bold text-[#2C1E1B]">
                   {reviewStats.avgRating}
                 </span>
-                <span className="text-[#A38E88] text-sm">/ 5.0</span>
+                <span className="text-[#6B5852] text-sm">/ 5.0</span>
               </div>
               <div className="flex items-center gap-1">
                 {[1, 2, 3, 4, 5].map((s) => (
@@ -923,8 +923,8 @@ export default function ProductDetailPage({
                 Loading verified customer reviews...
               </div>
             ) : filteredReviews.length === 0 ? (
-              <div className="bg-white border border-[#E8DCD7] p-12 text-center shadow-sm space-y-3">
-                <MessageSquare className="w-10 h-10 text-[#A38E88] stroke-[1.2] mx-auto" />
+              <div className="bg-[#FAF7F5] border border-[#DFD0CA] p-12 text-center shadow-sm space-y-3">
+                <MessageSquare className="w-10 h-10 text-[#6B5852] stroke-[1.2] mx-auto" />
                 <h3 className="font-brand text-sm uppercase tracking-wider font-bold text-[#2C1E1B]">
                   {reviews.length === 0 ? 'No Reviews Yet' : 'No Reviews Matching Selected Filter'}
                 </h3>
@@ -957,7 +957,7 @@ export default function ProductDetailPage({
                     key={rev.id}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="bg-white border border-[#E8DCD7] p-6 shadow-sm space-y-3"
+                    className="bg-[#FAF7F5] border border-[#DFD0CA] p-6 shadow-sm space-y-3"
                   >
                     {/* Header Row: User Name, Verified Buyer Badge, Date */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-[#FAF5F2]">
@@ -1097,7 +1097,7 @@ export default function ProductDetailPage({
                         window.scrollTo({ top: 0, behavior: 'smooth' });
                       }
                     }}
-                    className="bg-white border border-[#E8DCD7] p-3 shadow-sm hover:border-[#B86B60] transition-all cursor-pointer group flex flex-col justify-between relative"
+                    className="bg-[#FAF7F5] border border-[#DFD0CA] p-3 shadow-sm hover:border-[#9A4E44] transition-all cursor-pointer group flex flex-col justify-between relative"
                   >
                     <div className="w-full aspect-[3/4] bg-[#FAF5F2] overflow-hidden mb-3 relative">
                       {itemDisc > 0 && (

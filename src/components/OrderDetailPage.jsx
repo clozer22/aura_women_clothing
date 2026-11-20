@@ -362,28 +362,21 @@ export default function OrderDetailPage({
     };
 
     const existingReview = productReviews[pId];
+    if (existingReview) {
+      handleFormChange(pId, 'isSubmitting', false);
+      handleFormChange(pId, 'error', 'This item has already been reviewed for this order.');
+      return;
+    }
 
     try {
-      if (existingReview?.id) {
-        const { data, error } = await supabase
-          .from('product_reviews')
-          .update(payload)
-          .eq('id', existingReview.id)
-          .select()
-          .single();
+      const { data, error } = await supabase
+        .from('product_reviews')
+        .insert([payload])
+        .select()
+        .single();
 
-        if (error) throw error;
-        setProductReviews((prev) => ({ ...prev, [pId]: data || { ...existingReview, ...payload } }));
-      } else {
-        const { data, error } = await supabase
-          .from('product_reviews')
-          .insert([payload])
-          .select()
-          .single();
-
-        if (error) throw error;
-        setProductReviews((prev) => ({ ...prev, [pId]: data || payload }));
-      }
+      if (error) throw error;
+      setProductReviews((prev) => ({ ...prev, [pId]: data || payload }));
 
       handleFormChange(pId, 'success', 'Review published successfully! Thank you for your feedback.');
       handleFormChange(pId, 'isEditing', false);
@@ -817,7 +810,7 @@ export default function OrderDetailPage({
                 images: Array.isArray(existingReview?.images) ? existingReview.images : [],
                 isEditing: false,
               };
-              const isFormEditing = form.isEditing || !existingReview;
+              const isFormEditing = !existingReview;
 
               return (
                 <div key={idx} className="p-6 sm:p-8 space-y-6">
@@ -865,15 +858,9 @@ export default function OrderDetailPage({
                             )}
                           </div>
 
-                          {isDelivered && (
-                            <button
-                              type="button"
-                              onClick={() => startEditReview(pId, existingReview)}
-                              className="text-xs font-bold text-[#B86B60] hover:underline uppercase tracking-wider cursor-pointer"
-                            >
-                              Edit Review
-                            </button>
-                          )}
+                          <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700">
+                            Submitted
+                          </span>
                         </div>
 
                         <p className="text-xs sm:text-sm text-[#2C1E1B] leading-relaxed whitespace-pre-wrap bg-white p-3.5 border border-[#E8DCD7]">

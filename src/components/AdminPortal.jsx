@@ -744,7 +744,7 @@ export default function AdminPortal({
       const { data: profData, error: profErr } = await supabase
         .from('admin_profiles')
         .select('*')
-        .eq('id', session.user.id)
+        .or(`id.eq.${session.user.id},email.ilike.${(session.user.email || '').toLowerCase()}`)
         .maybeSingle();
 
       if (profErr) throw profErr;
@@ -1539,7 +1539,7 @@ export default function AdminPortal({
         const { data: profData, error: profErr } = await supabase
           .from('admin_profiles')
           .select('id, is_active')
-          .eq('id', data.user.id)
+          .or(`id.eq.${data.user.id},email.ilike.${(data.user.email || '').toLowerCase()}`)
           .maybeSingle();
 
         if (profErr || !profData || profData.is_active === false) {

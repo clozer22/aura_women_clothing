@@ -24,6 +24,7 @@ import {
   Award,
   Plus,
   Trash2,
+  Calendar,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabaseClient';
@@ -55,6 +56,7 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
   // Profile Form State
   const [fullName, setFullName] = useState(profile?.full_name || user?.user_metadata?.full_name || '');
   const [phone, setPhone] = useState(profile?.phone || '');
+  const [birthdate, setBirthdate] = useState(profile?.birthdate || '');
 
   // Password Form State
   const [newPassword, setNewPassword] = useState('');
@@ -295,7 +297,11 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
     }
 
     try {
-      await updateProfileData({ full_name: cleanName, phone: cleanPhone });
+      await updateProfileData({
+        full_name: cleanName,
+        phone: cleanPhone,
+        ...(!profile?.birthdate && birthdate ? { birthdate } : {}),
+      });
       setProfileSuccess('Profile details saved successfully.');
       setTimeout(() => setProfileSuccess(''), 4000);
     } catch (err) {
@@ -766,6 +772,32 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
 
                 <div>
                   <label className="block text-[11px] uppercase font-bold tracking-wider text-[#705B56] mb-2">
+                    Birthdate (One-Time Setup for Birthday Vouchers)
+                  </label>
+                  <div className="relative">
+                    <Calendar className="w-4 h-4 text-[#A38E88] absolute left-3.5 top-3.5" />
+                    <input
+                      type="date"
+                      disabled={Boolean(profile?.birthdate)}
+                      max={new Date().toISOString().split('T')[0]}
+                      value={profile?.birthdate || birthdate || ''}
+                      onChange={(e) => setBirthdate(e.target.value)}
+                      className={`w-full pl-10 pr-3.5 py-3 border border-[#E8DCD7] text-xs rounded-none ${
+                        profile?.birthdate
+                          ? 'bg-[#F0EBE7] text-[#705B56] cursor-not-allowed'
+                          : 'bg-[#FAF5F2] text-[#2C1E1B] focus:outline-none focus:border-[#2C1E1B]'
+                      }`}
+                    />
+                  </div>
+                  <span className="text-[10px] text-[#705B56] mt-1 block">
+                    {profile?.birthdate
+                      ? '✓ Birthdate locked (one-time setup for Birthday Vouchers)'
+                      : 'Optional: Can only be set once to unlock your Birthday Voucher.'}
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] uppercase font-bold tracking-wider text-[#705B56] mb-2">
                     Ranking Status
                   </label>
                   <div className="py-3 px-3.5 bg-[#FAF5F2] border border-[#E8DCD7] text-xs text-[#2C1E1B] font-bold uppercase tracking-wider flex items-center justify-between">
@@ -881,11 +913,14 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
                       <div className="mt-4 space-y-2">
                         {vouchers.map((v) => {
                           const isUsed = usedVoucherCodes.includes(v.code);
+                          const isLocked =
+                            totalItemsOrdered < 1 ||
+                            (v.minHistoricalItems && totalItemsOrdered < Number(v.minHistoricalItems));
                           return (
                             <div
                               key={v.code}
                               className={`p-2.5 border flex items-center justify-between gap-2 ${
-                                isUsed
+                                isUsed || isLocked
                                   ? 'bg-slate-50 border-slate-200 opacity-65'
                                   : 'bg-[#FAF5F2] border-[#E8DCD7]'
                               }`}
@@ -904,6 +939,10 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
                               {isUsed ? (
                                 <span className="px-2 py-1 bg-slate-200 text-slate-600 text-[9px] font-bold uppercase tracking-wider whitespace-nowrap">
                                   Used (1x)
+                                </span>
+                              ) : isLocked ? (
+                                <span className="px-2 py-1 bg-slate-200 text-slate-600 text-[9px] font-bold uppercase tracking-wider whitespace-nowrap">
+                                  Locked
                                 </span>
                               ) : (
                                 <button
@@ -965,11 +1004,14 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
                       <div className="mt-4 space-y-2">
                         {vouchers.map((v) => {
                           const isUsed = usedVoucherCodes.includes(v.code);
+                          const isLocked =
+                            totalItemsOrdered < 6 ||
+                            (v.minHistoricalItems && totalItemsOrdered < Number(v.minHistoricalItems));
                           return (
                             <div
                               key={v.code}
                               className={`p-2.5 border flex items-center justify-between gap-2 ${
-                                isUsed
+                                isUsed || isLocked
                                   ? 'bg-slate-50 border-slate-200 opacity-65'
                                   : 'bg-purple-50/50 border-purple-200/70'
                               }`}
@@ -988,6 +1030,10 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
                               {isUsed ? (
                                 <span className="px-2 py-1 bg-slate-200 text-slate-600 text-[9px] font-bold uppercase tracking-wider whitespace-nowrap">
                                   Used (1x)
+                                </span>
+                              ) : isLocked ? (
+                                <span className="px-2 py-1 bg-slate-200 text-slate-600 text-[9px] font-bold uppercase tracking-wider whitespace-nowrap">
+                                  Locked
                                 </span>
                               ) : (
                                 <button
@@ -1050,11 +1096,14 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
                       <div className="mt-4 space-y-2">
                         {vouchers.map((v) => {
                           const isUsed = usedVoucherCodes.includes(v.code);
+                          const isLocked =
+                            totalItemsOrdered < 16 ||
+                            (v.minHistoricalItems && totalItemsOrdered < Number(v.minHistoricalItems));
                           return (
                             <div
                               key={v.code}
                               className={`p-2.5 border flex items-center justify-between gap-2 ${
-                                isUsed
+                                isUsed || isLocked
                                   ? 'bg-slate-50 border-slate-200 opacity-65'
                                   : 'bg-amber-50/70 border-amber-300/80'
                               }`}
@@ -1073,6 +1122,10 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
                               {isUsed ? (
                                 <span className="px-2 py-1 bg-slate-200 text-slate-600 text-[9px] font-bold uppercase tracking-wider whitespace-nowrap">
                                   Used (1x)
+                                </span>
+                              ) : isLocked ? (
+                                <span className="px-2 py-1 bg-slate-200 text-slate-600 text-[9px] font-bold uppercase tracking-wider whitespace-nowrap">
+                                  Locked
                                 </span>
                               ) : (
                                 <button

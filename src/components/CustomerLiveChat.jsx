@@ -57,7 +57,7 @@ const ChatMessageItem = React.memo(({ msg, onExpandImage }) => {
       {/* Sender Header */}
       <div className="flex items-center gap-1.5 px-1 text-[10px] text-[#A38E88]">
         {!isCustomer && (
-          <span className="font-bold text-[#2C1E1B]">{msg.sender_name || 'Aura Support'}</span>
+          <span className="font-bold text-[#2C1E1B]">Aura Admin</span>
         )}
         {isAutoReply && (
           <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-[9px] font-semibold">
