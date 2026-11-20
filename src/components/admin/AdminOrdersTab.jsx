@@ -47,6 +47,10 @@ const AdminOrdersTab = ({
   orders = [],
   orderCounts = {},
   isLoading = false,
+  ordersPage = 1,
+  ordersPageSize = 20,
+  totalOrdersCount = null,
+  onOrdersPageChange = null,
   onRefresh,
   onUpdateOrderStatus,
   onUpdateOrderTracking,
@@ -101,6 +105,20 @@ const AdminOrdersTab = ({
       }
     } catch (e) { }
   }, [activeTab]);
+
+  // Trigger server-side paginated fetch when filter tab or search query changes
+  const isInitialPaginationMount = React.useRef(true);
+  useEffect(() => {
+    if (!onOrdersPageChange) return;
+    if (isInitialPaginationMount.current) {
+      isInitialPaginationMount.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      onOrdersPageChange(1, activeTab, searchQuery);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [activeTab, searchQuery]);
 
   useEffect(() => {
     try {
@@ -2190,6 +2208,35 @@ const AdminOrdersTab = ({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Server-Side Pagination Controls */}
+      {onOrdersPageChange && Number(totalOrdersCount) > ordersPageSize && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white border border-slate-200/80 rounded-2xl px-5 py-3.5 shadow-xs text-xs">
+          <span className="text-slate-600">
+            Page <strong className="text-slate-900">{ordersPage}</strong> of{' '}
+            <strong className="text-slate-900">{Math.max(1, Math.ceil(totalOrdersCount / ordersPageSize))}</strong>{' '}
+            ({totalOrdersCount} total orders)
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={ordersPage <= 1 || isLoading}
+              onClick={() => onOrdersPageChange(ordersPage - 1, activeTab, searchQuery)}
+              className="px-3.5 py-1.5 border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-semibold rounded-lg disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              disabled={ordersPage >= Math.ceil(totalOrdersCount / ordersPageSize) || isLoading}
+              onClick={() => onOrdersPageChange(ordersPage + 1, activeTab, searchQuery)}
+              className="px-3.5 py-1.5 border border-slate-900 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            >
+              Next
+            </button>
+          </div>
         </div>
       )}
 

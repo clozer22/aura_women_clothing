@@ -1149,6 +1149,14 @@ export default function AdminPortal({
         recalculateOrderCounts(next);
         return next;
       });
+      setPaginatedOrders(prev => prev.map(o => o.id === orderId ? {
+        ...o,
+        ...updatePayload,
+        status: newStatus,
+        inventory_deducted: newInventoryDeducted !== undefined ? newInventoryDeducted : o.inventory_deducted,
+        last_touched_by: modifier,
+        audit_trail: updatedAudit
+      } : o));
       triggerNotification('success', 'Status Updated', `Order fulfillment set to ${newStatus}.`);
 
       // If status changed to Out for Delivery (TO_DELIVER), notify customer via official email
@@ -1324,6 +1332,64 @@ export default function AdminPortal({
     }
   };
 
+  // Server-Side Paginated Orders Fetcher (scales cleanly to 10,000+ orders)
+  const fetchOrdersPage = async (page = 1, statusFilter = 'ALL', search = '') => {
+    if (!session?.user || !isAdmin) return;
+    setIsLoadingOrdersPage(true);
+    try {
+      let query = supabase
+        .from('orders')
+        .select('*', { count: 'exact' });
+
+      const cleanFilter = (statusFilter || 'ALL').toUpperCase();
+      if (cleanFilter === 'TO_SHIP') {
+        query = query.in('status', ['PENDING', 'PROCESSING', 'TO_SHIP', 'AWAITING_SHIPMENT', 'AWAITING_COLLECTION']);
+      } else if (cleanFilter === 'SHIPPED') {
+        query = query.in('status', ['SHIPPED', 'IN_TRANSIT']);
+      } else if (cleanFilter === 'TO_DELIVER') {
+        query = query.in('status', ['TO_DELIVER', 'OUT_FOR_DELIVERY']);
+      } else if (cleanFilter === 'DELIVERED') {
+        query = query.in('status', ['DELIVERED', 'COMPLETED']);
+      } else if (cleanFilter === 'CANCELLED') {
+        query = query.eq('status', 'CANCELLED');
+      } else if (cleanFilter === 'RETURNED') {
+        query = query.in('status', ['RETURNED', 'REFUNDED']);
+      } else if (cleanFilter === 'FAILED_TO_DELIVER') {
+        query = query.in('status', ['FAILED_TO_DELIVER', 'DELIVERY_FAILED']);
+      }
+
+      const normalizedSearch = (search || '').trim();
+      if (normalizedSearch) {
+        query = query.or(
+          `order_reference.ilike.%${normalizedSearch}%,customer_name.ilike.%${normalizedSearch}%,customer_email.ilike.%${normalizedSearch}%,tracking_number.ilike.%${normalizedSearch}%`
+        );
+      }
+
+      const from = (page - 1) * ordersPageSize;
+      const to = from + ordersPageSize - 1;
+
+      const { data, count, error } = await query
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+      if (error) throw error;
+      setPaginatedOrders(data || []);
+      setTotalOrdersCount(count || 0);
+    } catch (err) {
+      console.warn('Supabase paginated orders fetch failed:', err.message);
+    } finally {
+      setIsLoadingOrdersPage(false);
+    }
+  };
+
+  const handleOrdersPageChange = useCallback((nextPage, nextFilter = orderFilterTab, nextSearch = '') => {
+    setOrdersPage(nextPage);
+    if (nextFilter !== undefined && nextFilter !== orderFilterTab) {
+      setOrderFilterTab(nextFilter);
+    }
+    fetchOrdersPage(nextPage, nextFilter, nextSearch);
+  }, [orderFilterTab, session?.user?.id, isAdmin]);
+
   const adminInitializedForUser = useRef(null);
   const currentPageRef = useRef(currentPage);
   currentPageRef.current = currentPage;
@@ -1344,6 +1410,7 @@ export default function AdminPortal({
       fetchAdminProfile();
       fetchDashboardStats();
       fetchProductsPage(currentPageRef.current || 1, searchQueryRef.current || '', categoryFilterRef.current || 'all');
+      fetchOrdersPage(ordersPage || 1, orderFilterTab || 'ALL', '');
     } else if (!session) {
       adminInitializedForUser.current = null;
     }
@@ -1353,6 +1420,9 @@ export default function AdminPortal({
   useEffect(() => {
     if (session && isAdmin && (activeTab === 'orders' || activeTab === 'dashboard' || activeTab === 'finance')) {
       fetchDashboardStats();
+      if (activeTab === 'orders') {
+        fetchOrdersPage(ordersPage, orderFilterTab, '');
+      }
     }
   }, [activeTab]);
 
@@ -2963,10 +3033,17 @@ export default function AdminPortal({
 
           {activeTab === 'orders' && (
             <AdminOrdersTab
-              orders={ordersList}
+              orders={paginatedOrders.length > 0 || isLoadingOrdersPage ? paginatedOrders : ordersList}
               orderCounts={orderCounts}
-              isLoading={isLoadingOrders}
-              onRefresh={fetchDashboardStats}
+              isLoading={isLoadingOrdersPage || isLoadingOrders}
+              ordersPage={ordersPage}
+              ordersPageSize={ordersPageSize}
+              totalOrdersCount={totalOrdersCount || orderCounts.total}
+              onOrdersPageChange={handleOrdersPageChange}
+              onRefresh={() => {
+                fetchDashboardStats();
+                fetchOrdersPage(ordersPage, orderFilterTab, '');
+              }}
               onUpdateOrderStatus={handleUpdateOrderStatus}
               onUpdateOrderTracking={handleUpdateOrderTracking}
               initialFilterTab={orderFilterTab}
