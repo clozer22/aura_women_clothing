@@ -80,7 +80,6 @@ export default function TrackingModal({
           filter: `order_reference=eq.${orderReference}`,
         },
         (payload) => {
-          console.log('[TrackingModal] Realtime order change received:', payload.new);
           setOrder((prev) => ({ ...prev, ...payload.new }));
           // Refresh tracking details when status advances
           fetchTracking();

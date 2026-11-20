@@ -48,7 +48,6 @@ export default function OrderConfirmed({ order, onContinueShopping, onViewOrders
           filter: `order_reference=eq.${activeOrder.order_reference}`,
         },
         (payload) => {
-          console.log('[OrderConfirmed] Live order update received:', payload.new);
           setLiveOrder((prev) => ({ ...prev, ...payload.new }));
           if (payload.new?.payment_status === 'PAID' || payload.new?.payment_method === 'COD') {
             setIsVerifying(false);

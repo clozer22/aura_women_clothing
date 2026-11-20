@@ -707,7 +707,7 @@ export default function CheckoutPage({
       };
       setSavedAddresses(updatedMulti);
       localStorage.setItem('aura_saved_addresses', JSON.stringify(updatedMulti));
-      localStorage.setItem('aura_saved_shipping_address', JSON.stringify({ ...formData, ...cleanAddr }));
+      localStorage.setItem('aura_saved_shipping_address', JSON.stringify(cleanAddr));
 
       if (user?.id) {
         const nowIso = new Date().toISOString();

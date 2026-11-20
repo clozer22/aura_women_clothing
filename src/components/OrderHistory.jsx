@@ -316,7 +316,6 @@ export default function OrderHistory({ onBackToShop, onSelectOrder }) {
           filter: `user_id=eq.${user.id}`,
         },
         (payload) => {
-          console.log('[OrderHistory] Live order update received:', payload.new);
           setOrders((prev) =>
             prev.map((o) => (o.id === payload.new.id ? { ...o, ...payload.new } : o))
           );

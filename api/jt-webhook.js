@@ -73,8 +73,6 @@ export default async function handler(req, res) {
       }
     }
 
-    console.log('[J&T Webhook] Incoming push tracking payload:', JSON.stringify(body));
-
     // Extract parcel tracking data from all known J&T push formats
     let trackingList = [];
     if (Array.isArray(body)) {
