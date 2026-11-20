@@ -99,8 +99,8 @@ export default function CheckoutPage({
     barangays: false,
   });
 
-  // Payment Selection State
-  const [paymentMethod, setPaymentMethod] = useState('GCASH'); // 'GCASH' | 'MAYA' | 'CARD'
+  // Payment Selection State (Online payments temporarily Coming Soon; COD active)
+  const [paymentMethod, setPaymentMethod] = useState('COD'); // 'COD' | 'GCASH' | 'MAYA' | 'CARD'
   const [isProcessingOrder, setIsProcessingOrder] = useState(false);
   const [paymentError, setPaymentError] = useState(null);
 
@@ -649,12 +649,12 @@ export default function CheckoutPage({
     }
   };
 
-  // Auto-switch away from COD if cart total exceeds 1,000 PHP limit
+  // Ensure COD stays selected while online payments are Coming Soon
   useEffect(() => {
-    if (!isCodEligible && paymentMethod === 'COD') {
-      setPaymentMethod('GCASH');
+    if (paymentMethod !== 'COD') {
+      setPaymentMethod('COD');
     }
-  }, [isCodEligible, paymentMethod]);
+  }, [paymentMethod]);
 
   // Validation
   const validateShippingForm = () => {
@@ -1516,98 +1516,77 @@ export default function CheckoutPage({
 
                 {/* Payment Radio Options */}
                 <div className="space-y-3">
-                  {/* Option 1: GCash / E-Wallet */}
-                  <label
-                    onClick={() => setPaymentMethod('GCASH')}
-                    className={`flex items-center justify-between p-4 border cursor-pointer transition-all ${
-                      paymentMethod === 'GCASH'
-                        ? 'border-[#2C1E1B] bg-[#FAF5F2]'
-                        : 'border-[#E8DCD7] hover:border-[#B86B60] bg-white'
-                    }`}
+                  {/* Option 1: GCash / E-Wallet (Coming Soon) */}
+                  <div
+                    aria-disabled="true"
+                    className="flex items-center justify-between p-4 border border-[#E8DCD7] bg-[#FBF9F8] opacity-60 cursor-not-allowed transition-all"
                   >
                     <div className="flex items-center gap-3">
-                      <div
-                        className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                          paymentMethod === 'GCASH' ? 'border-[#2C1E1B]' : 'border-[#A38E88]'
-                        }`}
-                      >
-                        {paymentMethod === 'GCASH' && (
-                          <div className="w-2 h-2 rounded-full bg-[#2C1E1B]" />
-                        )}
-                      </div>
+                      <div className="w-4 h-4 rounded-full border border-slate-300 bg-slate-100 flex items-center justify-center" />
                       <div>
-                        <div className="text-xs font-bold uppercase tracking-wider text-[#2C1E1B]">
-                          GCash / E-Wallet
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-bold uppercase tracking-wider text-[#2C1E1B]">
+                            GCash / E-Wallet
+                          </span>
+                          <span className="text-[9px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 uppercase tracking-wider border border-amber-200">
+                            Coming Soon
+                          </span>
                         </div>
                         <div className="text-[11px] text-[#705B56]">
-                          Fast & instant e-wallet checkout via Xendit / PayMongo
+                          Online e-wallet checkout is currently being finalized.
                         </div>
                       </div>
                     </div>
-                    <Smartphone className="w-5 h-5 text-blue-600" />
-                  </label>
+                    <Smartphone className="w-5 h-5 text-slate-400" />
+                  </div>
 
-                  {/* Option 2: Maya (PayMaya) */}
-                  <label
-                    onClick={() => setPaymentMethod('MAYA')}
-                    className={`flex items-center justify-between p-4 border cursor-pointer transition-all ${
-                      paymentMethod === 'MAYA'
-                        ? 'border-[#2C1E1B] bg-[#FAF5F2]'
-                        : 'border-[#E8DCD7] hover:border-[#B86B60] bg-white'
-                    }`}
+                  {/* Option 2: Maya (PayMaya) (Coming Soon) */}
+                  <div
+                    aria-disabled="true"
+                    className="flex items-center justify-between p-4 border border-[#E8DCD7] bg-[#FBF9F8] opacity-60 cursor-not-allowed transition-all"
                   >
                     <div className="flex items-center gap-3">
-                      <div
-                        className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                          paymentMethod === 'MAYA' ? 'border-[#2C1E1B]' : 'border-[#A38E88]'
-                        }`}
-                      >
-                        {paymentMethod === 'MAYA' && (
-                          <div className="w-2 h-2 rounded-full bg-[#2C1E1B]" />
-                        )}
-                      </div>
+                      <div className="w-4 h-4 rounded-full border border-slate-300 bg-slate-100 flex items-center justify-center" />
                       <div>
-                        <div className="text-xs font-bold uppercase tracking-wider text-[#2C1E1B]">
-                          Maya (PayMaya)
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-bold uppercase tracking-wider text-[#2C1E1B]">
+                            Maya (PayMaya)
+                          </span>
+                          <span className="text-[9px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 uppercase tracking-wider border border-amber-200">
+                            Coming Soon
+                          </span>
                         </div>
                         <div className="text-[11px] text-[#705B56]">
-                          Pay with Maya wallet or Maya credit
+                          Pay with Maya wallet or Maya credit — launching soon.
                         </div>
                       </div>
                     </div>
-                    <Smartphone className="w-5 h-5 text-emerald-600" />
-                  </label>
+                    <Smartphone className="w-5 h-5 text-slate-400" />
+                  </div>
 
-                  {/* Option 3: Credit / Debit Card */}
-                  <label
-                    onClick={() => setPaymentMethod('CARD')}
-                    className={`flex items-center justify-between p-4 border cursor-pointer transition-all ${
-                      paymentMethod === 'CARD'
-                        ? 'border-[#2C1E1B] bg-[#FAF5F2]'
-                        : 'border-[#E8DCD7] hover:border-[#B86B60] bg-white'
-                    }`}
+                  {/* Option 3: Credit / Debit Card (Coming Soon) */}
+                  <div
+                    aria-disabled="true"
+                    className="flex items-center justify-between p-4 border border-[#E8DCD7] bg-[#FBF9F8] opacity-60 cursor-not-allowed transition-all"
                   >
                     <div className="flex items-center gap-3">
-                      <div
-                        className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                          paymentMethod === 'CARD' ? 'border-[#2C1E1B]' : 'border-[#A38E88]'
-                        }`}
-                      >
-                        {paymentMethod === 'CARD' && (
-                          <div className="w-2 h-2 rounded-full bg-[#2C1E1B]" />
-                        )}
-                      </div>
+                      <div className="w-4 h-4 rounded-full border border-slate-300 bg-slate-100 flex items-center justify-center" />
                       <div>
-                        <div className="text-xs font-bold uppercase tracking-wider text-[#2C1E1B]">
-                          Credit / Debit Card
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-bold uppercase tracking-wider text-[#2C1E1B]">
+                            Credit / Debit Card
+                          </span>
+                          <span className="text-[9px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 uppercase tracking-wider border border-amber-200">
+                            Coming Soon
+                          </span>
                         </div>
                         <div className="text-[11px] text-[#705B56]">
-                          Visa, Mastercard, JCB processed securely
+                          Visa, Mastercard, JCB — launching soon.
                         </div>
                       </div>
                     </div>
-                    <CreditCard className="w-5 h-5 text-[#2C1E1B]" />
-                  </label>
+                    <CreditCard className="w-5 h-5 text-slate-400" />
+                  </div>
 
                   {/* Option 4: Cash on Delivery (COD) */}
                   <label
@@ -1683,7 +1662,7 @@ export default function CheckoutPage({
                   <button
                     type="button"
                     onClick={handleCompleteOrder}
-                    disabled={isProcessingOrder || selectedCheckoutItems.length === 0}
+                    disabled={isProcessingOrder || selectedCheckoutItems.length === 0 || paymentMethod !== 'COD' || !isCodEligible}
                     className="flex-1 bg-emerald-800 hover:bg-emerald-900 text-white py-4 px-6 text-xs uppercase font-bold tracking-[0.2em] shadow-lg transition-all rounded-none flex items-center justify-center gap-2 disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed"
                   >
                     {isProcessingOrder ? (
