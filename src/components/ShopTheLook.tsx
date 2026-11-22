@@ -390,9 +390,9 @@ export const ShopTheLook: React.FC<ShopTheLookProps> = ({
                   className={`absolute -translate-x-1/2 -translate-y-1/2 ${isOpen ? 'z-40' : 'z-20'}`}
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {/* Subtle Pulse Halo (when closed) */}
+                  {/* Subtle Pulse Halo (desktop only when closed — disabled on mobile to prevent continuous composite repaint lag) */}
                   {!isOpen && (
-                    <span className="absolute inset-0 rounded-full bg-white/70 animate-ping pointer-events-none" />
+                    <span className="hidden sm:block absolute inset-0 rounded-full bg-white/70 animate-ping pointer-events-none" />
                   )}
 
                   {/* Circular + / × Hotspot Button */}
@@ -400,12 +400,12 @@ export const ShopTheLook: React.FC<ShopTheLookProps> = ({
                     type="button"
                     aria-label={`View ${title}`}
                     onClick={() => setActiveId(isOpen ? null : spot.id)}
-                    className={`relative flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-white/95 text-[#2C1E1B] shadow-[0_4px_20px_rgba(0,0,0,0.22)] border border-[#E8DCD7] transition-all duration-300 hover:scale-110 focus:outline-none cursor-pointer ${
+                    className={`relative flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-white/95 text-[#2C1E1B] shadow-[0_4px_20px_rgba(0,0,0,0.22)] border border-[#E8DCD7] transition-transform duration-150 ease-out sm:hover:scale-110 active:scale-95 focus:outline-none cursor-pointer touch-manipulation ${
                       isOpen ? 'ring-2 ring-[#B86B60]/50 scale-105' : ''
                     }`}
                   >
                     <div
-                      className={`transition-transform duration-300 ease-out ${
+                      className={`transition-transform duration-150 ease-out will-change-transform ${
                         isOpen ? 'rotate-45' : 'rotate-0'
                       }`}
                     >
@@ -417,11 +417,11 @@ export const ShopTheLook: React.FC<ShopTheLookProps> = ({
                   <AnimatePresence>
                     {isOpen && (
                       <motion.div
-                        initial={{ opacity: 0, scale: 0.95, y: 4 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.95, y: 4 }}
-                        transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-                        className={`absolute z-40 w-[260px] sm:w-[290px] bg-[#FAF9F6] p-2.5 sm:p-3 shadow-[0_16px_40px_rgba(44,30,27,0.25)] border border-[#E8DCD7] rounded-xl transition-all duration-200 ${
+                        initial={{ opacity: 0, scale: 0.96 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.96 }}
+                        transition={{ duration: 0.14, ease: 'easeOut' }}
+                        className={`absolute z-40 w-[260px] sm:w-[290px] bg-[#FAF9F6] p-2.5 sm:p-3 shadow-[0_16px_40px_rgba(44,30,27,0.25)] border border-[#E8DCD7] rounded-xl will-change-transform ${
                           openLeft ? 'right-11 sm:right-12' : 'left-11 sm:left-12'
                         } ${openUp ? 'bottom-0' : 'top-0'}`}
                       >

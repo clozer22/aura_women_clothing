@@ -7,13 +7,15 @@ import { RANK_VOUCHER_CATALOG, calculateCustomerTier } from '../lib/customerRank
 
 const LOCAL_STORAGE_KEY = 'aura_custom_vouchers';
 
-const isRankVoucherCode = (code) => {
+const isRankVoucherCode = (code, promoType) => {
   const upper = String(code || '').trim().toUpperCase();
   return Boolean(
-    RANK_VOUCHER_CATALOG[upper] ||
+    promoType === 'voucher' ||
+      RANK_VOUCHER_CATALOG[upper] ||
       upper.startsWith('MUSE') ||
       upper.startsWith('ICON') ||
-      upper.startsWith('ROYAL')
+      upper.startsWith('ROYAL') ||
+      upper.startsWith('AURA')
   );
 };
 
@@ -33,6 +35,13 @@ export default function LandingPromoToast({ onSelectPromo }) {
 
   const findActivePromo = useCallback(async () => {
     try {
+      // Never display any voucher / promotion toast if the visitor is not authenticated
+      if (!user?.id) {
+        setActivePromo(null);
+        setIsVisible(false);
+        return;
+      }
+
       const now = new Date();
 
       // 1. Fetch from Supabase
@@ -119,16 +128,17 @@ export default function LandingPromoToast({ onSelectPromo }) {
           if (expDate <= now) return false;
         }
 
-        if (isRankVoucherCode(upperCode)) {
+        if (isRankVoucherCode(upperCode, p.promo_type)) {
           // Never show rank/tier vouchers to logged-out visitors or users with 0 ordered items
           if (!user?.id || !customerTier || totalItemsOrdered <= 0) return false;
           if (usedCodes.has(upperCode)) return false;
 
           const rankMeta = RANK_VOUCHER_CATALOG[upperCode];
-          if (!rankMeta) return false;
-          if (rankMeta.tier !== customerTier) return false;
-          if (rankMeta.min_historical_items && totalItemsOrdered < Number(rankMeta.min_historical_items)) {
-            return false;
+          if (rankMeta) {
+            if (rankMeta.tier !== customerTier) return false;
+            if (rankMeta.min_historical_items && totalItemsOrdered < Number(rankMeta.min_historical_items)) {
+              return false;
+            }
           }
         }
 
@@ -209,7 +219,7 @@ export default function LandingPromoToast({ onSelectPromo }) {
     }
   };
 
-  if (!isVisible || !activePromo) return null;
+  if (!user?.id || !isVisible || !activePromo) return null;
 
   const isPercentage = activePromo.discount_type === 'percentage';
   const discountLabel = isPercentage
