@@ -6,20 +6,20 @@ import { supabaseAdmin as supabase } from '../lib/supabaseClient';
 import { invalidateProductsCache, saveCachedProducts, getCachedProducts } from '../lib/productCache';
 import { fetchSiteVisitorStats } from '../lib/visitorTracking';
 
-// Lazy-load admin tabs & modals so only the active tab is downloaded and parsed
-const AdminDashboardTab = React.lazy(() => import('./admin/AdminDashboardTab'));
-const AdminProductsTab = React.lazy(() => import('./admin/AdminProductsTab'));
-const AdminOrdersTab = React.lazy(() => import('./admin/AdminOrdersTab'));
-const AdminReviewsTab = React.lazy(() => import('./admin/AdminReviewsTab'));
-const AdminCustomizerTab = React.lazy(() => import('./admin/AdminCustomizerTab'));
-const AdminProfileTab = React.lazy(() => import('./admin/AdminProfileTab'));
-const AdminStaffTab = React.lazy(() => import('./admin/AdminStaffTab'));
-const AdminCustomersTab = React.lazy(() => import('./admin/AdminCustomersTab'));
-const AdminPromotionsTab = React.lazy(() => import('./admin/AdminPromotionsTab'));
-const AdminChatTab = React.lazy(() => import('./admin/AdminChatTab'));
-const AdminFinanceTab = React.lazy(() => import('./admin/AdminFinanceTab'));
-const AdminProductModal = React.lazy(() => import('./admin/AdminProductModal'));
-const AdminBulkModal = React.lazy(() => import('./admin/AdminBulkModal'));
+// Synchronous imports for instant admin tab switching & zero chunk-load race conditions across deployments
+import AdminDashboardTab from './admin/AdminDashboardTab';
+import AdminProductsTab from './admin/AdminProductsTab';
+import AdminOrdersTab from './admin/AdminOrdersTab';
+import AdminReviewsTab from './admin/AdminReviewsTab';
+import AdminCustomizerTab from './admin/AdminCustomizerTab';
+import AdminProfileTab from './admin/AdminProfileTab';
+import AdminStaffTab from './admin/AdminStaffTab';
+import AdminCustomersTab from './admin/AdminCustomersTab';
+import AdminPromotionsTab from './admin/AdminPromotionsTab';
+import AdminChatTab from './admin/AdminChatTab';
+import AdminFinanceTab from './admin/AdminFinanceTab';
+import AdminProductModal from './admin/AdminProductModal';
+import AdminBulkModal from './admin/AdminBulkModal';
 
 const isVideoUrl = (url) => url && (url.startsWith('data:video/') || url.match(/\.(mp4|mov|webm)($|\?)/i));
 
@@ -181,6 +181,12 @@ export default function AdminPortal({
     if (adminRole === 'Super Admin') return true;
     if (tabKey === 'staff') return adminRole === 'Super Admin';
     if (!permissions || !Array.isArray(permissions)) return true;
+    if (tabKey === 'finance' || tabKey === 'customers') {
+      return permissions.includes(tabKey) || permissions.includes('orders');
+    }
+    if (tabKey === 'promotions') {
+      return permissions.includes(tabKey) || permissions.includes('products');
+    }
     return permissions.includes(tabKey);
   }, [adminRole, permissions]);
 
@@ -223,34 +229,31 @@ export default function AdminPortal({
       window.history.replaceState({}, '', url.toString());
     } catch (e) { }
 
-    startTabTransition(() => {
-      setActiveTab(tab);
-    });
+    setActiveTab(tab);
   }, [hasPermission]);
 
   const handleNavigateTab = useCallback((tab, subfilter = null) => {
     if (!hasPermission(tab)) {
       return;
     }
+    const normalizedSubfilter = subfilter === 'DELIVERED' ? 'COMPLETED' : subfilter;
     try {
       sessionStorage.setItem('aura_admin_active_tab', tab);
       const url = new URL(window.location.href);
       url.searchParams.set('tab', tab);
-      if (subfilter) {
-        url.searchParams.set('subfilter', subfilter);
-        url.searchParams.set('orderTab', subfilter);
-        sessionStorage.setItem('aura_admin_order_subfilter', subfilter);
-        sessionStorage.setItem('aura_admin_order_tab', subfilter);
+      if (normalizedSubfilter) {
+        url.searchParams.set('subfilter', normalizedSubfilter);
+        url.searchParams.set('orderTab', normalizedSubfilter);
+        sessionStorage.setItem('aura_admin_order_subfilter', normalizedSubfilter);
+        sessionStorage.setItem('aura_admin_order_tab', normalizedSubfilter);
       }
       window.history.replaceState({}, '', url.toString());
     } catch (e) { }
 
-    if (subfilter) {
-      setOrderFilterTab(subfilter);
+    if (normalizedSubfilter) {
+      setOrderFilterTab(normalizedSubfilter);
     }
-    startTabTransition(() => {
-      setActiveTab(tab);
-    });
+    setActiveTab(tab);
   }, [hasPermission]);
 
   const [dashboardStats, setDashboardStats] = useState({
@@ -775,7 +778,12 @@ export default function AdminPortal({
         setEditProfileForm(profObj);
         if (profData.permissions && Array.isArray(profData.permissions)) {
           setPermissions(profData.permissions);
-          if (adminRole !== 'Super Admin' && !profData.permissions.includes(activeTab)) {
+          const isTabPermitted =
+            adminRole === 'Super Admin' ||
+            profData.permissions.includes(activeTab) ||
+            ((activeTab === 'finance' || activeTab === 'customers') && profData.permissions.includes('orders')) ||
+            (activeTab === 'promotions' && profData.permissions.includes('products'));
+          if (!isTabPermitted) {
             const firstAllowed = profData.permissions[0] || 'dashboard';
             setActiveTab(firstAllowed);
           }
@@ -2981,15 +2989,6 @@ export default function AdminPortal({
 
         {/* Main Panel Content Area */}
         <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 overflow-y-auto max-h-[calc(100vh-57px)] bg-[#F4F6F9] overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
-          <React.Suspense
-            fallback={
-              <div className="flex items-center justify-center py-24 text-slate-500 text-xs gap-2">
-                <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
-                <span>Loading workspace module...</span>
-              </div>
-            }
-          >
-
           {/* TAB CONTENTS */}
           {activeTab === 'dashboard' && (
             <AdminDashboardTab
@@ -3038,16 +3037,15 @@ export default function AdminPortal({
 
           {activeTab === 'orders' && (
             <AdminOrdersTab
-              orders={paginatedOrders.length > 0 || isLoadingOrdersPage ? paginatedOrders : ordersList}
+              orders={ordersList}
               orderCounts={orderCounts}
-              isLoading={isLoadingOrdersPage || isLoadingOrders}
+              isLoading={isLoadingOrders}
               ordersPage={ordersPage}
               ordersPageSize={ordersPageSize}
-              totalOrdersCount={totalOrdersCount || orderCounts.total}
+              totalOrdersCount={ordersList.length || orderCounts.total}
               onOrdersPageChange={handleOrdersPageChange}
               onRefresh={() => {
                 fetchDashboardStats();
-                fetchOrdersPage(ordersPage, orderFilterTab, '');
               }}
               onUpdateOrderStatus={handleUpdateOrderStatus}
               onUpdateOrderTracking={handleUpdateOrderTracking}
@@ -3133,44 +3131,41 @@ export default function AdminPortal({
               onNotification={triggerNotification}
             />
           )}
-          </React.Suspense>
         </main>
       </div>
 
       {/* MODALS */}
-      <React.Suspense fallback={null}>
-        {isAddModalOpen && (
-          <AdminProductModal
-            isOpen={isAddModalOpen}
-            initialMode={addProductModalMode}
-            editingProductId={editingProductId}
-            newProduct={newProduct}
-            setNewProduct={setNewProduct}
-            isUploadingProductImage={isUploadingProductImage}
-            onProductImageUpload={handleProductImageUpload}
-            onSaveProduct={handleSaveProduct}
-            onBulkSaveProducts={handleBulkSaveProducts}
-            onUploadVariantImage={handleUploadVariantImage}
-            onClose={() => setIsAddModalOpen(false)}
-          />
-        )}
+      {isAddModalOpen && (
+        <AdminProductModal
+          isOpen={isAddModalOpen}
+          initialMode={addProductModalMode}
+          editingProductId={editingProductId}
+          newProduct={newProduct}
+          setNewProduct={setNewProduct}
+          isUploadingProductImage={isUploadingProductImage}
+          onProductImageUpload={handleProductImageUpload}
+          onSaveProduct={handleSaveProduct}
+          onBulkSaveProducts={handleBulkSaveProducts}
+          onUploadVariantImage={handleUploadVariantImage}
+          onClose={() => setIsAddModalOpen(false)}
+        />
+      )}
 
-        {isBulkModalOpen && (
-          <AdminBulkModal
-            isOpen={isBulkModalOpen}
-            selectedCount={selectedProductIds.length}
-            bulkSizeChart={bulkSizeChart}
-            setBulkSizeChart={setBulkSizeChart}
-            isUploadingSizeChart={isUploadingSizeChart}
-            onBulkSizeChartUpload={handleBulkSizeChartUpload}
-            onBulkUpdate={handleBulkUpdate}
-            onClose={() => {
-              setBulkSizeChart('');
-              setIsBulkModalOpen(false);
-            }}
-          />
-        )}
-      </React.Suspense>
+      {isBulkModalOpen && (
+        <AdminBulkModal
+          isOpen={isBulkModalOpen}
+          selectedCount={selectedProductIds.length}
+          bulkSizeChart={bulkSizeChart}
+          setBulkSizeChart={setBulkSizeChart}
+          isUploadingSizeChart={isUploadingSizeChart}
+          onBulkSizeChartUpload={handleBulkSizeChartUpload}
+          onBulkUpdate={handleBulkUpdate}
+          onClose={() => {
+            setBulkSizeChart('');
+            setIsBulkModalOpen(false);
+          }}
+        />
+      )}
 
       {/* Custom Confirmation Dialog */}
       <AnimatePresence>

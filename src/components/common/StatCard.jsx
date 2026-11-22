@@ -22,10 +22,6 @@ const StatCard = memo(({
   return (
     <div
       className={`bg-white border border-slate-200/80 p-5 sm:p-6 rounded-2xl relative overflow-hidden transition-all duration-200 hover:shadow-md hover:border-slate-300/80 ${className}`}
-      style={{
-        contentVisibility: 'auto',
-        containIntrinsicSize: 'auto 180px',
-      }}
     >
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0 flex-1">

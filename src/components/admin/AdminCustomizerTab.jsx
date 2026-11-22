@@ -18,7 +18,6 @@ const AdminCustomizerTab = memo(({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2 }}
       className="max-w-4xl space-y-6"
-      style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 800px' }}
     >
       <div>
         <div className="flex items-center gap-2 mb-1">

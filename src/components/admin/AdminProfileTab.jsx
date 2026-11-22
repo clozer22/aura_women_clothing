@@ -22,7 +22,6 @@ const AdminProfileTab = memo(({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2 }}
       className="max-w-3xl space-y-6"
-      style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 700px' }}
     >
       <div>
         <div className="flex items-center gap-2 mb-1">

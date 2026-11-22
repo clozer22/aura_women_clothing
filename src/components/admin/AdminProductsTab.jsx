@@ -85,7 +85,6 @@ const AdminProductsTab = memo(({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2 }}
       className="space-y-6"
-      style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 900px' }}
     >
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

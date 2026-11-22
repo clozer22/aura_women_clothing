@@ -57,20 +57,22 @@ const AdminOrdersTab = ({
   initialFilterTab = 'ALL',
   currentAdmin = null,
 }) => {
+  const normalizeOrderTab = (tab) => (tab === 'DELIVERED' ? 'COMPLETED' : tab);
+
   const getInitialActiveOrderTab = () => {
     if (initialFilterTab && initialFilterTab !== 'ALL') {
-      return initialFilterTab;
+      return normalizeOrderTab(initialFilterTab);
     }
     try {
       const params = new URLSearchParams(window.location.search);
       const urlSub = params.get('subfilter');
-      if (urlSub) return urlSub;
+      if (urlSub) return normalizeOrderTab(urlSub);
       const urlTab = params.get('orderTab');
-      if (urlTab) return urlTab;
+      if (urlTab) return normalizeOrderTab(urlTab);
       const savedTab = sessionStorage.getItem('aura_admin_order_tab');
-      if (savedTab) return savedTab;
+      if (savedTab) return normalizeOrderTab(savedTab);
     } catch { }
-    return initialFilterTab || 'ALL';
+    return normalizeOrderTab(initialFilterTab || 'ALL');
   };
 
   const getInitialToShipSubTab = () => {
@@ -90,7 +92,7 @@ const AdminOrdersTab = ({
   // Synchronize activeTab when navigated from Dashboard pipeline cards (`initialFilterTab`)
   useEffect(() => {
     if (initialFilterTab) {
-      setActiveTab(initialFilterTab);
+      setActiveTab(normalizeOrderTab(initialFilterTab));
     }
   }, [initialFilterTab]);
 
@@ -106,19 +108,9 @@ const AdminOrdersTab = ({
     } catch (e) { }
   }, [activeTab]);
 
-  // Trigger server-side paginated fetch when filter tab or search query changes
-  const isInitialPaginationMount = React.useRef(true);
-  useEffect(() => {
-    if (!onOrdersPageChange) return;
-    if (isInitialPaginationMount.current) {
-      isInitialPaginationMount.current = false;
-      return;
-    }
-    const timer = setTimeout(() => {
-      onOrdersPageChange(1, activeTab, searchQuery);
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [activeTab, searchQuery]);
+  // Client-side pagination state for filtered orders
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = ordersPageSize || 20;
 
   useEffect(() => {
     try {
@@ -131,6 +123,11 @@ const AdminOrdersTab = ({
     } catch (e) { }
   }, [toShipSubTab]);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Reset pagination to page 1 whenever tab, subtab, or search query changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, toShipSubTab, searchQuery]);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(null);
   const [selectedOrderIds, setSelectedOrderIds] = useState([]);
@@ -293,11 +290,12 @@ const AdminOrdersTab = ({
   }, [orders]);
 
   // TikTok Shop style pipeline filter categories matching user specification:
-  // All | To ship | Shipped | Completed | Pending | Canceled | Failed delivery
+  // All | To ship | Shipped | To deliver | Completed | Pending | Canceled | Returned | Failed delivery
   const tabs = [
     { id: 'ALL', label: 'All', count: orders.length },
     { id: 'TO_SHIP', label: 'To ship', count: toShipTotalCount },
     { id: 'SHIPPED', label: 'Shipped', count: orderCounts.shipped || 0 },
+    { id: 'TO_DELIVER', label: 'To deliver', count: orderCounts.toDeliver || 0 },
     { id: 'COMPLETED', label: 'Completed', count: orderCounts.delivered || 0 },
     {
       id: 'PENDING',
@@ -310,6 +308,7 @@ const AdminOrdersTab = ({
       }).length,
     },
     { id: 'CANCELLED', label: 'Canceled', count: orderCounts.cancelled || 0 },
+    { id: 'RETURNED', label: 'Returned', count: orderCounts.returned || 0 },
     { id: 'FAILED_TO_DELIVER', label: 'Failed delivery', count: orderCounts.failedToDeliver || 0 },
   ];
 
@@ -345,7 +344,7 @@ const AdminOrdersTab = ({
           if (orderStatus !== 'SHIPPED') return false;
         } else if (activeTab === 'TO_DELIVER') {
           if (orderStatus !== 'TO_DELIVER') return false;
-        } else if (activeTab === 'COMPLETED') {
+        } else if (activeTab === 'COMPLETED' || activeTab === 'DELIVERED') {
           if (orderStatus !== 'DELIVERED' && orderStatus !== 'COMPLETED') return false;
         } else if (activeTab === 'PENDING') {
           const paymentStatus = (order.payment_status || 'PENDING').toUpperCase();
@@ -1657,7 +1656,9 @@ const AdminOrdersTab = ({
         </div>
       ) : (
         <div className="space-y-4">
-          {filteredOrders.map((order) => {
+          {filteredOrders
+            .slice((currentPage - 1) * pageSize, currentPage * pageSize)
+            .map((order) => {
             const isCod = (order.payment_method || '').toUpperCase() === 'COD';
             const isDeliveredOrder = ['DELIVERED', 'COMPLETED'].includes((order.status || '').toUpperCase());
             const isPaid = isCod
@@ -2211,27 +2212,27 @@ const AdminOrdersTab = ({
         </div>
       )}
 
-      {/* Server-Side Pagination Controls */}
-      {onOrdersPageChange && Number(totalOrdersCount) > ordersPageSize && (
+      {/* Pagination Controls */}
+      {filteredOrders.length > pageSize && (
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white border border-slate-200/80 rounded-2xl px-5 py-3.5 shadow-xs text-xs">
           <span className="text-slate-600">
-            Page <strong className="text-slate-900">{ordersPage}</strong> of{' '}
-            <strong className="text-slate-900">{Math.max(1, Math.ceil(totalOrdersCount / ordersPageSize))}</strong>{' '}
-            ({totalOrdersCount} total orders)
+            Page <strong className="text-slate-900">{currentPage}</strong> of{' '}
+            <strong className="text-slate-900">{Math.max(1, Math.ceil(filteredOrders.length / pageSize))}</strong>{' '}
+            ({filteredOrders.length} orders)
           </span>
           <div className="flex items-center gap-2">
             <button
               type="button"
-              disabled={ordersPage <= 1 || isLoading}
-              onClick={() => onOrdersPageChange(ordersPage - 1, activeTab, searchQuery)}
+              disabled={currentPage <= 1 || isLoading}
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               className="px-3.5 py-1.5 border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-semibold rounded-lg disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
             >
               Previous
             </button>
             <button
               type="button"
-              disabled={ordersPage >= Math.ceil(totalOrdersCount / ordersPageSize) || isLoading}
-              onClick={() => onOrdersPageChange(ordersPage + 1, activeTab, searchQuery)}
+              disabled={currentPage >= Math.ceil(filteredOrders.length / pageSize) || isLoading}
+              onClick={() => setCurrentPage((p) => Math.min(Math.ceil(filteredOrders.length / pageSize), p + 1))}
               className="px-3.5 py-1.5 border border-slate-900 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
             >
               Next

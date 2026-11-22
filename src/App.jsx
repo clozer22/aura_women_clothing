@@ -81,7 +81,12 @@ class RouteErrorBoundary extends React.Component {
             <p className="text-xs text-[#705B56] break-words">{this.state.errorMessage}</p>
             <button
               type="button"
-              onClick={() => window.location.reload()}
+              onClick={() => {
+                try {
+                  sessionStorage.removeItem('aura_chunk_reloaded');
+                } catch (e) {}
+                window.location.reload();
+              }}
               className="px-6 py-3 bg-[#2C1E1B] hover:bg-[#B86B60] text-white text-xs font-bold uppercase tracking-widest cursor-pointer"
             >
               Reload Page
@@ -96,6 +101,12 @@ class RouteErrorBoundary extends React.Component {
 
 function MainApp() {
   const { user } = useAuth();
+
+  useEffect(() => {
+    try {
+      sessionStorage.removeItem('aura_chunk_reloaded');
+    } catch (e) {}
+  }, []);
 
   const getInitialView = () => {
     const path = window.location.pathname;
