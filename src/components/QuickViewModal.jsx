@@ -273,7 +273,7 @@ export default function QuickViewModal({ product, onClose, onBuyNow, onOpenWishl
                 onClick={handleBuyNow}
                 className={`w-full py-4 px-6 font-brand rounded-none text-xs font-bold uppercase tracking-[0.2em] transition-all duration-300 shadow-md flex items-center justify-center gap-2 border-2 ${isSoldOut
                   ? 'bg-[#E8DCD7] text-[#9E8E89] border-[#E8DCD7] cursor-not-allowed shadow-none'
-                  : 'bg-[#B86B60] hover:bg-transparent border-[#B86B60] text-white hover:text-[#B86B60] cursor-pointer'
+                  : 'bg-black hover:bg-transparent border-black text-white hover:text-black cursor-pointer'
                   }`}
               >
                 <span>{isSoldOut ? 'Sold Out' : 'Buy Now'}</span>

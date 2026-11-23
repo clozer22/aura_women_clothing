@@ -1338,7 +1338,7 @@ export default function ProductDetailPage({
               onClick={handleBuyNow}
               className={`flex-1 py-3 px-2 text-[11px] font-brand font-bold uppercase tracking-wider transition-all flex items-center justify-center text-center shadow-sm cursor-pointer border-2 ${isSoldOut
                 ? 'bg-[#E8DCD7] text-[#9E8E89] border-[#E8DCD7] cursor-not-allowed shadow-none'
-                : 'bg-[#B86B60] hover:bg-transparent border-[#B86B60] text-white hover:text-[#B86B60] active:scale-[0.98]'
+                : 'bg-black hover:bg-transparent border-black text-white hover:text-black active:scale-[0.98]'
                 }`}
             >
               {isSoldOut ? 'Sold Out' : 'Buy Now'}
