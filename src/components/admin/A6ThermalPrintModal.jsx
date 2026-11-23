@@ -1,15 +1,55 @@
 import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Printer } from 'lucide-react';
+import { X, Printer, ExternalLink } from 'lucide-react';
 import BarcodeSvg from '../common/BarcodeSvg';
 import QrCodeSvg from '../common/QrCodeSvg';
+import { supabaseAdmin as supabase } from '../../lib/supabaseClient';
 
 export default function A6ThermalPrintModal({ isOpen, onClose, order }) {
   const [activePageIndex, setActivePageIndex] = useState(1);
+  const [isFetchingOfficialPdf, setIsFetchingOfficialPdf] = useState(false);
   const page1Ref = useRef(null);
   const page2Ref = useRef(null);
 
   if (!isOpen || !order) return null;
+
+  const handleOpenOfficialJtPdf = async () => {
+    setIsFetchingOfficialPdf(true);
+    try {
+      const { data: { session: ssn } } = await supabase.auth.getSession();
+      const adminTok = ssn?.access_token || '';
+      const res = await fetch('/api/jt-dispatch', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(adminTok ? { Authorization: `Bearer ${adminTok}` } : {}),
+        },
+        body: JSON.stringify({
+          action: 'print',
+          orderReference: order.order_reference,
+          billCode: order.tracking_number || '',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || 'Failed to fetch official J&T waybill PDF');
+      }
+      if (data.waybillUrl) {
+        window.open(data.waybillUrl, '_blank', 'noopener,noreferrer');
+      } else if (data.base64EncodeContent) {
+        const pdfWin = window.open('', '_blank');
+        if (pdfWin) {
+          pdfWin.document.write(
+            `<iframe width="100%" height="100%" style="border:none;margin:0;padding:0;" src="data:application/pdf;base64,${data.base64EncodeContent}"></iframe>`
+          );
+        }
+      }
+    } catch (err) {
+      alert(`Official J&T Waybill Error: ${err.message}`);
+    } finally {
+      setIsFetchingOfficialPdf(false);
+    }
+  };
 
   const trackingNumber = order.tracking_number || 'JT-UNASSIGNED';
   const orderRef = order.order_reference || 'AC-000000';
@@ -115,11 +155,24 @@ export default function A6ThermalPrintModal({ isOpen, onClose, order }) {
             <div className="flex items-center gap-3">
               <button
                 type="button"
+                onClick={handleOpenOfficialJtPdf}
+                disabled={isFetchingOfficialPdf}
+                className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-bold text-xs rounded-xl flex items-center gap-2 shadow-lg shadow-red-600/20 transition-all cursor-pointer disabled:opacity-50"
+                title="Fetch official J&T Express Waybill PDF from /api/order/printOrder"
+              >
+                <ExternalLink className="w-4 h-4" />
+                <span>
+                  {isFetchingOfficialPdf ? 'Generating J&T PDF...' : 'Official J&T Waybill (PDF)'}
+                </span>
+              </button>
+
+              <button
+                type="button"
                 onClick={handlePrint}
                 className="px-4 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs rounded-xl flex items-center gap-2 shadow-lg shadow-amber-400/20 transition-all cursor-pointer"
               >
                 <Printer className="w-4 h-4" />
-                <span>Print Waybill & Packing List</span>
+                <span>Print Custom Waybill & Packing List</span>
               </button>
 
               <button

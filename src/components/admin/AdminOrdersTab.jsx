@@ -147,9 +147,62 @@ const AdminOrdersTab = ({
   // TikTok Seller Center Fulfillment: Action Dropdown, Note & Flag Modal, 2-Page A6 Print Modal
   const [activeDropdownOrderId, setActiveDropdownOrderId] = useState(null);
   const [isArrangingShipmentId, setIsArrangingShipmentId] = useState(null);
+  const [printingJtWaybillId, setPrintingJtWaybillId] = useState(null);
   const [noteModalOrder, setNoteModalOrder] = useState(null);
   const [isSavingNote, setIsSavingNote] = useState(false);
   const [a6PrintOrder, setA6PrintOrder] = useState(null);
+
+  // Request & open Official J&T Express Waybill PDF from /api/order/printOrder
+  const handlePrintOfficialJtWaybill = async (order) => {
+    if (!order) return;
+    setPrintingJtWaybillId(order.id);
+    setActiveDropdownOrderId(null);
+    try {
+      const { data: { session: ssn } } = await supabase.auth.getSession();
+      const adminTok = ssn?.access_token || '';
+      const res = await fetch('/api/jt-dispatch', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(adminTok ? { Authorization: `Bearer ${adminTok}` } : {}),
+        },
+        body: JSON.stringify({
+          action: 'print',
+          orderReference: order.order_reference,
+          billCode: order.tracking_number || '',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || 'Could not generate official J&T waybill PDF');
+      }
+
+      if (data.waybillUrl) {
+        window.open(data.waybillUrl, '_blank', 'noopener,noreferrer');
+      } else if (data.base64EncodeContent) {
+        const pdfWin = window.open('', '_blank');
+        if (pdfWin) {
+          pdfWin.document.write(
+            `<iframe width="100%" height="100%" style="border:none;margin:0;padding:0;" src="data:application/pdf;base64,${data.base64EncodeContent}"></iframe>`
+          );
+        }
+      }
+
+      setShipmentFeedback({
+        type: 'success',
+        orderRef: order.order_reference,
+        message: `Official J&T Express Waybill PDF opened (BillCode: ${data.billCode || order.tracking_number}).`,
+        waybillUrl: data.waybillUrl,
+      });
+
+      if (onRefresh) await onRefresh();
+    } catch (err) {
+      console.error('Official J&T Waybill Print Error:', err);
+      alert(`Official J&T Waybill Error: ${err.message}`);
+    } finally {
+      setPrintingJtWaybillId(null);
+    }
+  };
 
   // J&T Express Custom Dispatch Setup Modal state
   const [dispatchModalOrder, setDispatchModalOrder] = useState(null);
@@ -1923,6 +1976,19 @@ const AdminOrdersTab = ({
 
                               <div className="py-1">
                                 <button
+                                  onClick={() => handlePrintOfficialJtWaybill(order)}
+                                  disabled={printingJtWaybillId === order.id}
+                                  className="w-full text-left px-3.5 py-2 hover:bg-red-50 flex items-center gap-2 text-red-700 font-semibold cursor-pointer disabled:opacity-50"
+                                >
+                                  <Printer className="w-3.5 h-3.5 text-red-600" />
+                                  <span>
+                                    {printingJtWaybillId === order.id
+                                      ? 'Fetching J&T PDF...'
+                                      : 'Official J&T Waybill (PDF)'}
+                                  </span>
+                                </button>
+
+                                <button
                                   onClick={() => {
                                     setActiveDropdownOrderId(null);
                                     setA6PrintOrder(order);
@@ -1930,7 +1996,7 @@ const AdminOrdersTab = ({
                                   className="w-full text-left px-3.5 py-2 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
                                 >
                                   <Printer className="w-3.5 h-3.5 text-slate-500" />
-                                  <span>Print documents (A6)</span>
+                                  <span>Custom A6 + Packing List</span>
                                 </button>
 
                                 <button
@@ -2161,9 +2227,20 @@ const AdminOrdersTab = ({
 
                             <button
                               type="button"
+                              onClick={() => handlePrintOfficialJtWaybill(order)}
+                              disabled={printingJtWaybillId === order.id}
+                              className="text-[11px] font-semibold text-red-600 hover:text-red-800 inline-flex items-center gap-1 border-l border-slate-200 pl-2 ml-1 cursor-pointer disabled:opacity-50"
+                              title="Fetch & Print Official J&T Express Waybill PDF (/api/order/printOrder)"
+                            >
+                              <Printer className="w-3 h-3 text-red-600" />
+                              <span>{printingJtWaybillId === order.id ? 'Loading PDF...' : 'J&T PDF'}</span>
+                            </button>
+
+                            <button
+                              type="button"
                               onClick={() => setSelectedWaybillOrder(order)}
                               className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 inline-flex items-center gap-1 border-l border-slate-200 pl-2 ml-1 cursor-pointer"
-                              title="View & Print Air Waybill (AWB)"
+                              title="View & Print Custom Air Waybill (AWB)"
                             >
                               <FileText className="w-3 h-3 text-blue-500" />
                               <span>Waybill</span>
@@ -3331,11 +3408,25 @@ const AdminOrdersTab = ({
                 </div>
                 <div className="flex items-center gap-2">
                   <button
+                    type="button"
+                    onClick={() => handlePrintOfficialJtWaybill(selectedWaybillOrder)}
+                    disabled={printingJtWaybillId === selectedWaybillOrder.id}
+                    className="px-3 py-1 bg-red-600 hover:bg-red-500 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                    title="Open Official J&T Express Waybill PDF from J&T /api/order/printOrder endpoint"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>
+                      {printingJtWaybillId === selectedWaybillOrder.id
+                        ? 'Fetching J&T PDF...'
+                        : 'Official J&T Waybill (PDF)'}
+                    </span>
+                  </button>
+                  <button
                     onClick={() => window.print()}
                     className="px-3 py-1 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
                   >
                     <Printer className="w-3.5 h-3.5" />
-                    <span>Print Label</span>
+                    <span>Print Custom Label</span>
                   </button>
                   <button
                     onClick={() => setSelectedWaybillOrder(null)}

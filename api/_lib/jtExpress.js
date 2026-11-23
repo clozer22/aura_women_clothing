@@ -184,14 +184,14 @@ export async function createJtOrder(order, options = {}) {
     sendEndTime: new Date(Date.now() + 48 * 3600 * 1000).toISOString().replace('T', ' ').substring(0, 19),
     remark: options.notes || `Aura Luxury Apparel - Order #${order.order_reference}`,
     sender: {
-      name: process.env.AURA_DISPATCH_SENDER_NAME || 'Aura Atelier Salcedo',
-      phone: process.env.AURA_DISPATCH_SENDER_PHONE || '09171234567',
-      mobile: process.env.AURA_DISPATCH_SENDER_PHONE || '09171234567',
+      name: process.env.AURA_DISPATCH_SENDER_NAME || 'Aura Fulfillment Hub',
+      phone: process.env.AURA_DISPATCH_SENDER_PHONE || '09170000000',
+      mobile: process.env.AURA_DISPATCH_SENDER_PHONE || '09170000000',
       prov: senderAddr.prov,
       city: senderAddr.city,
       area: senderAddr.area,
-      address: process.env.AURA_DISPATCH_SENDER_ADDRESS || '108 Atelier Blvd, Salcedo Village',
-      postCode: process.env.AURA_DISPATCH_SENDER_ZIP || '1209',
+      address: process.env.AURA_DISPATCH_SENDER_ADDRESS || 'General Trias Cavite City',
+      postCode: process.env.AURA_DISPATCH_SENDER_ZIP || '4107',
     },
     receiver: {
       name: order.customer_name || 'Valued Customer',
@@ -296,13 +296,29 @@ export async function createJtOrder(order, options = {}) {
         responseItem?.trackingNumber;
 
       if (isSuccess && billcode) {
+        // Immediately request official J&T A6 Waybill PDF from /api/order/printOrder
+        let officialWaybillUrl = responseItem.waybillUrl || null;
+        if (!officialWaybillUrl) {
+          try {
+            const printRes = await printJtOrder(billcode, order.order_reference);
+            if (printRes?.waybillUrl) {
+              officialWaybillUrl = printRes.waybillUrl;
+            }
+          } catch (printErr) {
+            console.warn(`[J&T Express] printOrder warning for ${billcode}:`, printErr.message);
+          }
+        }
+
         liveResult = {
           trackingNumber: billcode,
           sortingCode: responseItem.sortingCode || responseItem.code || 'MNL-01',
-          dispatchSite: responseItem.dispatchSite || 'J&T Salcedo Makati Station',
+          thirdSortingCode: responseItem.thirdSortingCode || null,
+          fourSortingCode: responseItem.fourSortingCode || null,
+          dispatchSite: responseItem.dispatchSite || 'J&T Express Philippines',
           waybillUrl:
-            responseItem.waybillUrl ||
+            officialWaybillUrl ||
             `https://www.jtexpress.ph/trajectoryQuery?bills=${billcode}`,
+          officialWaybillPdfUrl: officialWaybillUrl,
           rawResponse,
         };
       }
@@ -341,8 +357,11 @@ export async function createJtOrder(order, options = {}) {
     trackingNumber: liveResult.trackingNumber,
     courierName: 'J&T Express',
     sortingCode: liveResult.sortingCode,
+    thirdSortingCode: liveResult.thirdSortingCode || null,
+    fourSortingCode: liveResult.fourSortingCode || null,
     dispatchSite: liveResult.dispatchSite,
     waybillUrl: liveResult.waybillUrl,
+    officialWaybillPdfUrl: liveResult.officialWaybillPdfUrl || null,
     mode: config.isTestMode ? 'UAT / SANDBOX' : 'PRODUCTION',
     isCod,
     codAmount,
