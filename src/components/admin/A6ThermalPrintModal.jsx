@@ -266,9 +266,8 @@ export default function A6ThermalPrintModal({ isOpen, onClose, order }) {
                         FROM (SHIPPER):
                       </span>
                       <p className="font-bold text-[10px] text-slate-900">Aura Fulfillment Hub</p>
-                      <p className="text-slate-800">09171234567</p>
                       <p className="text-slate-700 leading-tight text-[8.5px]">
-                        Salcedo Village, Bel-Air, Makati City, Metro Manila 1209
+                        General Trias Cavite City
                       </p>
                     </div>
 
