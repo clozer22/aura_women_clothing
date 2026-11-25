@@ -170,7 +170,7 @@ export default async function handler(req, res) {
         });
       }
 
-      let printResult = await printJtOrder(cleanBillCode, cleanRef || order?.order_reference || null);
+      let printResult = await printJtOrder(cleanBillCode, null);
 
       // If this tracking number wasn't registered in J&T yet (e.g. simulator billcode "There is no three segment code"),
       // automatically register the order with J&T addOrder and then call printOrder!
@@ -190,7 +190,7 @@ export default async function handler(req, res) {
               rawResponse: bookingResult.rawResponse,
             };
           } else {
-            printResult = await printJtOrder(cleanBillCode, order.order_reference);
+            printResult = await printJtOrder(cleanBillCode, null);
           }
         }
       }

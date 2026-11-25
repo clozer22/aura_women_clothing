@@ -322,11 +322,15 @@ export async function createJtOrder(order, options = {}) {
         responseItem?.trackingNumber;
 
       if (isSuccess && billcode) {
+        const effectiveTxLogisticId = responseItem?.txlogisticId || order.order_reference;
         // Immediately request official J&T A6 Waybill PDF from /api/order/printOrder
         let officialWaybillUrl = responseItem.waybillUrl || null;
         if (!officialWaybillUrl) {
           try {
-            const printRes = await printJtOrder(billcode, order.order_reference);
+            let printRes = await printJtOrder(billcode, null);
+            if (!printRes?.waybillUrl && effectiveTxLogisticId) {
+              printRes = await printJtOrder(billcode, effectiveTxLogisticId);
+            }
             if (printRes?.waybillUrl) {
               officialWaybillUrl = printRes.waybillUrl;
             }
