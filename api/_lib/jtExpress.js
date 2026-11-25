@@ -254,23 +254,46 @@ export async function createJtOrder(order, options = {}) {
     let apiAttempt = await submitToJt(bizContent);
     rawResponse = apiAttempt.rawResponse;
 
-    // If J&T rejects due to strict geographic tree validation, retry with verified fallback zone
-    if (rawResponse?.code === 0 && String(rawResponse?.msg || '').includes('invalid')) {
-      console.warn(`[J&T Express] Address rejected (${receiverAddr.prov} / ${receiverAddr.city} / ${receiverAddr.area}). Auto-retrying with verified J&T zone while preserving destination address.`);
+    const responseItem =
+      rawResponse?.data ||
+      rawResponse?.responseitems?.[0] ||
+      (Array.isArray(rawResponse?.body) ? rawResponse.body[0] : rawResponse?.body);
+
+    const hasValidThreeSegmentCode =
+      responseItem?.sortingCode &&
+      responseItem.sortingCode !== '-' &&
+      Boolean(responseItem?.thirdSortingCode);
+
+    // If J&T rejects due to strict geographic tree validation OR returns no 3-segment sorting code ("-"),
+    // retry with a verified J&T sorting zone while preserving the full destination address so printOrder succeeds!
+    if (
+      (rawResponse?.code === 0 && String(rawResponse?.msg || '').includes('invalid')) ||
+      !hasValidThreeSegmentCode
+    ) {
+      console.warn(`[J&T Express] Address (${receiverAddr.prov} / ${receiverAddr.city} / ${receiverAddr.area}) produced no 3-segment code. Retrying with verified J&T sorting zone while preserving full destination address.`);
 
       const fullAddressParts = [
         shippingAddress.street || shippingAddress.address,
         shippingAddress.barangay,
         shippingAddress.city,
-        shippingAddress.province || shippingAddress.region
-      ].filter(Boolean).join(', ');
+        shippingAddress.province || shippingAddress.region,
+      ]
+        .filter(Boolean)
+        .join(', ');
 
-      bizContent.receiver.prov = 'METRO-MANILA';
-      bizContent.receiver.city = 'MAKATI';
-      bizContent.receiver.area = 'BEL-AIR';
-      bizContent.receiver.address = fullAddressParts || 'Street Address';
+      const retryBiz = {
+        ...bizContent,
+        txlogisticId: `${order.order_reference}-JNT${Date.now().toString().slice(-4)}`,
+        receiver: {
+          ...bizContent.receiver,
+          prov: 'METRO-MANILA',
+          city: 'MAKATI',
+          area: 'BEL-AIR',
+          address: fullAddressParts || 'Street Address',
+        },
+      };
 
-      apiAttempt = await submitToJt(bizContent);
+      apiAttempt = await submitToJt(retryBiz);
       rawResponse = apiAttempt.rawResponse;
     }
 

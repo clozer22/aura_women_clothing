@@ -150,10 +150,10 @@ export default function WishlistDrawer({ isOpen, onClose, onProceedToCheckout })
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-            className="w-screen max-w-md bg-[#FAF5F2] shadow-2xl border-l border-[#E8DCD7] flex flex-col justify-between rounded-none"
+            className="w-screen max-w-md bg-white shadow-2xl border-l border-[#E8DCD7] flex flex-col justify-between rounded-none"
           >
             {/* Header */}
-            <div className="p-4 sm:p-6 border-b border-[#E8DCD7] bg-[#F3EAE6] flex items-center justify-between rounded-none">
+            <div className="p-4 sm:p-6 border-b border-[#E8DCD7] bg-white flex items-center justify-between rounded-none">
               <div className="flex items-center gap-2.5">
                 <ShoppingBag className="w-5 h-5 text-[#B86B60]" />
                 <h2 className="font-brand text-xs uppercase tracking-[0.25em] font-bold text-[#2C1E1B]">
@@ -162,7 +162,7 @@ export default function WishlistDrawer({ isOpen, onClose, onProceedToCheckout })
               </div>
               <button
                 onClick={onClose}
-                className="p-2 rounded-none hover:bg-white/80 text-[#2C1E1B] transition-colors focus:outline-none cursor-pointer"
+                className="p-2 rounded-none hover:bg-[#FAF7F5] text-[#2C1E1B] transition-colors focus:outline-none cursor-pointer"
                 aria-label="Close bag"
               >
                 <X className="w-4 h-4" />
@@ -171,7 +171,7 @@ export default function WishlistDrawer({ isOpen, onClose, onProceedToCheckout })
 
             {/* Select All Bar (when bag has items) */}
             {items.length > 0 && (
-              <div className="flex items-center justify-between px-6 py-3 bg-[#FAF0EC]/80 border-b border-[#E8DCD7] text-xs">
+              <div className="flex items-center justify-between px-6 py-3 bg-white border-b border-[#E8DCD7] text-xs">
                 <label className="flex items-center gap-2.5 cursor-pointer select-none">
                   <input
                     type="checkbox"
@@ -343,10 +343,10 @@ export default function WishlistDrawer({ isOpen, onClose, onProceedToCheckout })
 
             {/* Footer Summary & Checkout Button */}
             {items.length > 0 && (
-              <div className="p-6 border-t border-[#E8DCD7] bg-[#F3EAE6] space-y-4">
+              <div className="p-6 border-t border-[#E8DCD7] bg-white space-y-4">
                 {/* Sold Out Informational Banner (Non-blocking) */}
                 {soldOutItems.length > 0 && (
-                  <div className="p-3 bg-[#FAF5F2] border border-[#E8DCD7] text-[#705B56] text-xs flex items-center justify-between gap-2 shadow-xs">
+                  <div className="p-3 bg-[#FAF7F5] border border-[#DFD0CA] text-[#705B56] text-xs flex items-center justify-between gap-2 shadow-xs">
                     <div className="flex items-center gap-2 min-w-0">
                       <AlertCircle className="w-4 h-4 text-[#B86B60] shrink-0" />
                       <span className="text-[11px] leading-tight">

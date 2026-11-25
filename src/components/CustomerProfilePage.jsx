@@ -470,7 +470,7 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
   };
 
   return (
-    <div className="min-h-screen bg-[#FAF5F2] text-[#2C1E1B] py-10 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-white text-[#2C1E1B] py-10 px-4 sm:px-6 lg:px-8">
       <div className="max-w-4xl mx-auto">
         {/* Navigation Bar */}
         <div className="flex items-center justify-between pb-6 border-b border-[#E8DCD7] mb-8">
@@ -486,8 +486,8 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
         </div>
 
         {/* Customer Header Banner */}
-        <div className="bg-white border border-[#E8DCD7] p-6 sm:p-8 shadow-sm mb-8 flex flex-col sm:flex-row items-center sm:items-start gap-6">
-          <div className="w-20 h-20 bg-[#FAF5F2] border border-[#E8DCD7] rounded-full flex items-center justify-center text-2xl font-brand font-bold text-[#2C1E1B] shadow-inner flex-shrink-0">
+        <div className="bg-white border border-[#DFD0CA] p-6 sm:p-8 shadow-sm mb-8 flex flex-col sm:flex-row items-center sm:items-start gap-6">
+          <div className="w-20 h-20 bg-[#FAF7F5] border border-[#DFD0CA] rounded-full flex items-center justify-center text-2xl font-brand font-bold text-[#2C1E1B] shadow-inner flex-shrink-0">
             {fullName ? fullName.charAt(0).toUpperCase() : user?.email?.charAt(0).toUpperCase()}
           </div>
 
@@ -501,7 +501,7 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
             <p className="text-xs text-[#705B56] mt-1 font-sans">{user?.email}</p>
 
             <div className="mt-3 flex flex-wrap gap-2 justify-center sm:justify-start">
-              <span className="text-[11px] bg-[#FAF5F2] border border-[#E8DCD7] text-[#705B56] px-2.5 py-1">
+              <span className="text-[11px] bg-[#FAF7F5] border border-[#DFD0CA] text-[#705B56] px-2.5 py-1">
                 Account Status: <strong className="text-[#2C1E1B]">Active</strong>
               </span>
               {!hasSetPassword && (
@@ -623,7 +623,7 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
         {activeTab === 'profile' && (
           <div className="space-y-6">
             {/* VIP TIER OVERVIEW CARD */}
-            <div className="bg-gradient-to-br from-[#FAF5F2] via-white to-[#F5ECE8] border border-[#E8DCD7] p-6 sm:p-7 shadow-xs relative overflow-hidden">
+            <div className="bg-white border border-[#DFD0CA] p-6 sm:p-7 shadow-xs relative overflow-hidden">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-start gap-4">
                   <div className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 border ${
@@ -1157,7 +1157,7 @@ export default function CustomerProfilePage({ onBackToShop, onNavigateOrders, in
             </div>
 
             {/* Note on Admin Managed Perks */}
-            <div className="bg-[#FAF5F2] border border-[#E8DCD7] p-5 text-center">
+            <div className="bg-white border border-[#DFD0CA] p-5 text-center">
               <p className="text-xs text-[#705B56] leading-relaxed max-w-xl mx-auto">
                 <strong className="text-[#2C1E1B]">VIP Privileges Note:</strong> Benefits and exclusive vouchers are curated and granted by the AURA Administration based on items ordered. To redeem a voucher, enter the code in checkout.
               </p>

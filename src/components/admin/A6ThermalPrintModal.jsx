@@ -1,6 +1,6 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Printer, ExternalLink } from 'lucide-react';
+import { X, Printer, ExternalLink, RefreshCw } from 'lucide-react';
 import BarcodeSvg from '../common/BarcodeSvg';
 import QrCodeSvg from '../common/QrCodeSvg';
 import { supabaseAdmin as supabase } from '../../lib/supabaseClient';
@@ -8,13 +8,22 @@ import { supabaseAdmin as supabase } from '../../lib/supabaseClient';
 export default function A6ThermalPrintModal({ isOpen, onClose, order }) {
   const [activePageIndex, setActivePageIndex] = useState(1);
   const [isFetchingOfficialPdf, setIsFetchingOfficialPdf] = useState(false);
+  const [officialPdfUrl, setOfficialPdfUrl] = useState(null);
+  const [officialBillCode, setOfficialBillCode] = useState(null);
+  const [officialPdfError, setOfficialPdfError] = useState(null);
   const page1Ref = useRef(null);
   const page2Ref = useRef(null);
 
-  if (!isOpen || !order) return null;
-
-  const handleOpenOfficialJtPdf = async () => {
+  const fetchOfficialJtPdf = async () => {
+    if (!order) return null;
+    // If order already has a direct J&T PDF URL stored in waybill_url, use it directly
+    if (order.waybill_url && order.waybill_url.includes('.pdf')) {
+      setOfficialPdfUrl(order.waybill_url);
+      setOfficialBillCode(order.tracking_number);
+      return order.waybill_url;
+    }
     setIsFetchingOfficialPdf(true);
+    setOfficialPdfError(null);
     try {
       const { data: { session: ssn } } = await supabase.auth.getSession();
       const adminTok = ssn?.access_token || '';
@@ -34,20 +43,43 @@ export default function A6ThermalPrintModal({ isOpen, onClose, order }) {
       if (!res.ok || !data?.success) {
         throw new Error(data?.error || 'Failed to fetch official J&T waybill PDF');
       }
-      if (data.waybillUrl) {
-        window.open(data.waybillUrl, '_blank', 'noopener,noreferrer');
-      } else if (data.base64EncodeContent) {
-        const pdfWin = window.open('', '_blank');
-        if (pdfWin) {
-          pdfWin.document.write(
-            `<iframe width="100%" height="100%" style="border:none;margin:0;padding:0;" src="data:application/pdf;base64,${data.base64EncodeContent}"></iframe>`
-          );
-        }
+      const pdfSrc = data.waybillUrl
+        ? data.waybillUrl
+        : data.base64EncodeContent
+        ? `data:application/pdf;base64,${data.base64EncodeContent}`
+        : null;
+      if (pdfSrc) {
+        setOfficialPdfUrl(pdfSrc);
+        if (data.billCode) setOfficialBillCode(data.billCode);
       }
+      return pdfSrc;
     } catch (err) {
-      alert(`Official J&T Waybill Error: ${err.message}`);
+      setOfficialPdfError(err.message);
+      return null;
     } finally {
       setIsFetchingOfficialPdf(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen && order) {
+      setOfficialPdfUrl(
+        order.waybill_url && order.waybill_url.includes('.pdf') ? order.waybill_url : null
+      );
+      setOfficialBillCode(order.tracking_number || null);
+      setOfficialPdfError(null);
+      fetchOfficialJtPdf();
+    }
+  }, [isOpen, order?.id, order?.tracking_number]);
+
+  if (!isOpen || !order) return null;
+
+  const handleOpenOfficialJtPdf = async () => {
+    const url = officialPdfUrl || (await fetchOfficialJtPdf());
+    if (url) {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } else if (officialPdfError) {
+      alert(`Official J&T Waybill Error: ${officialPdfError}`);
     }
   };
 
@@ -172,7 +204,7 @@ export default function A6ThermalPrintModal({ isOpen, onClose, order }) {
                 className="px-4 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs rounded-xl flex items-center gap-2 shadow-lg shadow-amber-400/20 transition-all cursor-pointer"
               >
                 <Printer className="w-4 h-4" />
-                <span>Print Custom Waybill & Packing List</span>
+                <span>Print Waybill & Packing List</span>
               </button>
 
               <button
@@ -251,145 +283,53 @@ export default function A6ThermalPrintModal({ isOpen, onClose, order }) {
 
             {/* Right Main Preview Canvas */}
             <div className="flex-1 bg-slate-800/60 overflow-y-auto p-4 sm:p-8 flex flex-col items-center gap-8 printable-thermal-canvas">
-              {/* PAGE 1: EXISTING AURA OFFICIAL AIR WAYBILL (A6: 105mm x 148mm) */}
+              {/* PAGE 1: OFFICIAL J&T EXPRESS WAYBILL PDF (FROM /api/order/printOrder) */}
               <div
                 ref={page1Ref}
                 onClick={() => setActivePageIndex(1)}
-                className="a6-sheet a6-page-1 bg-white text-slate-900 font-mono shadow-2xl relative select-text"
+                className="a6-sheet a6-page-1 bg-white text-slate-900 font-mono shadow-2xl relative select-text overflow-hidden"
                 style={{
                   width: '105mm',
                   minHeight: '148mm',
                   height: '148mm',
-                  padding: '3mm',
                   boxSizing: 'border-box',
                 }}
               >
-                <div className="w-full h-full border-2 border-slate-900 p-3 flex flex-col justify-between text-slate-900 print:border-none print:p-0">
-                  {/* Carrier & Sort Code Header with QR Code */}
-                  <div className="border-b-2 border-slate-900 pb-2 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="bg-red-600 text-white font-black text-xl px-2.5 py-0.5 tracking-tighter">
-                        J&T
-                      </div>
-                      <div>
-                        <span className="text-xl font-black tracking-tight block leading-tight">
-                          EXPRESS
-                        </span>
-                        <span className="text-[8.5px] font-sans font-bold uppercase tracking-wider text-slate-600 block">
-                          Official Air Waybill (AWB)
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 text-right">
-                      <div>
-                        <span className="text-lg font-black tracking-wider block bg-slate-900 text-white px-2 py-0.5 leading-tight">
-                          {hubCode}
-                        </span>
-                        <span className="text-[8px] font-bold block pt-0.5 text-slate-700">
-                          STANDARD AIR
-                        </span>
-                      </div>
-                      <div className="border border-slate-900 p-0.5 bg-white shrink-0">
-                        <QrCodeSvg value={jtexpressTrackingUrl} size={36} margin={0} />
-                      </div>
-                    </div>
+                {isFetchingOfficialPdf ? (
+                  <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center space-y-3 bg-white">
+                    <RefreshCw className="w-8 h-8 text-red-600 animate-spin" />
+                    <p className="font-sans font-bold text-xs text-slate-800">
+                      Generating Official J&T Express Waybill...
+                    </p>
+                    <p className="font-sans text-[11px] text-slate-500">
+                      Fetching official A6 thermal label from J&T Express Open API (<code>/api/order/printOrder</code>)
+                    </p>
                   </div>
-
-                  {/* Scannable Barcode & Tracking Code */}
-                  <div className="py-1 text-center border-b-2 border-slate-900 space-y-0.5">
-                    <div className="flex items-center justify-center min-h-[44px]">
-                      <BarcodeSvg
-                        value={trackingNumber}
-                        format="CODE128"
-                        width={1.8}
-                        height={42}
-                        className="mx-auto"
-                      />
-                    </div>
-                    <div className="font-bold text-xs tracking-widest uppercase font-mono">
-                      {trackingNumber}
-                    </div>
-                  </div>
-
-                  {/* Shipper & Consignee Grid */}
-                  <div className="grid grid-cols-2 border-b-2 border-slate-900 text-[9px] divide-x-2 divide-slate-900">
-                    <div className="p-1.5 space-y-0.5">
-                      <span className="font-bold uppercase tracking-wider block text-[8px] text-slate-500">
-                        FROM (SHIPPER):
-                      </span>
-                      <p className="font-bold text-[10px] text-slate-900">Aura Fulfillment Hub</p>
-                      <p className="text-slate-700 leading-tight text-[8.5px]">
-                        General Trias Cavite City
+                ) : officialPdfUrl ? (
+                  <iframe
+                    src={`${officialPdfUrl}#toolbar=0&navpanes=0&scrollbar=0&view=Fit`}
+                    title={`Official J&T Express Waybill ${officialBillCode || trackingNumber}`}
+                    className="w-full h-full border-0 block"
+                  />
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center space-y-3 bg-white">
+                    <p className="font-sans font-bold text-xs text-rose-700">
+                      Could not load Official J&T Waybill PDF
+                    </p>
+                    {officialPdfError && (
+                      <p className="font-sans text-[11px] text-slate-500 max-w-xs">
+                        {officialPdfError}
                       </p>
-                    </div>
-
-                    <div className="p-1.5 space-y-0.5 bg-amber-50/40">
-                      <span className="font-bold uppercase tracking-wider block text-[8px] text-slate-500">
-                        TO (CONSIGNEE):
-                      </span>
-                      <p className="font-bold text-[10px] text-slate-900">{order.customer_name}</p>
-                      <p className="font-bold text-slate-800">{order.customer_phone}</p>
-                      <p className="text-slate-800 leading-tight text-[8.5px]">{formattedAddress}</p>
-                    </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={fetchOfficialJtPdf}
+                      className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-sans font-bold text-xs rounded-lg cursor-pointer"
+                    >
+                      Retry J&T Official Waybill
+                    </button>
                   </div>
-
-                  {/* Parcel Details & Payment Terms */}
-                  <div className="text-[9px] space-y-1.5 pt-1 border-b-2 border-slate-900 pb-2">
-                    <div className="flex justify-between items-center font-bold">
-                      <span className="text-[9.5px]">Order Ref: {orderRef}</span>
-                      {isCod ? (
-                        <span className="bg-red-600 text-white px-2 py-0.5 text-[8.5px] font-sans font-black rounded-xs">
-                          COLLECT COD (₱{totalAmount.toLocaleString()})
-                        </span>
-                      ) : (
-                        <span className="bg-emerald-700 text-white px-2 py-0.5 text-[8.5px] font-sans font-bold rounded-xs">
-                          PREPAID (NON-COD)
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="bg-slate-50 p-1.5 border border-slate-300">
-                      <span className="block font-bold text-[8px] text-slate-500 mb-0.5">
-                        CONTENT SPECIFICATION:
-                      </span>
-                      <p className="truncate text-[8.5px] text-slate-900">{contentSpecification}</p>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-1.5 text-center font-bold text-[8.5px]">
-                      <div className="border border-slate-300 p-1">
-                        <span className="block text-[7.5px] text-slate-500 font-sans">WEIGHT</span>
-                        <span>0.35 KG</span>
-                      </div>
-                      <div className="border border-slate-300 p-1">
-                        <span className="block text-[7.5px] text-slate-500 font-sans">COURIER</span>
-                        <span>J&T EXPRESS</span>
-                      </div>
-                      <div
-                        className={`border p-1 ${
-                          isCod
-                            ? 'bg-red-600 text-white border-red-600'
-                            : 'bg-slate-100 text-slate-800 border-slate-300'
-                        }`}
-                      >
-                        <span
-                          className={`block text-[7.5px] font-sans ${
-                            isCod ? 'text-white' : 'text-slate-500'
-                          }`}
-                        >
-                          COLLECT COD
-                        </span>
-                        <span>₱{isCod ? totalAmount.toLocaleString() : '0.00'}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Signature Notice */}
-                  <div className="pt-1 flex items-center justify-between text-[8px] text-slate-600">
-                    <span>Date: {orderDate}</span>
-                    <span>Recipient Signature: __________________</span>
-                  </div>
-                </div>
+                )}
               </div>
 
               {/* PAGE 2: ORDER LIST / PACKING SLIP (A6: 105mm x 148mm) */}
