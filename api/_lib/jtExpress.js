@@ -281,15 +281,18 @@ export async function createJtOrder(order, options = {}) {
         .filter(Boolean)
         .join(', ');
 
+      const streetOnly = shippingAddress.street || shippingAddress.address || 'Street Address';
+
       const retryBiz = {
         ...bizContent,
         txlogisticId: `${order.order_reference}-JNT${Date.now().toString().slice(-4)}`,
+        remark: `${bizContent.remark} | Dest: ${fullAddressParts}`,
         receiver: {
           ...bizContent.receiver,
           prov: 'METRO-MANILA',
           city: 'MAKATI',
           area: 'BEL-AIR',
-          address: fullAddressParts || 'Street Address',
+          address: streetOnly,
         },
       };
 

@@ -170,6 +170,7 @@ const AdminOrdersTab = ({
           action: 'print',
           orderReference: order.order_reference,
           billCode: order.tracking_number || '',
+          order,
         }),
       });
       const data = await res.json();

@@ -22,9 +22,13 @@ export function getSupabaseServerClient(customKey = null, customHeaders = {}) {
     process.env.SUPABASE_URL ||
     'https://pcmlleeuxbymomjxhwlv.supabase.co';
 
+  const rawServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  const validServiceKey =
+    rawServiceKey && !rawServiceKey.includes('YOUR_') ? rawServiceKey : null;
+
   const supabaseKey =
     customKey ||
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    validServiceKey ||
     process.env.VITE_SUPABASE_ANON_KEY ||
     process.env.SUPABASE_ANON_KEY;
 

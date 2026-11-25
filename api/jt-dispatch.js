@@ -65,7 +65,10 @@ export default async function handler(req, res) {
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'Administrative authorization token required to book courier shipments' });
     }
-    const hasServiceRole = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
+    const hasServiceRole = Boolean(
+      process.env.SUPABASE_SERVICE_ROLE_KEY &&
+      !process.env.SUPABASE_SERVICE_ROLE_KEY.includes('YOUR_')
+    );
     const customHeaders = !hasServiceRole ? { Authorization: authHeader } : {};
     const supabase = getSupabaseServerClient(null, customHeaders);
     if (!supabase) {
@@ -91,7 +94,7 @@ export default async function handler(req, res) {
       return res.status(403).json({ error: 'Forbidden: Active admin access required to dispatch courier shipments' });
     }
 
-    // 3. Fetch Order from Supabase if cleanRef is provided
+    // 3. Fetch Order from Supabase if cleanRef is provided (or fall back to body.order supplied by Admin UI)
     let order = null;
     if (cleanRef) {
       try {
@@ -117,6 +120,10 @@ export default async function handler(req, res) {
         .eq('tracking_number', cleanBillCode)
         .maybeSingle();
       order = directOrder;
+    }
+
+    if (!order && body.order && typeof body.order === 'object') {
+      order = body.order;
     }
 
     // =========================================================================

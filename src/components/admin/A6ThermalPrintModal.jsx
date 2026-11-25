@@ -37,6 +37,7 @@ export default function A6ThermalPrintModal({ isOpen, onClose, order }) {
           action: 'print',
           orderReference: order.order_reference,
           billCode: order.tracking_number || '',
+          order,
         }),
       });
       const data = await res.json();
