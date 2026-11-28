@@ -1498,6 +1498,30 @@ export default function CheckoutPage({
                   </div>
                 </div>
 
+                {/* Compact Pricing Summary on Mobile (since Order Summary card is hidden on Steps 2 & 3 on mobile) */}
+                <div className="lg:hidden space-y-2 text-xs font-brand pt-4 border-t border-[#E8DCD7]">
+                  <div className="flex justify-between text-[#705B56]">
+                    <span>Subtotal</span>
+                    <span className="font-semibold text-[#2C1E1B]">₱{subtotal.toLocaleString()}</span>
+                  </div>
+                  {appliedPromo && (
+                    <div className="flex justify-between text-emerald-700 font-semibold">
+                      <span>Discount ({appliedPromo.code})</span>
+                      <span>-₱{discountAmount.toLocaleString()}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-[#705B56]">
+                    <span>{shippingDetails.courier}</span>
+                    <span className="font-semibold text-[#2C1E1B]">
+                      {shippingDetails.isFree ? 'FREE' : `₱${shippingFee.toLocaleString()}`}
+                    </span>
+                  </div>
+                  <div className="border-t border-[#E8DCD7] pt-2.5 flex justify-between text-sm font-bold text-[#2C1E1B]">
+                    <span className="uppercase tracking-wider">Total Amount</span>
+                    <span className="font-hero text-base">₱{totalAmount.toLocaleString()}</span>
+                  </div>
+                </div>
+
                 {/* Step 2 Actions */}
                 <div className="pt-6 flex flex-col sm:flex-row gap-3">
                   <button
@@ -1709,8 +1733,8 @@ export default function CheckoutPage({
             )}
           </div>
 
-          {/* Right Column: Order Summary (Matching Image 2 & 3) */}
-          <div className="lg:col-span-5 space-y-6">
+          {/* Right Column: Order Summary (Hidden on Mobile during Step 2 Order Review & Step 3 Payment to prevent duplicate view) */}
+          <div className={`lg:col-span-5 space-y-6 ${currentStep >= 2 ? 'hidden lg:block' : ''}`}>
             <div className="bg-white border border-[#E8DCD7] p-6 sm:p-8 shadow-sm space-y-6">
               <h3 className="font-brand text-xs uppercase tracking-[0.25em] font-bold text-[#2C1E1B] pb-3 border-b border-[#E8DCD7]">
                 Order Summary ({selectedCheckoutItems.length} selected of {effectiveCheckoutItems.length})
